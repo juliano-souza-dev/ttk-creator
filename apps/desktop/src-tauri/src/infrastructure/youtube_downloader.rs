@@ -201,7 +201,7 @@ fn ytdlp_command() -> Result<(String, Vec<String>), String> {
     ];
     for (program, prefix) in candidates {
         let found = Command::new(program)
-            .args(prefix)
+            .args(&prefix)
             .arg("--version")
             .stdout(Stdio::null())
             .stderr(Stdio::null())
