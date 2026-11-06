@@ -104,9 +104,23 @@ fn save_project(file: &Path, document: &Value) -> Result<(), String> {
     let temporary = file.with_extension("json.tmp");
     let serialized = serde_json::to_string_pretty(document).map_err(|e| e.to_string())?;
     fs::write(&temporary, serialized).map_err(|e| e.to_string())?;
+    let backup = file.with_extension("json.bak");
+    let had_original = file.exists();
+    if had_original {
+        if let Err(error) = fs::rename(file, &backup) {
+            let _ = fs::remove_file(&temporary);
+            return Err(format!("Não foi possível preparar a atualização do projeto: {error}"));
+        }
+    }
     if let Err(error) = fs::rename(&temporary, file) {
+        if had_original {
+            let _ = fs::rename(&backup, file);
+        }
         let _ = fs::remove_file(&temporary);
-        return Err(error.to_string());
+        return Err(format!("Não foi possível salvar a biblioteca do projeto: {error}"));
+    }
+    if had_original {
+        let _ = fs::remove_file(backup);
     }
     Ok(())
 }
@@ -655,6 +669,11 @@ fn download_youtube_blocking(
     }
 
     let original_name = format!("{id}.mp4");
+    let actual_height = if height == 0 {
+        info.qualities.first().map(|quality| quality.height)
+    } else {
+        Some(height)
+    };
     let asset = make_asset(
         id.clone(),
         info.title.clone(),
@@ -667,7 +686,7 @@ fn download_youtube_blocking(
         Some(info.url),
         info.duration_ms,
         None,
-        Some(height.max(0)),
+        actual_height,
     );
 
     append_assets(&app, &project_id, &[asset.clone()], &[downloaded])?;
