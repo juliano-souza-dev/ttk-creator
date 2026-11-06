@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { desktopApi, isDesktopRuntime } from "./services/desktop-api";
+import EditorWorkspace from "./EditorWorkspace";
 import type { DownloadProgress, MediaAsset, Project, YoutubeInspection } from "./shared/types";
 import { Clapperboard, LayoutGrid, Film, GraduationCap, Settings2, Plus, Search, FolderOpen, FolderPlus, Clock3, Video, Sparkles, Play, X, ArrowUpRight, Upload, Youtube, Music2, Image as ImageIcon, FileVideo, CheckCircle2, LoaderCircle, Link2, Download, HardDrive } from "lucide-react";
 
@@ -146,7 +147,7 @@ export default function App() {
         </section>
         </> : activeProject ? <>
         <section className="project-workspace-heading">
-          <div className="project-workspace-copy"><label className="eyebrow muted">PROJETO ABERTO</label><h1>{activeProject.name}</h1><p>Seu espaço de trabalho. Importe os arquivos que farão parte deste vídeo.</p></div>
+          <div className="project-workspace-copy"><label className="eyebrow muted">PROJETO ABERTO</label><h1>{activeProject.name}</h1><p>Importe suas mídias, organize os clipes e comece a montar seu vídeo.</p></div>
           <div className="project-workspace-actions"><span className="project-format">1080 × 1920 <i>·</i> 30 FPS</span><button className="primary" onClick={()=>{setMediaTab("local");setMediaModal(true);}}><Plus size={15}/> Adicionar mídia</button></div>
         </section>
         <section className="project-workspace-status"><div><span className="workspace-status-dot"/><b>Projeto aberto</b><small>As mídias são armazenadas neste dispositivo e vinculadas a este projeto.</small></div><button className="secondary-action" onClick={returnToWorkspace}><LayoutGrid size={14}/> Todos os projetos</button></section>
@@ -154,7 +155,7 @@ export default function App() {
         <section className="media-library">
           <div className="section-head"><div><label className="eyebrow muted">BIBLIOTECA DE MÍDIA</label><h2>{activeProject.name}</h2><p className="section-subtitle">{assets.length} arquivo(s) · {formatBytes(assets.reduce((sum,a)=>sum+a.sizeBytes,0))} armazenados</p></div><button className="primary" onClick={()=>{setMediaTab("local");setMediaModal(true);}}><Plus size={15}/> Adicionar mídia</button></div>
           {assets.length===0 ? <div className="asset-empty"><div className="asset-empty-icon"><HardDrive size={22}/></div><b>Esta biblioteca ainda está vazia</b><p>Importe arquivos do computador ou traga um vídeo do YouTube.</p><div><button className="secondary-action" onClick={()=>{setMediaTab("local");setMediaModal(true);}}><Upload size={14}/> Arquivos locais</button><button className="secondary-action" onClick={()=>{setMediaTab("youtube");setMediaModal(true);}}><Youtube size={14}/> YouTube</button></div></div> :
-          <div className="asset-list">{assets.map(a=><article className="asset-row" key={a.id}><div className={"asset-icon "+a.kind}>{a.kind==="video"?<FileVideo size={17}/>:a.kind==="audio"?<Music2 size={17}/>:<ImageIcon size={17}/>}</div><div className="asset-info"><b>{a.name}</b><small>{a.originalName} · {a.source==="youtube"?"YouTube":"Arquivo local"}</small></div><span className="asset-kind">{a.kind==="video"?"VÍDEO":a.kind==="audio"?"ÁUDIO":"IMAGEM"}</span><span className="asset-size">{formatBytes(a.sizeBytes)}</span><span className="asset-duration">{formatDuration(a.durationMs)}</span></article>)}</div>}
+          <EditorWorkspace projectId={activeProject.id} assets={assets} onAddMedia={()=>{setMediaTab("local");setMediaModal(true);}}/>}
         </section>
         </> : null}
         <footer>FRAME LAB · FEITO PARA IDEIAS EM MOVIMENTO <span>EARLY ACCESS · 0.2.0</span></footer>
