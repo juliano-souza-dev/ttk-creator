@@ -8,8 +8,8 @@ This is an independent application with its own project format, media library, e
 
 - Tauri 2, Rust, React, and TypeScript
 - Native Windows file picker for local media
-- yt-dlp Rust integration for YouTube inspection and downloads
-- Automatically managed yt-dlp and FFmpeg binaries
+- yt-dlp CLI for YouTube inspection and downloads
+- External yt-dlp and FFmpeg tools
 - Python + FastAPI reserved for future media and AI jobs
 
 ## Current milestone
