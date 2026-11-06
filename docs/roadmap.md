@@ -14,8 +14,7 @@
 - [x] YouTube URL inspection before download
 - [x] Available-height quality selection
 - [x] yt-dlp CLI integration with progress events
-- [ ] Detect and guide installation of FFmpeg and yt-dlp
-- [x] YouTube download progress events
+- [ ] Detect and guide installation of yt-dlp and FFmpeg
 - [x] MP4 output and project asset registration
 - [ ] Probe local media duration, dimensions, frame rate, and codecs with FFprobe
 - [ ] Asset preview and remove/relink actions
