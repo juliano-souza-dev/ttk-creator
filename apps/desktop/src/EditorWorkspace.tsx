@@ -14,6 +14,7 @@ const timeLabel = (ms: number) => { const total = Math.max(0, Math.floor(ms / 10
 export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props) {
   const storageKey = `ttk-creator:timeline:${projectId}`;
   const [clips, setClips] = useState<TimelineClip[]>([]);
+  const [restored, setRestored] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({});
   const [loadError, setLoadError] = useState("");
@@ -26,7 +27,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
     } catch { setClips([]); }
   }, [storageKey]);
 
-  useEffect(() => { window.localStorage.setItem(storageKey, JSON.stringify(clips)); }, [storageKey, clips]);
+  useEffect(() => { if (restored) window.localStorage.setItem(storageKey, JSON.stringify(clips)); }, [storageKey, clips, restored]);
 
   useEffect(() => {
     let cancelled = false;
