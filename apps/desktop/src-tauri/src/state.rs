@@ -2,13 +2,15 @@ use std::sync::{Arc, Mutex};
 use tracing_appender::non_blocking::WorkerGuard;
 
 use crate::{
-    application::ports::ProjectRepository,
+    application::{ports::ProjectRepository, services::{MediaService, ProjectService}},
     infrastructure::media_storage::MediaStorage,
 };
 
 pub struct AppState {
-    pub projects: Arc<dyn ProjectRepository>,
+    pub projects: ProjectService,
+    pub media: MediaService,
+    pub repository: Arc<dyn ProjectRepository>,
     pub media_storage: MediaStorage,
-    // Keeping the guard alive is required for buffered log writes to flush.
+    // The worker must remain alive so buffered log records are flushed.
     pub(crate) _log_guard: Mutex<Option<WorkerGuard>>,
 }
