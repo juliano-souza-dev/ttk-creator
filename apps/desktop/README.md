@@ -1,63 +1,28 @@
-# Desktop application
+# Desktop app
 
-The desktop app uses Tauri 2, React, TypeScript, Vite, and a Rust backend.
+## Development
 
-## Requirements
+From this directory:
 
-- Node.js (LTS) and npm
-- Rust toolchain
-- Microsoft C++ Build Tools
-- WebView2 Runtime
-
-See the official [Tauri v2 Windows prerequisites](https://v2.tauri.app/start/prerequisites/).
-
-## Run in development
-
-From this directory in PowerShell:
-
-```powershell
+```bash
 npm install
 npm run tauri dev
 ```
 
-## Build a Windows installer
-
-```powershell
-npm run tauri build
-```
+The Windows desktop build requires Node.js, Rust/Cargo, Microsoft C++ Build Tools, and WebView2.
 
 ## Media import
 
-The media library currently supports:
+Local imports use the native Tauri file picker. Imported files are copied into the selected project's `media/` directory. The original files are never modified.
 
-- Local video: MP4, MOV, M4V, MKV, WebM, AVI.
-- Local audio: MP3, WAV, M4A, AAC, FLAC, OGG, OPUS.
-- Images: PNG, JPG, JPEG, WebP, GIF, BMP.
-- Up to 100 selected files per import operation.
-- Project-local copies under `projects/<id>/media/`; original files are not modified.
-- YouTube video inspection, quality selection, MP4 download, and progress reporting.
+Supported local formats:
 
-### YouTube tools
+- Video: MP4, MOV, M4V, MKV, WebM, AVI
+- Audio: MP3, WAV, M4A, AAC, FLAC, OGG, OPUS
+- Image: PNG, JPG/JPEG, WebP, GIF, BMP
 
-Install yt-dlp:
+YouTube inspection and download use the Rust `yt-dlp` integration. On first use, the application downloads and prepares the yt-dlp and FFmpeg binaries inside its application data directory. Subsequent uses reuse those binaries. No separate Python installation is required for this feature.
 
-```powershell
-py -m pip install -U yt-dlp
-```
+YouTube format availability is determined by the source. The importer offers the available video heights and remuxes the selected download to MP4. Only import videos that you have permission to download and reuse.
 
-Install FFmpeg and make sure `ffmpeg.exe` is available in PATH. Verify both:
-
-```powershell
-yt-dlp --version
-ffmpeg -version
-```
-
-The app searches for `yt-dlp`, `yt-dlp.exe`, and Python module launchers (`py -m yt_dlp`, `python -m yt_dlp`, `python3 -m yt_dlp`). The standalone app bundle does not include these external tools yet.
-
-YouTube availability is not guaranteed for private, restricted, age-gated, region-blocked, or authentication-required videos. Only download content you have permission to use.
-
-## Project document
-
-Each project starts with a 1080 × 1920 canvas at 30 FPS and a versioned `project.json`. Imported assets are recorded in the document with a relative path, media type, source, and file metadata.
-
-Timeline editing, media playback, captions, and final rendering are upcoming milestones.
+Each asset is registered in the project's `project.json` and stored under its `media/` directory.
