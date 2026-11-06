@@ -59,7 +59,7 @@ impl YoutubeDownloader {
             .spawn()
             .map_err(|error| format!("Não foi possível iniciar o yt-dlp: {error}"))?;
 
-        let progress = Arc::new(on_progress);
+        let progress: Arc<dyn Fn(DownloadProgress) + Send + Sync> = Arc::new(on_progress);
         let stdout = child.stdout.take().ok_or("Não foi possível ler a saída do yt-dlp.")?;
         let stdout_progress = Arc::clone(&progress);
         let stdout_project = project_id.to_string();
@@ -128,13 +128,6 @@ impl YoutubeDownloader {
             created_at: timestamp_millis(),
         };
 
-        progress(DownloadProgress {
-            project_id: project_id.to_string(),
-            percent: Some(100.0),
-            speed: None,
-            eta: None,
-            status: "completed".into(),
-        });
         Ok((asset, final_path))
     }
 }
