@@ -1,9 +1,14 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::{fs, path::{Path, PathBuf}, time::{SystemTime, UNIX_EPOCH}};
+use std::{
+    fs,
+    io::{BufRead, BufReader},
+    path::{Path, PathBuf},
+    process::{Command, Stdio},
+    time::{SystemTime, UNIX_EPOCH},
+};
 use tauri::{AppHandle, Emitter, Manager};
 use uuid::Uuid;
-use yt_dlp::{Downloader, model::selector::VideoQuality};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -378,120 +383,143 @@ fn normalize_youtube_url(raw: &str) -> Result<(String, String), String> {
     Ok((id.clone(), format!("https://www.youtube.com/watch?v={id}")))
 }
 
-async fn youtube_downloader(app: &AppHandle) -> Result<Downloader, String> {
-    let app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let tools = app_data.join("tools");
-    let output = app_data.join("youtube-cache");
-    fs::create_dir_all(&tools).map_err(|e| e.to_string())?;
-    fs::create_dir_all(&output).map_err(|e| e.to_string())?;
-    let builder = Downloader::with_new_binaries(tools, output).await
-        .map_err(|e| format!("Não foi possível preparar o importador do YouTube: {e}"))?;
-    builder.build().await.map_err(|e| format!("Não foi possível iniciar o importador do YouTube: {e}"))
+fn ytdlp_command() -> Result<(String, Vec<String>), String> {
+    let candidates: Vec<(String, Vec<String>)> = vec![
+        ("yt-dlp".into(), vec![]),
+        ("py".into(), vec!["-m".into(), "yt_dlp".into()]),
+        ("python".into(), vec!["-m".into(), "yt_dlp".into()]),
+        ("python3".into(), vec!["-m".into(), "yt_dlp".into()]),
+    ];
+    for (program, prefix) in candidates {
+        let found = Command::new(&program).args(&prefix).arg("--version")
+            .stdout(Stdio::null()).stderr(Stdio::null()).status()
+            .map(|status| status.success()).unwrap_or(false);
+        if found { return Ok((program, prefix)); }
+    }
+    Err("yt-dlp não foi encontrado. Instale com: py -m pip install --upgrade yt-dlp".into())
 }
 
-fn youtube_inspection(video: &yt_dlp::model::Video, canonical: String, video_id: String) -> YoutubeInspection {
+fn youtube_error(detail: &str) -> String {
+    let text = detail.to_ascii_lowercase();
+    if text.contains("private") { "Este vídeo é privado e não pode ser importado.".into() }
+    else if text.contains("members-only") || text.contains("subscriber") { "Este vídeo exige uma assinatura ou associação.".into() }
+    else if text.contains("unavailable") || text.contains("not available") { "Este vídeo não está disponível ou está bloqueado nesta região.".into() }
+    else if text.contains("sign in") || text.contains("login required") { "O YouTube exige autenticação para acessar este vídeo.".into() }
+    else { "Não foi possível acessar o vídeo. Confira o link e tente novamente.".into() }
+}
+
+fn inspect_youtube_source(raw: &str) -> Result<YoutubeInspection, String> {
+    let (video_id, canonical) = normalize_youtube_url(raw)?;
+    let (program, prefix) = ytdlp_command()?;
+    let output = Command::new(program).args(prefix).args([
+        "--dump-single-json", "--skip-download", "--no-playlist", "--no-warnings", "--socket-timeout", "20"
+    ]).arg(&canonical).output().map_err(|e| e.to_string())?;
+    if !output.status.success() {
+        return Err(youtube_error(&String::from_utf8_lossy(&output.stderr)));
+    }
+    let data: Value = serde_json::from_slice(&output.stdout)
+        .map_err(|_| "Metadados retornados pelo yt-dlp são inválidos.".to_string())?;
+    if data.get("id").and_then(Value::as_str) != Some(video_id.as_str()) {
+        return Err("O YouTube retornou um vídeo diferente do link informado.".into());
+    }
+    let title = data.get("title").and_then(Value::as_str).unwrap_or("").trim();
+    if title.is_empty() { return Err("Não foi possível identificar o título do vídeo.".into()); }
+    let channel = data.get("channel").or_else(|| data.get("uploader")).and_then(Value::as_str).map(str::to_string);
+    let duration_ms = data.get("duration").and_then(Value::as_f64).map(|seconds| (seconds * 1000.0) as u64);
+    let thumbnail = data.get("thumbnail").and_then(Value::as_str).map(str::to_string);
     let mut heights = std::collections::BTreeSet::new();
-    for format in &video.formats {
-        if format.is_video() {
-            if let Some(height) = format.video_resolution.height {
-                if height > 0 && height <= 2160 { heights.insert(height); }
+    if let Some(formats) = data.get("formats").and_then(Value::as_array) {
+        for format in formats {
+            let has_video = format.get("vcodec").and_then(Value::as_str).map(|codec| codec != "none").unwrap_or(false);
+            if has_video {
+                if let Some(height) = format.get("height").and_then(Value::as_u64) {
+                    if height > 0 && height <= 2160 { heights.insert(height as u32); }
+                }
             }
         }
     }
-    let mut qualities: Vec<YoutubeQuality> = heights.into_iter().rev()
-        .map(|height| YoutubeQuality { height, label: format!("{height}p") }).collect();
-    if qualities.is_empty() {
-        qualities.push(YoutubeQuality { height: 720, label: "Melhor disponível".into() });
-    }
-    YoutubeInspection {
-        video_id,
-        url: canonical,
-        title: video.title.chars().take(255).collect(),
-        channel: video.channel.clone().or_else(|| video.uploader.clone()),
-        duration_ms: video.duration.map(|seconds| (seconds.max(0) as u64) * 1000),
-        thumbnail: video.thumbnail.clone(),
-        qualities,
-    }
+    let qualities = heights.into_iter().rev().map(|height| YoutubeQuality {
+        height, label: format!("{height}p"),
+    }).collect();
+    Ok(YoutubeInspection {
+        video_id, url: canonical, title: title.chars().take(255).collect(),
+        channel, duration_ms, thumbnail, qualities,
+    })
 }
 
 #[tauri::command]
-async fn inspect_youtube(app: AppHandle, url: String) -> Result<YoutubeInspection, String> {
-    let (video_id, canonical) = normalize_youtube_url(&url)?;
-    let downloader = youtube_downloader(&app).await?;
-    let video = downloader.fetch_video_infos(canonical.clone()).await
-        .map_err(|e| format!("Não foi possível inspecionar o vídeo: {e}"))?;
-    if video.id != video_id { return Err("O YouTube retornou um vídeo diferente do link informado.".into()); }
-    Ok(youtube_inspection(&video, canonical, video_id))
+fn inspect_youtube(url: String) -> Result<YoutubeInspection, String> {
+    inspect_youtube_source(&url)
 }
 
 #[tauri::command]
 async fn download_youtube(
-    app: AppHandle,
-    project_id: String,
-    url: String,
-    max_height: Option<u32>,
+    app: AppHandle, project_id: String, url: String, max_height: Option<u32>,
 ) -> Result<MediaAsset, String> {
-    let (video_id, canonical) = normalize_youtube_url(&url)?;
+    tauri::async_runtime::spawn_blocking(move || download_youtube_blocking(app, project_id, url, max_height))
+        .await.map_err(|e| format!("A tarefa de download foi interrompida: {e}"))?
+}
+
+fn download_youtube_blocking(
+    app: AppHandle, project_id: String, raw: String, max_height: Option<u32>,
+) -> Result<MediaAsset, String> {
+    let info = inspect_youtube_source(&raw)?;
     let height = max_height.unwrap_or(1080);
     if height != 0 && !(144..=2160).contains(&height) { return Err("Qualidade selecionada inválida.".into()); }
+    let (program, prefix) = ytdlp_command()?;
+    let folder = project_folder(&app, &project_id)?.join("media");
+    fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
+    let id = Uuid::new_v4().to_string();
+    let template = folder.join(format!("{id}.%(ext)s"));
+    let selector = if height == 0 { "bv*+ba/b".to_string() }
+        else { format!("bv*[height<={height}]+ba/b[height<={height}]") };
+    let mut child = Command::new(program).args(prefix).args([
+        "--no-warnings", "--newline", "--progress", "--progress-template",
+        "download:PROGRESS:%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s",
+        "--no-playlist", "--format", &selector, "--merge-output-format", "mp4",
+        "--remux-video", "mp4", "--output",
+    ]).arg(template.to_string_lossy().to_string()).arg(&info.url)
+        .stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()
+        .map_err(|e| format!("Não foi possível iniciar o yt-dlp: {e}"))?;
 
-    let project = project_folder(&app, &project_id)?;
-    let media_folder = project.join("media");
-    fs::create_dir_all(&media_folder).map_err(|e| e.to_string())?;
-    let downloader = youtube_downloader(&app).await?;
-    let video = downloader.fetch_video_infos(canonical.clone()).await
-        .map_err(|e| format!("Não foi possível acessar o vídeo: {e}"))?;
-    if video.id != video_id { return Err("O YouTube retornou um vídeo diferente do link informado.".into()); }
-
-    let asset_id = Uuid::new_v4().to_string();
-    let destination = media_folder.join(format!("{asset_id}.mp4"));
-    let app_for_progress = app.clone();
-    let project_for_progress = project_id.clone();
-    let quality = if height == 0 { VideoQuality::Best } else { VideoQuality::CustomHeight(height) };
-    let downloaded = downloader.download(&video, destination.clone())
-        .video_quality(quality)
-        .with_progress(move |fraction| {
-            let _ = app_for_progress.emit("youtube-download-progress", DownloadProgress {
-                project_id: project_for_progress.clone(),
-                percent: Some((fraction * 100.0) as f32),
-                speed: None,
-                eta: None,
-                status: "downloading".into(),
-            });
-        })
-        .execute().await
-        .map_err(|e| format!("Falha ao baixar o vídeo: {e}"))?;
-
-    if !downloaded.is_file() {
-        return Err("O download terminou, mas o arquivo MP4 não foi encontrado.".into());
+    if let Some(stdout) = child.stdout.take() {
+        for line in BufReader::new(stdout).lines().flatten() {
+            if let Some(raw_progress) = line.strip_prefix("PROGRESS:") {
+                let fields: Vec<&str> = raw_progress.split('|').collect();
+                let percent = fields.first().and_then(|v| v.trim().trim_end_matches('%').trim().parse::<f32>().ok());
+                let speed = fields.get(1).map(|v| v.trim().to_string()).filter(|v| !v.is_empty() && *v != "NA");
+                let eta = fields.get(2).map(|v| v.trim().to_string()).filter(|v| !v.is_empty() && *v != "NA");
+                let _ = app.emit("youtube-download-progress", DownloadProgress {
+                    project_id: project_id.clone(), percent, speed, eta, status: "downloading".into(),
+                });
+            }
+        }
     }
-    let size = fs::metadata(&downloaded).map_err(|e| e.to_string())?.len();
+    let output = child.wait_with_output().map_err(|e| e.to_string())?;
+    if !output.status.success() {
+        let detail = String::from_utf8_lossy(&output.stderr);
+        if detail.to_ascii_lowercase().contains("ffmpeg") {
+            return Err("FFmpeg não foi encontrado. Instale-o e deixe ffmpeg.exe disponível no PATH.".into());
+        }
+        return Err(youtube_error(&detail));
+    }
+
+    let downloaded = folder.join(format!("{id}.mp4"));
+    let size = fs::metadata(&downloaded)
+        .map_err(|_| "O download terminou, mas o MP4 não foi encontrado. Verifique se o FFmpeg está instalado.".to_string())?.len();
     if size == 0 { return Err("O arquivo baixado está vazio.".into()); }
-    if downloaded != destination {
-        fs::copy(&downloaded, &destination).map_err(|e| e.to_string())?;
-        let _ = fs::remove_file(&downloaded);
-    }
-
-    let title = video.title.clone();
-    let safe_name: String = title.chars()
+    let safe_title: String = info.title.chars()
         .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
         .take(48).collect();
     let asset = MediaAsset {
-        id: asset_id.clone(),
-        name: title.clone(),
-        original_name: format!("{safe_name}.mp4"),
-        kind: "video".into(),
-        mime_type: "video/mp4".into(),
-        size_bytes: size,
-        relative_path: format!("media/{asset_id}.mp4"),
-        source: "youtube".into(),
-        source_url: Some(canonical),
-        duration_ms: video.duration.map(|seconds| (seconds.max(0) as u64) * 1000),
-        width: None,
-        height: if height == 0 { video.formats.iter().filter_map(|f| f.video_resolution.height).max() } else { Some(height) },
+        id: id.clone(), name: info.title.clone(), original_name: format!("{safe_title}.mp4"),
+        kind: "video".into(), mime_type: "video/mp4".into(), size_bytes: size,
+        relative_path: format!("media/{id}.mp4"), source: "youtube".into(),
+        source_url: Some(info.url.clone()), duration_ms: info.duration_ms,
+        width: None, height: if height == 0 { info.qualities.first().map(|q| q.height) } else { Some(height) },
         created_at: timestamp_millis(),
     };
-    append_assets(&app, &project_id, &[asset.clone()], &[destination])?;
+    append_assets(&app, &project_id, &[asset.clone()], &[downloaded])?;
     let _ = app.emit("youtube-download-progress", DownloadProgress {
         project_id, percent: Some(100.0), speed: None, eta: None, status: "completed".into(),
     });
