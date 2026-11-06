@@ -9,30 +9,20 @@ The first target is Windows desktop. The architecture should avoid coupling core
 ## 2. Initial system shape
 
 ```text
-┌──────────────────────────────────────────────┐
-│              Desktop application             │
-│  Tauri 2                                      │
-│  ┌────────────────────────────────────────┐  │
-│  │ React + TypeScript                     │  │
-│  │ Project UI · Media bin · Preview       │  │
-│  │ Timeline · Captions · Export controls  │  │
-│  └───────────────────┬────────────────────┘  │
-└──────────────────────┼───────────────────────┘
-                       │ local API / commands
-┌──────────────────────▼───────────────────────┐
-│              Local media service             │
-│  Python + FastAPI                            │
-│  Project service · Media probe · Render jobs │
-│  Transcription adapters · AI adapters        │
-└───────────────┬───────────────────┬──────────┘
-                │                   │
-        ┌───────▼────────┐  ┌───────▼─────────┐
-        │ SQLite         │  │ FFmpeg          │
-        │ Project data   │  │ Preview/export  │
-        └────────────────┘  └─────────────────┘
+Desktop application (Tauri 2 + React + TypeScript)
+  ├─ Project dashboard and project document
+  ├─ Native file picker and project media library
+  ├─ Tauri/Rust commands for local file operations
+  └─ YouTube adapter (yt-dlp CLI)
+       └─ FFmpeg for stream merging and MP4 remuxing
+
+Future local media service (Python + FastAPI)
+  ├─ FFmpeg render orchestration and media probing
+  ├─ Transcription and AI provider adapters
+  └─ Long-running media jobs
 ```
 
-This is a logical boundary, not a mandate that every operation must cross HTTP. Tauri commands may be used for secure desktop integration. The frontend must not execute arbitrary shell commands.
+This is an incremental architecture. The current import workflows use native Tauri commands. The Python service remains a future boundary for heavier media processing and AI jobs. The frontend never executes shell commands directly.
 
 ## 3. Repository layout
 
