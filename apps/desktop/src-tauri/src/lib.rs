@@ -6,7 +6,7 @@ mod logging;
 mod state;
 
 use std::{path::PathBuf, sync::{Arc, Mutex}};
-use tauri::{Manager, path::BaseDirectory};
+use tauri::Manager;
 
 use application::services::{MediaService, ProjectService};
 use infrastructure::{media_storage::MediaStorage, sqlite_project_repository::SqliteProjectRepository};
@@ -37,7 +37,6 @@ pub fn run() {
             app.manage(AppState {
                 projects,
                 media,
-                repository: repository_port,
                 media_storage,
                 _log_guard: Mutex::new(Some(log_guard)),
             });
