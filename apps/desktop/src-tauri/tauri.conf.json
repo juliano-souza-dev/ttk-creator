@@ -33,6 +33,8 @@
     ],
     "shortDescription": "Editor de vídeos curtos",
     "category": "Video",
-    "icon": []
+    "icon": [
+      "icons/icon.ico"
+    ]
   }
 }
