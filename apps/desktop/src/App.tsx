@@ -15,6 +15,7 @@ export default function App() {
   const [busy,setBusy] = useState(false);
   const [error,setError] = useState("");
   const [activeProject,setActiveProject] = useState<Project|null>(null);
+  const [view,setView] = useState<"workspace"|"project">("workspace");
   const [assets,setAssets] = useState<MediaAsset[]>([]);
   const [mediaModal,setMediaModal] = useState(false);
   const [mediaTab,setMediaTab] = useState<"local"|"youtube">("local");
@@ -29,13 +30,34 @@ export default function App() {
     try { setProjects(await desktopApi.listProjects()); }
     catch (e) { setError(String(e)); }
   }
-  useEffect(()=>{ void refresh(); },[]);
   useEffect(()=>{
+    let cancelled=false;
+    async function restoreLastProject(){
+      if(!isDesktopRuntime){ await refresh(); return; }
+      try {
+        const loaded=await desktopApi.listProjects();
+        if(cancelled) return;
+        setProjects(loaded);
+        const lastProjectId=window.localStorage.getItem("ttk-creator:last-open-project");
+        const remembered=loaded.find(project=>project.id===lastProjectId);
+        if(remembered){
+          const opened=await desktopApi.openProject(remembered.id);
+          const projectAssets=await desktopApi.listProjectAssets(opened.id);
+          if(cancelled) return;
+          setActiveProject(opened); setAssets(projectAssets); setView("project");
+        }
+      } catch(e){ if(!cancelled) setError(String(e)); }
+    }
+    void restoreLastProject();
+    return ()=>{cancelled=true;};
+  },[]);
+  useEffect(()=>{
+    let disposed=false;
     let unlisten:(()=>void)|undefined;
     void desktopApi.subscribeToYoutubeProgress(progressEvent=>{
       if(progressEvent.projectId===activeProject?.id) setProgress(progressEvent);
-    }).then(fn=>{unlisten=fn;});
-    return ()=>unlisten?.();
+    }).then(fn=>{ if(disposed) fn(); else unlisten=fn; });
+    return ()=>{disposed=true;unlisten?.();};
   },[activeProject?.id]);
 
   async function refreshAssets(project:Project) {
@@ -44,8 +66,17 @@ export default function App() {
     catch(e) { setError(String(e)); }
   }
   async function selectProject(project:Project) {
-    setActiveProject(project); setNotice(""); await refreshAssets(project);
+    setBusy(true); setError("");
+    try {
+      const opened=await desktopApi.openProject(project.id);
+      setActiveProject(opened); setNotice("");
+      window.localStorage.setItem("ttk-creator:last-open-project",opened.id);
+      await refreshAssets(opened);
+      setView("project");
+    } catch(e){ setError(String(e)); }
+    finally { setBusy(false); }
   }
+  function returnToWorkspace(){ setView("workspace"); setMediaModal(false); setError(""); setNotice(""); }
   async function importLocalFiles() {
     if(!activeProject) return;
     setBusy(true); setError("");
@@ -83,7 +114,8 @@ export default function App() {
     setBusy(true); setError("");
     try {
       const project = await desktopApi.createProject(name.trim());
-      setProjects(p=>[project,...p]); setName(""); setCreating(false); setActiveProject(project); setAssets([]); setMediaModal(true);
+      setProjects(p=>[project,...p]); setName(""); setCreating(false); setActiveProject(project); setAssets([]);
+      window.localStorage.setItem("ttk-creator:last-open-project",project.id); setView("project");
     } catch(e) { setError(String(e)); }
     finally { setBusy(false); }
   }
@@ -101,21 +133,29 @@ export default function App() {
       <div className="profile"><div className="avatar">J</div><div><b>Seu estúdio</b><small>Ambiente local</small></div><Settings2 size={17}/></div>
     </aside>
     <section className="main">
-      <header className="topbar"><div>Workspace <span>/</span> <b>Visão geral</b></div><div className="top-right"><small><i/> Salvo neste dispositivo</small><button className="secondary-action" disabled={!activeProject} onClick={()=>{setMediaTab("local");setMediaModal(true);}}><Upload size={15}/> Importar mídia</button><button className="primary" onClick={()=>setCreating(true)}><Plus size={16}/> Novo projeto</button></div></header>
+      <header className="topbar"><div>Workspace <span>/</span> <b>{view==="project"&&activeProject?activeProject.name:"Visão geral"}</b></div><div className="top-right"><small><i/> Salvo neste dispositivo</small>{view==="project"&&<button className="secondary-action" onClick={returnToWorkspace}><LayoutGrid size={15}/> Voltar à workspace</button>}<button className="secondary-action" disabled={!activeProject||view!=="project"} onClick={()=>{setMediaTab("local");setMediaModal(true);}}><Upload size={15}/> Importar mídia</button><button className="primary" onClick={()=>setCreating(true)}><Plus size={16}/> Novo projeto</button></div></header>
       <div className="content">
+        {view==="workspace" ? <>
         <section className="hero"><div><label className="eyebrow"><Sparkles size={13}/> SEU PRÓXIMO VÍDEO COMEÇA AQUI</label><h1>Boas ideias merecem<br/><em>uma boa edição.</em></h1><p>Seu espaço para transformar ideias em vídeos que prendem a atenção.</p></div><div className="hero-visual"><div className="preview-art"><div className="rec">REC <i/></div><div className="play"><Play size={22} fill="currentColor"/></div><strong>IDEIA <span>EM MOVIMENTO.</span></strong><div className="scrub">00:18 <div><i/><i/><i/><i/><i/></div> 00:55</div></div><div className="float-tag"><Sparkles size={13}/> MAKE IT MATTER</div></div></section>
         <section className="stats"><div><span className="stat-icon purple"><Film size={17}/></span><label>PROJETOS<strong>{String(projects.length).padStart(2,"0")}</strong></label></div><div><span className="stat-icon orange"><Clock3 size={17}/></span><label>FORMATO PADRÃO<strong>9:16 <small>VERTICAL</small></strong></label></div><div><span className="stat-icon green"><Video size={17}/></span><label>SEU ESTÚDIO<strong>LOCAL <small>WINDOWS</small></strong></label></div></section>
         <section className="projects"><div className="section-head"><div><label className="eyebrow muted">BIBLIOTECA</label><h2>Seus projetos</h2></div><label className="search"><Search size={15}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar projeto..."/></label></div>
           {error && !mediaModal && <div className="error">{error}</div>}
           {notice && !mediaModal && <div className="notice"><CheckCircle2 size={15}/>{notice}</div>}
-          {visible.length ? <div className="project-grid">{visible.map(p=><article className={"project "+(activeProject?.id===p.id?"selected":"")} key={p.id} onClick={()=>void selectProject(p)}><div className="thumb"><div className="thumb-grid"/><div className="thumb-play"><Play size={16} fill="currentColor"/></div><small>9:16</small></div><div className="project-meta"><div><b>{p.name}</b><small>Atualizado em {new Date(Number(p.updatedAt)).toLocaleDateString("pt-BR")}</small></div></div></article>)}</div> :
+          {visible.length ? <div className="project-grid">{visible.map(p=><article className={"project "+(activeProject?.id===p.id?"selected":"")} key={p.id} onClick={()=>void selectProject(p)}><div className="thumb"><div className="thumb-grid"/><div className="thumb-play"><Play size={16} fill="currentColor"/></div><small>9:16</small></div><div className="project-meta"><div><b>{p.name}</b><small>Atualizado em {new Date(Number(p.updatedAt)).toLocaleDateString("pt-BR")}</small></div><span className="project-open-label">Abrir projeto <ArrowUpRight size={13}/></span></div></article>)}</div> :
           <div className="empty"><div className="empty-icon"><FolderOpen size={27}/><i><Plus size={13}/></i></div><b>{search?"Nenhum projeto encontrado":"Seu primeiro projeto começa aqui"}</b><p>{search?"Tente buscar por outro nome.":"Crie um espaço para reunir vídeos, áudios, cenas e ideias."}</p>{!search&&<button className="primary" onClick={()=>setCreating(true)}><FolderPlus size={16}/> Criar meu primeiro projeto</button>}</div>}
         </section>
-        {activeProject && <section className="media-library">
+        </> : activeProject ? <>
+        <section className="project-workspace-heading">
+          <div className="project-workspace-copy"><label className="eyebrow muted">PROJETO ABERTO</label><h1>{activeProject.name}</h1><p>Seu espaço de trabalho. Importe os arquivos que farão parte deste vídeo.</p></div>
+          <div className="project-workspace-actions"><span className="project-format">1080 × 1920 <i>·</i> 30 FPS</span><button className="primary" onClick={()=>{setMediaTab("local");setMediaModal(true);}}><Plus size={15}/> Adicionar mídia</button></div>
+        </section>
+        <section className="project-workspace-status"><div><span className="workspace-status-dot"/><b>Projeto aberto</b><small>As mídias são armazenadas neste dispositivo e vinculadas a este projeto.</small></div><button className="secondary-action" onClick={returnToWorkspace}><LayoutGrid size={14}/> Todos os projetos</button></section>
+        <section className="media-library">
           <div className="section-head"><div><label className="eyebrow muted">BIBLIOTECA DE MÍDIA</label><h2>{activeProject.name}</h2><p className="section-subtitle">{assets.length} arquivo(s) · {formatBytes(assets.reduce((sum,a)=>sum+a.sizeBytes,0))} armazenados</p></div><button className="primary" onClick={()=>{setMediaTab("local");setMediaModal(true);}}><Plus size={15}/> Adicionar mídia</button></div>
           {assets.length===0 ? <div className="asset-empty"><div className="asset-empty-icon"><HardDrive size={22}/></div><b>Esta biblioteca ainda está vazia</b><p>Importe arquivos do computador ou traga um vídeo do YouTube.</p><div><button className="secondary-action" onClick={()=>{setMediaTab("local");setMediaModal(true);}}><Upload size={14}/> Arquivos locais</button><button className="secondary-action" onClick={()=>{setMediaTab("youtube");setMediaModal(true);}}><Youtube size={14}/> YouTube</button></div></div> :
           <div className="asset-list">{assets.map(a=><article className="asset-row" key={a.id}><div className={"asset-icon "+a.kind}>{a.kind==="video"?<FileVideo size={17}/>:a.kind==="audio"?<Music2 size={17}/>:<ImageIcon size={17}/>}</div><div className="asset-info"><b>{a.name}</b><small>{a.originalName} · {a.source==="youtube"?"YouTube":"Arquivo local"}</small></div><span className="asset-kind">{a.kind==="video"?"VÍDEO":a.kind==="audio"?"ÁUDIO":"IMAGEM"}</span><span className="asset-size">{formatBytes(a.sizeBytes)}</span><span className="asset-duration">{formatDuration(a.durationMs)}</span></article>)}</div>}
-        </section>}
+        </section>
+        </> : null}
         <footer>FRAME LAB · FEITO PARA IDEIAS EM MOVIMENTO <span>EARLY ACCESS · 0.2.0</span></footer>
       </div>
     </section>
