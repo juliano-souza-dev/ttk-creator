@@ -5,6 +5,7 @@ use std::{
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
     process::{Command, Stdio},
+    thread,
     time::{SystemTime, UNIX_EPOCH},
 };
 use tauri::{AppHandle, Emitter, Manager};
@@ -460,6 +461,22 @@ async fn download_youtube(
         .await.map_err(|e| format!("A tarefa de download foi interrompida: {e}"))?
 }
 
+
+fn emit_download_progress(app: &AppHandle, project_id: &str, line: &str) {
+    let Some(index) = line.find("PROGRESS:") else { return; };
+    let fields: Vec<&str> = line[index + "PROGRESS:".len()..].split('|').collect();
+    let percent = fields.first().and_then(|value| {
+        value.trim().trim_end_matches('%').trim().parse::<f32>().ok()
+    });
+    let speed = fields.get(1).map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty() && *value != "NA");
+    let eta = fields.get(2).map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty() && *value != "NA");
+    let _ = app.emit("youtube-download-progress", DownloadProgress {
+        project_id: project_id.to_string(), percent, speed, eta, status: "downloading".into(),
+    });
+}
+
 fn download_youtube_blocking(
     app: AppHandle, project_id: String, raw: String, max_height: Option<u32>,
 ) -> Result<MediaAsset, String> {
@@ -482,22 +499,30 @@ fn download_youtube_blocking(
         .stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()
         .map_err(|e| format!("Não foi possível iniciar o yt-dlp: {e}"))?;
 
-    if let Some(stdout) = child.stdout.take() {
+    let stdout = child.stdout.take().ok_or("Não foi possível ler a saída do yt-dlp.")?;
+    let stderr = child.stderr.take().ok_or("Não foi possível ler os erros do yt-dlp.")?;
+    let app_stdout = app.clone();
+    let project_stdout = project_id.clone();
+    let stdout_reader = thread::spawn(move || {
         for line in BufReader::new(stdout).lines().flatten() {
-            if let Some(raw_progress) = line.strip_prefix("PROGRESS:") {
-                let fields: Vec<&str> = raw_progress.split('|').collect();
-                let percent = fields.first().and_then(|v| v.trim().trim_end_matches('%').trim().parse::<f32>().ok());
-                let speed = fields.get(1).map(|v| v.trim().to_string()).filter(|v| !v.is_empty() && *v != "NA");
-                let eta = fields.get(2).map(|v| v.trim().to_string()).filter(|v| !v.is_empty() && *v != "NA");
-                let _ = app.emit("youtube-download-progress", DownloadProgress {
-                    project_id: project_id.clone(), percent, speed, eta, status: "downloading".into(),
-                });
-            }
+            emit_download_progress(&app_stdout, &project_stdout, &line);
         }
-    }
-    let output = child.wait_with_output().map_err(|e| e.to_string())?;
-    if !output.status.success() {
-        let detail = String::from_utf8_lossy(&output.stderr);
+    });
+    let app_stderr = app.clone();
+    let project_stderr = project_id.clone();
+    let stderr_reader = thread::spawn(move || {
+        let mut details = String::new();
+        for line in BufReader::new(stderr).lines().flatten() {
+            emit_download_progress(&app_stderr, &project_stderr, &line);
+            details.push_str(&line);
+            details.push('\n');
+        }
+        details
+    });
+    let status = child.wait().map_err(|e| e.to_string())?;
+    let _ = stdout_reader.join();
+    let detail = stderr_reader.join().unwrap_or_default();
+    if !status.success() {
         if detail.to_ascii_lowercase().contains("ffmpeg") {
             return Err("FFmpeg não foi encontrado. Instale-o e deixe ffmpeg.exe disponível no PATH.".into());
         }
