@@ -21,9 +21,9 @@ These choices are the starting architecture, not immutable constraints. Each sub
 
 ## Development status
 
-The repository is being initialized. The first milestone is a runnable desktop shell and a reliable local project/media foundation. Timeline editing, caption synchronization, and rendering will follow in deliberate increments.
+The first Windows desktop shell is now in place. It includes a project dashboard and local project creation/listing. Timeline editing, media import, caption synchronization, and rendering will follow in deliberate increments.
 
-See [Architecture](docs/architecture.md) and [Roadmap](docs/roadmap.md).
+See [Architecture](docs/architecture.md) and [Roadmap](docs/roadmap.md).\n\n## Run on Windows\n\nInstall the prerequisites described in the [Tauri v2 Windows guide](https://v2.tauri.app/start/prerequisites/), including Node.js, Rust, Microsoft C++ Build Tools, and WebView2.\n\nThen open PowerShell in `apps/desktop` and run:\n\n```powershell\nnpm install\nnpm run tauri dev\n```\n\nTo build a Windows installer:\n\n```powershell\nnpm run tauri build\n```\n\nProjects created by the app are stored in the operating system's application data directory under `projects/`. The current version creates and lists project documents; the editing timeline and media workflows are not implemented yet.
 
 ## Principles
 
