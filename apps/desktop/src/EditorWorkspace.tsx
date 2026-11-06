@@ -3,7 +3,7 @@ import type { DragEvent } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { desktopApi } from "./services/desktop-api";
 import type { MediaAsset } from "./shared/types";
-import { AudioLines, Film, Image as ImageIcon, Plus, Play, Pause, Trash2, ChevronUp, ChevronDown, Scissors, Clock3 } from "lucide-react";
+import { AudioLines, Film, Image as ImageIcon, Plus, Play, Trash2, ChevronUp, ChevronDown, Scissors, Clock3 } from "lucide-react";
 
 type TimelineClip = { id: string; assetId: string; startMs: number; endMs: number };
 type Props = { projectId: string; assets: MediaAsset[]; onAddMedia: () => void };
@@ -24,7 +24,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
       const saved = window.localStorage.getItem(storageKey);
       const parsed = saved ? JSON.parse(saved) as TimelineClip[] : [];
       setClips(Array.isArray(parsed) ? parsed.filter(c => c && typeof c.id === "string" && typeof c.assetId === "string" && Number.isFinite(c.startMs) && Number.isFinite(c.endMs) && c.endMs > c.startMs) : []);
-    } catch { setClips([]); }
+    } catch { setClips([]); } finally { setRestored(true); }
   }, [storageKey]);
 
   useEffect(() => { if (restored) window.localStorage.setItem(storageKey, JSON.stringify(clips)); }, [storageKey, clips, restored]);
