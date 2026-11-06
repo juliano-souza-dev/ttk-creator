@@ -10,23 +10,29 @@
     "frontendDist": "../dist"
   },
   "app": {
-    "windows": [{
-      "title": "TikTok Media Creator",
-      "width": 1440,
-      "height": 920,
-      "minWidth": 980,
-      "minHeight": 680,
-      "center": true,
-      "resizable": true
-    }],
+    "windows": [
+      {
+        "title": "TikTok Media Creator",
+        "width": 1440,
+        "height": 920,
+        "minWidth": 980,
+        "minHeight": 680,
+        "center": true,
+        "resizable": true
+      }
+    ],
     "security": {
       "csp": "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' asset: http://asset.localhost data: blob: https://i.ytimg.com https://*.ytimg.com; connect-src ipc: http://ipc.localhost"
     }
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "msi"],
+    "targets": [
+      "nsis",
+      "msi"
+    ],
     "shortDescription": "Editor de vídeos curtos",
-    "category": "Video"
+    "category": "Video",
+    "icon": []
   }
 }
