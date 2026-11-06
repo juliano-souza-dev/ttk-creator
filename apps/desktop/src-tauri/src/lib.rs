@@ -20,6 +20,8 @@ pub fn run() {
             let app_data_directory = app.path().app_data_dir()?;
             std::fs::create_dir_all(&app_data_directory)?;
 
+            let log_guard = logging::initialize(&app_data_directory.join("logs"))
+                .map_err(std::io::Error::other)?;
             let projects_directory = app_data_directory.join("projects");
             let database_path: PathBuf = app_data_directory.join("tiktok-media-creator.sqlite3");
             let repository = Arc::new(
@@ -30,9 +32,6 @@ pub fn run() {
             let media_storage = MediaStorage::new(app_data_directory.clone());
             let projects = ProjectService::new(repository_port.clone(), media_storage.clone());
             let media = MediaService::new(repository_port.clone(), media_storage.clone());
-            let log_guard = logging::initialize(&app_data_directory.join("logs"))
-                .map_err(std::io::Error::other)?;
-
             tracing::info!("TikTok Media Creator started");
             app.manage(AppState {
                 projects,
