@@ -16,7 +16,7 @@ This is an independent application with its own project format, media library, e
 
 The desktop shell, local project persistence, project media library, multi-file local import, and YouTube import workflow are implemented.
 
-Local assets are copied into each project's `media/` directory and registered in `project.json`. YouTube imports support metadata inspection, available video-height selection, and download progress. The application prepares yt-dlp and FFmpeg on first use and reuses them afterward.
+Local assets are copied into each project's `media/` directory and registered in `project.json`. YouTube imports support metadata inspection, available video-height selection, and download progress. Install yt-dlp and FFmpeg separately and make both commands available on the Windows PATH. The app also supports running yt-dlp through common Python launchers.
 
 The next milestones are media probing, asset preview, a multi-track timeline, caption editing, and MP4 export.
 
