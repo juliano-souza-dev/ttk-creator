@@ -1,6 +1,6 @@
 use std::{fs, path::{Path, PathBuf}, sync::Arc, time::Duration};
 
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, Connection};
 use serde_json::Value;
 
 use crate::{
