@@ -39,7 +39,7 @@ export default function App() {
   },[activeProject?.id]);
 
   async function refreshAssets(project:Project) {
-    if(!desktop) return;
+    if(!isDesktopRuntime) return;
     try { setAssets(await desktopApi.listProjectAssets(project.id)); }
     catch(e) { setError(String(e)); }
   }
