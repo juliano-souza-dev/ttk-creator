@@ -22,8 +22,10 @@
 
 ## 0.3.0 - Editing workspace
 
-- [ ] Video/image/audio preview
-- [ ] Multi-track timeline
-- [ ] Clip trim and positioning
+- [x] Video/image/audio preview in the desktop editor
+- [x] Initial video/image and audio timeline lanes
+- [x] Add, reorder, remove, and trim clip ranges without changing source files
+- [x] Save and restore timeline state locally per project
+- [ ] Persist timeline state in the versioned project document
 - [ ] Caption editor and synchronization
 - [ ] MP4 vertical export
