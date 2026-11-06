@@ -44,6 +44,8 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
     return () => { cancelled = true; };
   }, [assets, projectId]);
 
+  useEffect(() => { if (!selectedId && clips.length) setSelectedId(clips[0].id); }, [clips, selectedId]);
+
   const selectedClip = clips.find(clip => clip.id === selectedId) ?? clips[0] ?? null;
   const selectedAsset = selectedClip ? assets.find(asset => asset.id === selectedClip.assetId) ?? null : null;
   const totalDuration = clips.reduce((sum, clip) => sum + clip.endMs - clip.startMs, 0);
@@ -70,6 +72,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
   }
   function handleDrop(event: DragEvent, targetIndex?: number) {
     event.preventDefault();
+    event.stopPropagation();
     const assetId = event.dataTransfer.getData("text/asset-id");
     const asset = assets.find(item => item.id === assetId);
     if (!asset) return;
