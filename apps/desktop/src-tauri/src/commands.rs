@@ -11,6 +11,11 @@ pub fn list_projects(state: State<'_, AppState>) -> Result<Vec<ProjectSummary>, 
 }
 
 #[tauri::command]
+pub fn open_project(state: State<'_, AppState>, project_id: String) -> Result<ProjectSummary, String> {
+    state.projects.open(&project_id)
+}
+
+#[tauri::command]
 pub fn create_project(state: State<'_, AppState>, name: String) -> Result<ProjectSummary, String> {
     state.projects.create(&name)
 }
