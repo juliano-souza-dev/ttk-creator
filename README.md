@@ -8,22 +8,68 @@ TikTok Media Creator is an independent project. It does not depend on the legacy
 
 Build a capable editor for TikTok, Instagram Reels, and YouTube Shorts, with a strong workflow for educational videos: media, narration, captions, timed scenes, motion graphics, and export.
 
-## Initial technology direction
+## Technology
 
 - **Desktop shell:** Tauri 2
 - **Frontend:** React + TypeScript
-- **Local media service:** Python + FastAPI
-- **Media processing:** FFmpeg
-- **Project database:** SQLite
+- **Native desktop services:** Rust
+- **Media processing roadmap:** FFmpeg
 - **Initial platform:** Windows
 
-These choices are the starting architecture, not immutable constraints. Each subsystem should remain replaceable behind clear interfaces.
+The architecture is intentionally modular. Media processing and AI providers can be added or replaced without coupling them to the editor UI.
 
-## Development status
+## Current development status
 
-The first Windows desktop shell is now in place. It includes a project dashboard and local project creation/listing. Timeline editing, media import, caption synchronization, and rendering will follow in deliberate increments.
+The current milestone provides:
 
-See [Architecture](docs/architecture.md) and [Roadmap](docs/roadmap.md).\n\n## Run on Windows\n\nInstall the prerequisites described in the [Tauri v2 Windows guide](https://v2.tauri.app/start/prerequisites/), including Node.js, Rust, Microsoft C++ Build Tools, and WebView2.\n\nThen open PowerShell in `apps/desktop` and run:\n\n```powershell\nnpm install\nnpm run tauri dev\n```\n\nTo build a Windows installer:\n\n```powershell\nnpm run tauri build\n```\n\nProjects created by the app are stored in the operating system's application data directory under `projects/`. The current version creates and lists project documents; the editing timeline and media workflows are not implemented yet.
+- Project creation and local project library.
+- Per-project media library.
+- Import of local video, audio, and image files.
+- Copying imported media into the project folder, preserving the original files.
+- YouTube link inspection, available video quality selection, and download into the project.
+- Download progress events in the desktop UI.
+
+The editor timeline, playback, captions, and final video rendering are separate upcoming milestones.
+
+## Run on Windows
+
+Install Node.js, Rust, Microsoft C++ Build Tools, and WebView2. See the official [Tauri v2 Windows prerequisites](https://v2.tauri.app/start/prerequisites/).
+
+From PowerShell, in `apps/desktop`:
+
+```powershell
+npm install
+npm run tauri dev
+```
+
+To build a Windows installer:
+
+```powershell
+npm run tauri build
+```
+
+### YouTube importer prerequisites
+
+The YouTube importer currently uses the external command-line tools **yt-dlp** and **FFmpeg**. Install them and make sure both commands are available in the Windows PATH.
+
+Install/update yt-dlp with Python:
+
+```powershell
+py -m pip install -U yt-dlp
+```
+
+Install FFmpeg using a trusted Windows distribution and verify:
+
+```powershell
+yt-dlp --version
+ffmpeg -version
+```
+
+The app also checks common Python launchers and can run yt-dlp as `py -m yt_dlp` when the standalone command is not available. YouTube access may vary by video, region, age restriction, authentication, and changes made by YouTube. Only import videos you are authorized to download and reuse.
+
+## Project storage
+
+Projects are stored in the operating system's application data directory under `projects/<project-id>/`. Each project contains a versioned `project.json` and a `media/` directory for imported assets. Media files are copied into this directory and assigned internal IDs, so duplicate filenames do not collide.
 
 ## Principles
 
