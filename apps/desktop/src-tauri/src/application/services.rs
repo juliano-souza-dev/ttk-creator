@@ -22,6 +22,12 @@ impl ProjectService {
         self.repository.list_projects()
     }
 
+    pub fn open(&self, project_id: &str) -> Result<ProjectSummary, String> {
+        self.repository.list_projects()?.into_iter()
+            .find(|project| project.id == project_id)
+            .ok_or_else(|| "Projeto não encontrado neste dispositivo.".to_string())
+    }
+
     pub fn create(&self, name: &str) -> Result<ProjectSummary, String> {
         let name = name.trim();
         if name.is_empty() {
