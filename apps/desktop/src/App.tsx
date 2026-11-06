@@ -1,17 +1,11 @@
 import { FormEvent, useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
+import { desktopApi, isDesktopRuntime } from "./services/desktop-api";
+import type { DownloadProgress, MediaAsset, Project, YoutubeInspection } from "./shared/types";
 import { Clapperboard, LayoutGrid, Film, GraduationCap, Settings2, Plus, Search, FolderOpen, FolderPlus, Clock3, Video, Sparkles, Play, X, ArrowUpRight, Upload, Youtube, Music2, Image as ImageIcon, FileVideo, CheckCircle2, LoaderCircle, Link2, Download, HardDrive } from "lucide-react";
 
-type Project = { id:string; name:string; createdAt:string; updatedAt:string; width:number; height:number };
-type MediaAsset = { id:string; name:string; originalName:string; kind:"video"|"audio"|"image"; mimeType:string; sizeBytes:number; relativePath:string; source:"local"|"youtube"; sourceUrl?:string|null; durationMs?:number|null; width?:number|null; height?:number|null; createdAt:string };
-type YoutubeQuality = { height:number; label:string };
-type YoutubeInspection = { videoId:string; url:string; title:string; channel?:string|null; durationMs?:number|null; thumbnail?:string|null; qualities:YoutubeQuality[] };
-type DownloadProgress = { projectId:string; percent?:number|null; speed?:string|null; eta?:string|null; status:string };
 const formatBytes = (n:number) => n < 1048576 ? Math.round(n/1024)+" KB" : n < 1073741824 ? (n/1048576).toFixed(1)+" MB" : (n/1073741824).toFixed(2)+" GB";
 const formatDuration = (n?:number|null) => !n ? "Duração não informada" : Math.floor(n/60000)+":"+String(Math.floor(n/1000)%60).padStart(2,"0");
-const desktop = "__TAURI_INTERNALS__" in window;
 
 export default function App() {
   const [projects,setProjects] = useState<Project[]>([]);
@@ -31,22 +25,22 @@ export default function App() {
   const [notice,setNotice] = useState("");
 
   async function refresh() {
-    if (!desktop) return;
-    try { setProjects(await invoke<Project[]>("list_projects")); }
+    if (!isDesktopRuntime) return;
+    try { setProjects(await desktopApi.listProjects()); }
     catch (e) { setError(String(e)); }
   }
   useEffect(()=>{ void refresh(); },[]);
   useEffect(()=>{
     let unlisten:(()=>void)|undefined;
-    void listen<DownloadProgress>("youtube-download-progress",event=>{
-      if(event.payload.projectId===activeProject?.id) setProgress(event.payload);
+    void desktopApi.subscribeToYoutubeProgress(progressEvent=>{
+      if(progressEvent.projectId===activeProject?.id) setProgress(progressEvent);
     }).then(fn=>{unlisten=fn;});
     return ()=>unlisten?.();
   },[activeProject?.id]);
 
   async function refreshAssets(project:Project) {
     if(!desktop) return;
-    try { setAssets(await invoke<MediaAsset[]>("list_project_assets",{projectId:project.id})); }
+    try { setAssets(await desktopApi.listProjectAssets(project.id)); }
     catch(e) { setError(String(e)); }
   }
   async function selectProject(project:Project) {
@@ -59,7 +53,7 @@ export default function App() {
       const selected=await open({multiple:true,directory:false,title:"Importar mídia",filters:[{name:"Arquivos de mídia",extensions:["mp4","mov","m4v","mkv","webm","avi","mp3","wav","m4a","aac","flac","ogg","opus","png","jpg","jpeg","webp","gif","bmp"]}]});
       if(!selected) return;
       const paths=Array.isArray(selected)?selected:[selected];
-      const imported=await invoke<MediaAsset[]>("import_media_files",{projectId:activeProject.id,paths});
+      const imported=await desktopApi.importMediaFiles(activeProject.id,paths);
       setAssets(current=>[...imported,...current]); setNotice(imported.length+" arquivo(s) importado(s)."); setMediaModal(false);
     } catch(e) { setError(String(e)); } finally { setBusy(false); }
   }
@@ -67,7 +61,7 @@ export default function App() {
     if(!youtubeUrl.trim()) return;
     setBusy(true); setError(""); setYoutubeInfo(null); setProgress(null);
     try {
-      const info=await invoke<YoutubeInspection>("inspect_youtube",{url:youtubeUrl.trim()});
+      const info=await desktopApi.inspectYoutube(youtubeUrl.trim());
       setYoutubeInfo(info);
       const preferred=info.qualities.find(item=>item.height<=1080)??info.qualities[0];
       setQuality(preferred?.height??0);
@@ -77,7 +71,7 @@ export default function App() {
     if(!activeProject||!youtubeInfo) return;
     setBusy(true); setError(""); setProgress({projectId:activeProject.id,percent:0,status:"starting"});
     try {
-      const asset=await invoke<MediaAsset>("download_youtube",{projectId:activeProject.id,url:youtubeInfo.url,maxHeight:quality});
+      const asset=await desktopApi.downloadYoutube(activeProject.id,youtubeInfo.url,quality);
       setAssets(current=>[asset,...current]); setNotice("Vídeo do YouTube importado."); setMediaModal(false);
       setYoutubeUrl(""); setYoutubeInfo(null); setProgress(null);
     } catch(e) { setError(String(e)); setProgress(null); } finally { setBusy(false); }
@@ -85,10 +79,10 @@ export default function App() {
 
   async function createProject(e:FormEvent) {
     e.preventDefault();
-    if (!name.trim() || !desktop) return;
+    if (!name.trim() || !isDesktopRuntime) return;
     setBusy(true); setError("");
     try {
-      const project = await invoke<Project>("create_project",{name:name.trim()});
+      const project = await desktopApi.createProject(name.trim());
       setProjects(p=>[project,...p]); setName(""); setCreating(false); setActiveProject(project); setAssets([]); setMediaModal(true);
     } catch(e) { setError(String(e)); }
     finally { setBusy(false); }
@@ -138,6 +132,6 @@ export default function App() {
       {error&&<div className="error modal-error">{error}</div>}
       <div className="modal-footer"><button className="cancel-button" disabled={busy} onClick={()=>setMediaModal(false)}>Cancelar</button>{mediaTab==="youtube"&&youtubeInfo&&<button className="primary" disabled={busy} onClick={()=>void downloadYoutube()}>{busy?<><LoaderCircle className="spin" size={15}/> Baixando...</>:<><Download size={15}/> Baixar e importar</>}</button>}</div>
     </section></div>}
-    {!desktop&&<div className="browser-warning">Prévia no navegador. Execute pelo Tauri para importar arquivos no computador.</div>}
+    {!isDesktopRuntime&&<div className="browser-warning">Prévia no navegador. Execute pelo Tauri para importar arquivos no computador.</div>}
   </main>;
 }
