@@ -51,7 +51,7 @@ impl SqliteProjectRepository {
         if version == 0 {
             connection.execute_batch(
                 "
-                CREATE TABLE projects (
+                CREATE TABLE IF NOT EXISTS projects (
                     id TEXT PRIMARY KEY NOT NULL,
                     name TEXT NOT NULL,
                     created_at TEXT NOT NULL,
@@ -60,7 +60,7 @@ impl SqliteProjectRepository {
                     height INTEGER NOT NULL
                 );
 
-                CREATE TABLE assets (
+                CREATE TABLE IF NOT EXISTS assets (
                     id TEXT PRIMARY KEY NOT NULL,
                     project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
                     name TEXT NOT NULL,
@@ -78,8 +78,8 @@ impl SqliteProjectRepository {
                     UNIQUE(project_id, relative_path)
                 );
 
-                CREATE INDEX idx_projects_updated_at ON projects(updated_at DESC);
-                CREATE INDEX idx_assets_project_created ON assets(project_id, created_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_projects_updated_at ON projects(updated_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_assets_project_created ON assets(project_id, created_at DESC);
                 PRAGMA user_version = 1;
                 "
             ).map_err(|error| format!("Falha ao criar o esquema SQLite: {error}"))?;
@@ -112,7 +112,7 @@ impl SqliteProjectRepository {
                     "INSERT OR IGNORE INTO projects (id, name, created_at, updated_at, width, height)
                      VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
                     params![project.id, project.name, project.created_at, project.updated_at,
-                        project.width, project.height],
+                        i64::from(project.width), i64::from(project.height)],
                 ).map_err(|error| error.to_string())?;
 
                 if let Some(items) = document.get("assets").and_then(Value::as_array) {
@@ -144,7 +144,7 @@ impl SqliteProjectRepository {
                     asset.id, project_id, asset.name, asset.original_name, asset.kind, asset.mime_type,
                     size, asset.relative_path, asset.source, asset.source_url,
                     asset.duration_ms.map(i64::try_from).transpose().map_err(|_| "Duração inválida.")?,
-                    asset.width, asset.height, asset.created_at
+                    asset.width.map(i64::from), asset.height.map(i64::from), asset.created_at
                 ],
             ).map_err(|error| format!("Não foi possível registrar a mídia {}: {error}", asset.name))?;
         }
@@ -160,7 +160,9 @@ impl ProjectRepository for SqliteProjectRepository {
         ).map_err(|error| error.to_string())?;
         let rows = statement.query_map([], |row| Ok(ProjectSummary {
             id: row.get(0)?, name: row.get(1)?, created_at: row.get(2)?,
-            updated_at: row.get(3)?, width: row.get(4)?, height: row.get(5)?,
+            updated_at: row.get(3)?,
+            width: u32::try_from(row.get::<_, i64>(4)?).unwrap_or_default(),
+            height: u32::try_from(row.get::<_, i64>(5)?).unwrap_or_default(),
         })).map_err(|error| error.to_string())?;
         rows.collect::<Result<Vec<_>, _>>().map_err(|error| error.to_string())
     }
