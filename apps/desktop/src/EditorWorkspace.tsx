@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import type { DragEvent } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { desktopApi } from "./services/desktop-api";
 import type { MediaAsset } from "./shared/types";
@@ -16,8 +17,6 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({});
   const [loadError, setLoadError] = useState("");
-  const [playing, setPlaying] = useState(false);
-  const mediaRef = useRef<HTMLVideoElement & HTMLAudioElement>(null);
 
   useEffect(() => {
     try {
@@ -47,14 +46,12 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
   const selectedClip = clips.find(clip => clip.id === selectedId) ?? clips[0] ?? null;
   const selectedAsset = selectedClip ? assets.find(asset => asset.id === selectedClip.assetId) ?? null : null;
   const totalDuration = clips.reduce((sum, clip) => sum + clip.endMs - clip.startMs, 0);
-  const clipCountByAsset = useMemo(() => new Set(clips.map(clip => clip.assetId)), [clips]);
 
   function addToTimeline(asset: MediaAsset) {
     const duration = defaultDuration(asset);
     const clip: TimelineClip = { id: crypto.randomUUID(), assetId: asset.id, startMs: 0, endMs: duration };
     setClips(current => [...current, clip]);
     setSelectedId(clip.id);
-    setPlaying(false);
   }
   function updateClip(id: string, patch: Partial<TimelineClip>) {
     setClips(current => current.map(clip => clip.id === id ? { ...clip, ...patch } : clip));
@@ -62,7 +59,6 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
   function removeClip(id: string) {
     setClips(current => current.filter(clip => clip.id !== id));
     if (selectedId === id) setSelectedId(null);
-    setPlaying(false);
   }
   function moveClip(index: number, direction: -1 | 1) {
     setClips(current => {
@@ -71,7 +67,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
       const next = [...current]; [next[index], next[target]] = [next[target], next[index]]; return next;
     });
   }
-  function handleDrop(event: React.DragEvent, targetIndex?: number) {
+  function handleDrop(event: DragEvent, targetIndex?: number) {
     event.preventDefault();
     const assetId = event.dataTransfer.getData("text/asset-id");
     const asset = assets.find(item => item.id === assetId);
@@ -101,8 +97,8 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
         <div className="preview-stage">
           {!selectedAsset ? <div className="preview-placeholder"><Play size={27}/><span>Seu vídeo aparecerá aqui</span><small>Adicione uma mídia à timeline para visualizar</small></div> :
             !previewUrl ? <div className="preview-placeholder"><span>Não foi possível carregar esta mídia.</span><small>{loadError || "Verifique se o arquivo continua na pasta do projeto."}</small></div> :
-            selectedAsset.kind === "video" ? <video key={selectedAsset.id} ref={mediaRef as React.RefObject<HTMLVideoElement>} src={previewUrl} controls onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onError={() => setLoadError("Formato não suportado pelo preview do sistema.")} /> :
-            selectedAsset.kind === "audio" ? <div className="audio-preview"><AudioLines size={48}/><b>{selectedAsset.name}</b><audio key={selectedAsset.id} ref={mediaRef as React.RefObject<HTMLAudioElement>} src={previewUrl} controls onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}/></div> :
+            selectedAsset.kind === "video" ? <video key={selectedAsset.id} src={previewUrl} controls onError={() => setLoadError("Formato não suportado pelo preview do sistema.")} /> :
+            selectedAsset.kind === "audio" ? <div className="audio-preview"><AudioLines size={48}/><b>{selectedAsset.name}</b><audio key={selectedAsset.id} src={previewUrl} controls/></div> :
             <img src={previewUrl} alt={selectedAsset.name} />
           }
         </div>
@@ -112,7 +108,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
     <section className="editor-panel timeline-panel"><div className="editor-panel-head"><div><b>Timeline</b><small>Arraste mídias da biblioteca ou use o botão +</small></div><span className="timeline-duration">{timeLabel(totalDuration)}</span></div>
       <div className="timeline-ruler"><span>00:00</span><span>{timeLabel(totalDuration / 2)}</span><span>{timeLabel(totalDuration)}</span></div>
       <div className="timeline-track" onDragOver={event => event.preventDefault()} onDrop={event => handleDrop(event)}><div className="track-label">VÍDEO / IMAGEM</div><div className="track-clips">
-        {clips.filter(clip => assets.find(asset => asset.id === clip.assetId)?.kind !== "audio").map(clip => { const asset = assets.find(item => item.id === clip.assetId)!; const index = clips.indexOf(clip); return <button key={clip.id} className={`timeline-clip ${selectedId === clip.id ? "selected" : ""} ${asset.kind}`} onClick={() => { setSelectedId(clip.id); setPlaying(false); }} onDragOver={event => event.preventDefault()} onDrop={event => handleDrop(event, index)}><b>{asset.name}</b><small>{timeLabel(clip.endMs - clip.startMs)}</small><span className="clip-controls"><i onClick={event => {event.stopPropagation();moveClip(index,-1);}}><ChevronUp size={12}/></i><i onClick={event => {event.stopPropagation();moveClip(index,1);}}><ChevronDown size={12}/></i><i onClick={event => {event.stopPropagation();removeClip(clip.id);}}><Trash2 size={12}/></i></span></button>; })}
+        {clips.filter(clip => assets.find(asset => asset.id === clip.assetId)?.kind !== "audio").map(clip => { const asset = assets.find(item => item.id === clip.assetId)!; const index = clips.indexOf(clip); return <button key={clip.id} className={`timeline-clip ${selectedId === clip.id ? "selected" : ""} ${asset.kind}`} onClick={() => { setSelectedId(clip.id); }} onDragOver={event => event.preventDefault()} onDrop={event => handleDrop(event, index)}><b>{asset.name}</b><small>{timeLabel(clip.endMs - clip.startMs)}</small><span className="clip-controls"><i onClick={event => {event.stopPropagation();moveClip(index,-1);}}><ChevronUp size={12}/></i><i onClick={event => {event.stopPropagation();moveClip(index,1);}}><ChevronDown size={12}/></i><i onClick={event => {event.stopPropagation();removeClip(clip.id);}}><Trash2 size={12}/></i></span></button>; })}
         {clips.filter(clip => assets.find(asset => asset.id === clip.assetId)?.kind !== "audio").length === 0 && <span className="track-hint">Solte vídeos ou imagens aqui</span>}
       </div></div>
       <div className="timeline-track audio-track"><div className="track-label">ÁUDIO</div><div className="track-clips" onDragOver={event => event.preventDefault()} onDrop={event => handleDrop(event)}>{clips.filter(clip => assets.find(asset => asset.id === clip.assetId)?.kind === "audio").map(clip => { const asset = assets.find(item => item.id === clip.assetId)!; const index = clips.indexOf(clip); return <button key={clip.id} className={`timeline-clip audio ${selectedId === clip.id ? "selected" : ""}`} onClick={() => setSelectedId(clip.id)}><b>{asset.name}</b><small>{timeLabel(clip.endMs - clip.startMs)}</small><span className="clip-controls"><i onClick={event => {event.stopPropagation();moveClip(index,-1);}}><ChevronUp size={12}/></i><i onClick={event => {event.stopPropagation();moveClip(index,1);}}><ChevronDown size={12}/></i><i onClick={event => {event.stopPropagation();removeClip(clip.id);}}><Trash2 size={12}/></i></span></button>; })}{clips.filter(clip => assets.find(asset => asset.id === clip.assetId)?.kind === "audio").length === 0 && <span className="track-hint">Solte áudios aqui</span>}</div></div>
