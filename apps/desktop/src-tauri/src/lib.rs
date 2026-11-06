@@ -43,6 +43,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::list_projects,
+            commands::open_project,
             commands::create_project,
             commands::list_project_assets,
             commands::import_media_files,
