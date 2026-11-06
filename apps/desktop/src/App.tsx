@@ -1,8 +1,16 @@
 import { FormEvent, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Clapperboard, LayoutGrid, Film, GraduationCap, Settings2, Plus, Search, FolderOpen, FolderPlus, Clock3, Video, Sparkles, Play, X, ArrowUpRight } from "lucide-react";
+import { listen } from "@tauri-apps/api/event";
+import { open } from "@tauri-apps/plugin-dialog";
+import { Clapperboard, LayoutGrid, Film, GraduationCap, Settings2, Plus, Search, FolderOpen, FolderPlus, Clock3, Video, Sparkles, Play, X, ArrowUpRight, Upload, Youtube, Music2, Image as ImageIcon, FileVideo, CheckCircle2, LoaderCircle, Link2, Download, HardDrive } from "lucide-react";
 
 type Project = { id:string; name:string; createdAt:string; updatedAt:string; width:number; height:number };
+type MediaAsset = { id:string; name:string; originalName:string; kind:"video"|"audio"|"image"; mimeType:string; sizeBytes:number; relativePath:string; source:"local"|"youtube"; sourceUrl?:string|null; durationMs?:number|null; width?:number|null; height?:number|null; createdAt:string };
+type YoutubeQuality = { height:number; label:string };
+type YoutubeInspection = { videoId:string; url:string; title:string; channel?:string|null; durationMs?:number|null; thumbnail?:string|null; qualities:YoutubeQuality[] };
+type DownloadProgress = { projectId:string; percent?:number|null; speed?:string|null; eta?:string|null; status:string };
+const formatBytes = (n:number) => n < 1048576 ? Math.round(n/1024)+" KB" : n < 1073741824 ? (n/1048576).toFixed(1)+" MB" : (n/1073741824).toFixed(2)+" GB";
+const formatDuration = (n?:number|null) => !n ? "Duração não informada" : Math.floor(n/60000)+":"+String(Math.floor(n/1000)%60).padStart(2,"0");
 const desktop = "__TAURI_INTERNALS__" in window;
 
 export default function App() {
@@ -12,6 +20,15 @@ export default function App() {
   const [creating,setCreating] = useState(false);
   const [busy,setBusy] = useState(false);
   const [error,setError] = useState("");
+  const [activeProject,setActiveProject] = useState<Project|null>(null);
+  const [assets,setAssets] = useState<MediaAsset[]>([]);
+  const [mediaModal,setMediaModal] = useState(false);
+  const [mediaTab,setMediaTab] = useState<"local"|"youtube">("local");
+  const [youtubeUrl,setYoutubeUrl] = useState("");
+  const [youtubeInfo,setYoutubeInfo] = useState<YoutubeInspection|null>(null);
+  const [quality,setQuality] = useState(1080);
+  const [progress,setProgress] = useState<DownloadProgress|null>(null);
+  const [notice,setNotice] = useState("");
 
   async function refresh() {
     if (!desktop) return;
@@ -19,6 +36,52 @@ export default function App() {
     catch (e) { setError(String(e)); }
   }
   useEffect(()=>{ void refresh(); },[]);
+  useEffect(()=>{
+    let unlisten:(()=>void)|undefined;
+    void listen<DownloadProgress>("youtube-download-progress",event=>{
+      if(event.payload.projectId===activeProject?.id) setProgress(event.payload);
+    }).then(fn=>{unlisten=fn;});
+    return ()=>unlisten?.();
+  },[activeProject?.id]);
+
+  async function refreshAssets(project:Project) {
+    if(!desktop) return;
+    try { setAssets(await invoke<MediaAsset[]>("list_project_assets",{projectId:project.id})); }
+    catch(e) { setError(String(e)); }
+  }
+  async function selectProject(project:Project) {
+    setActiveProject(project); setNotice(""); await refreshAssets(project);
+  }
+  async function importLocalFiles() {
+    if(!activeProject) return;
+    setBusy(true); setError("");
+    try {
+      const selected=await open({multiple:true,directory:false,title:"Importar mídia",filters:[{name:"Arquivos de mídia",extensions:["mp4","mov","m4v","mkv","webm","avi","mp3","wav","m4a","aac","flac","ogg","opus","png","jpg","jpeg","webp","gif","bmp"]}]});
+      if(!selected) return;
+      const paths=Array.isArray(selected)?selected:[selected];
+      const imported=await invoke<MediaAsset[]>("import_media_files",{projectId:activeProject.id,paths});
+      setAssets(current=>[...imported,...current]); setNotice(imported.length+" arquivo(s) importado(s)."); setMediaModal(false);
+    } catch(e) { setError(String(e)); } finally { setBusy(false); }
+  }
+  async function inspectYoutube() {
+    if(!youtubeUrl.trim()) return;
+    setBusy(true); setError(""); setYoutubeInfo(null); setProgress(null);
+    try {
+      const info=await invoke<YoutubeInspection>("inspect_youtube",{url:youtubeUrl.trim()});
+      setYoutubeInfo(info);
+      const preferred=info.qualities.find(item=>item.height<=1080)??info.qualities[0];
+      setQuality(preferred?.height??0);
+    } catch(e) { setError(String(e)); } finally { setBusy(false); }
+  }
+  async function downloadYoutube() {
+    if(!activeProject||!youtubeInfo) return;
+    setBusy(true); setError(""); setProgress({projectId:activeProject.id,percent:0,status:"starting"});
+    try {
+      const asset=await invoke<MediaAsset>("download_youtube",{projectId:activeProject.id,url:youtubeInfo.url,maxHeight:quality});
+      setAssets(current=>[asset,...current]); setNotice("Vídeo do YouTube importado."); setMediaModal(false);
+      setYoutubeUrl(""); setYoutubeInfo(null); setProgress(null);
+    } catch(e) { setError(String(e)); setProgress(null); } finally { setBusy(false); }
+  }
 
   async function createProject(e:FormEvent) {
     e.preventDefault();
@@ -26,7 +89,7 @@ export default function App() {
     setBusy(true); setError("");
     try {
       const project = await invoke<Project>("create_project",{name:name.trim()});
-      setProjects(p=>[project,...p]); setName(""); setCreating(false);
+      setProjects(p=>[project,...p]); setName(""); setCreating(false); setActiveProject(project); setAssets([]); setMediaModal(true);
     } catch(e) { setError(String(e)); }
     finally { setBusy(false); }
   }
@@ -44,19 +107,37 @@ export default function App() {
       <div className="profile"><div className="avatar">J</div><div><b>Seu estúdio</b><small>Ambiente local</small></div><Settings2 size={17}/></div>
     </aside>
     <section className="main">
-      <header className="topbar"><div>Workspace <span>/</span> <b>Visão geral</b></div><div className="top-right"><small><i/> Salvo neste dispositivo</small><button className="primary" onClick={()=>setCreating(true)}><Plus size={16}/> Novo projeto</button></div></header>
+      <header className="topbar"><div>Workspace <span>/</span> <b>Visão geral</b></div><div className="top-right"><small><i/> Salvo neste dispositivo</small><button className="secondary-action" disabled={!activeProject} onClick={()=>{setMediaTab("local");setMediaModal(true);}}><Upload size={15}/> Importar mídia</button><button className="primary" onClick={()=>setCreating(true)}><Plus size={16}/> Novo projeto</button></div></header>
       <div className="content">
         <section className="hero"><div><label className="eyebrow"><Sparkles size={13}/> SEU PRÓXIMO VÍDEO COMEÇA AQUI</label><h1>Boas ideias merecem<br/><em>uma boa edição.</em></h1><p>Seu espaço para transformar ideias em vídeos que prendem a atenção.</p></div><div className="hero-visual"><div className="preview-art"><div className="rec">REC <i/></div><div className="play"><Play size={22} fill="currentColor"/></div><strong>IDEIA <span>EM MOVIMENTO.</span></strong><div className="scrub">00:18 <div><i/><i/><i/><i/><i/></div> 00:55</div></div><div className="float-tag"><Sparkles size={13}/> MAKE IT MATTER</div></div></section>
         <section className="stats"><div><span className="stat-icon purple"><Film size={17}/></span><label>PROJETOS<strong>{String(projects.length).padStart(2,"0")}</strong></label></div><div><span className="stat-icon orange"><Clock3 size={17}/></span><label>FORMATO PADRÃO<strong>9:16 <small>VERTICAL</small></strong></label></div><div><span className="stat-icon green"><Video size={17}/></span><label>SEU ESTÚDIO<strong>LOCAL <small>WINDOWS</small></strong></label></div></section>
         <section className="projects"><div className="section-head"><div><label className="eyebrow muted">BIBLIOTECA</label><h2>Seus projetos</h2></div><label className="search"><Search size={15}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar projeto..."/></label></div>
-          {error && <div className="error">{error}</div>}
-          {visible.length ? <div className="project-grid">{visible.map(p=><article className="project" key={p.id}><div className="thumb"><div className="thumb-grid"/><div className="thumb-play"><Play size={16} fill="currentColor"/></div><small>9:16</small></div><div className="project-meta"><div><b>{p.name}</b><small>Atualizado em {new Date(Number(p.updatedAt)).toLocaleDateString("pt-BR")}</small></div></div></article>)}</div> :
+          {error && !mediaModal && <div className="error">{error}</div>}
+          {notice && !mediaModal && <div className="notice"><CheckCircle2 size={15}/>{notice}</div>}
+          {visible.length ? <div className="project-grid">{visible.map(p=><article className={"project "+(activeProject?.id===p.id?"selected":"")} key={p.id} onClick={()=>void selectProject(p)}><div className="thumb"><div className="thumb-grid"/><div className="thumb-play"><Play size={16} fill="currentColor"/></div><small>9:16</small></div><div className="project-meta"><div><b>{p.name}</b><small>Atualizado em {new Date(Number(p.updatedAt)).toLocaleDateString("pt-BR")}</small></div></div></article>)}</div> :
           <div className="empty"><div className="empty-icon"><FolderOpen size={27}/><i><Plus size={13}/></i></div><b>{search?"Nenhum projeto encontrado":"Seu primeiro projeto começa aqui"}</b><p>{search?"Tente buscar por outro nome.":"Crie um espaço para reunir vídeos, áudios, cenas e ideias."}</p>{!search&&<button className="primary" onClick={()=>setCreating(true)}><FolderPlus size={16}/> Criar meu primeiro projeto</button>}</div>}
         </section>
-        <footer>FRAME LAB · FEITO PARA IDEIAS EM MOVIMENTO <span>EARLY ACCESS · 0.1.0</span></footer>
+        {activeProject && <section className="media-library">
+          <div className="section-head"><div><label className="eyebrow muted">BIBLIOTECA DE MÍDIA</label><h2>{activeProject.name}</h2><p className="section-subtitle">{assets.length} arquivo(s) · {formatBytes(assets.reduce((sum,a)=>sum+a.sizeBytes,0))} armazenados</p></div><button className="primary" onClick={()=>{setMediaTab("local");setMediaModal(true);}}><Plus size={15}/> Adicionar mídia</button></div>
+          {assets.length===0 ? <div className="asset-empty"><div className="asset-empty-icon"><HardDrive size={22}/></div><b>Esta biblioteca ainda está vazia</b><p>Importe arquivos do computador ou traga um vídeo do YouTube.</p><div><button className="secondary-action" onClick={()=>{setMediaTab("local");setMediaModal(true);}}><Upload size={14}/> Arquivos locais</button><button className="secondary-action" onClick={()=>{setMediaTab("youtube");setMediaModal(true);}}><Youtube size={14}/> YouTube</button></div></div> :
+          <div className="asset-list">{assets.map(a=><article className="asset-row" key={a.id}><div className={"asset-icon "+a.kind}>{a.kind==="video"?<FileVideo size={17}/>:a.kind==="audio"?<Music2 size={17}/>:<ImageIcon size={17}/>}</div><div className="asset-info"><b>{a.name}</b><small>{a.originalName} · {a.source==="youtube"?"YouTube":"Arquivo local"}</small></div><span className="asset-kind">{a.kind==="video"?"VÍDEO":a.kind==="audio"?"ÁUDIO":"IMAGEM"}</span><span className="asset-size">{formatBytes(a.sizeBytes)}</span><span className="asset-duration">{formatDuration(a.durationMs)}</span></article>)}</div>}
+        </section>}
+        <footer>FRAME LAB · FEITO PARA IDEIAS EM MOVIMENTO <span>EARLY ACCESS · 0.2.0</span></footer>
       </div>
     </section>
     {creating&&<div className="backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setCreating(false);}}><form className="modal" onSubmit={createProject}><button type="button" className="close" onClick={()=>setCreating(false)}><X size={18}/></button><div className="modal-icon"><FolderPlus size={21}/></div><label className="eyebrow muted">NOVO PROJETO</label><h2>Vamos dar forma à ideia?</h2><p>Seu projeto será salvo no computador e poderá ser aberto novamente quando quiser.</p><label className="field-label" htmlFor="project-name">Nome do projeto</label><input id="project-name" autoFocus maxLength={80} value={name} onChange={e=>setName(e.target.value)} placeholder="Ex.: Inglês em 1 minuto"/><div className="canvas-info"><span>Canvas vertical</span><b>1080 × 1920 · 30 FPS</b></div><button className="primary submit" disabled={!name.trim()||busy}>{busy?"Criando...":"Criar projeto"} <ArrowUpRight size={16}/></button></form></div>}
-    {!desktop&&<div className="browser-warning">Prévia no navegador. Execute pelo Tauri para salvar projetos no computador.</div>}
+    {mediaModal&&activeProject&&<div className="backdrop media-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget&&!busy)setMediaModal(false);}}><section className="media-modal">
+      <button type="button" className="close" onClick={()=>!busy&&setMediaModal(false)}><X size={18}/></button><label className="eyebrow muted">ADICIONAR À BIBLIOTECA</label><h2>Importar mídia</h2><p className="media-modal-subtitle">Destino: <strong>{activeProject.name}</strong></p>
+      <div className="media-tabs"><button className={mediaTab==="local"?"active":""} onClick={()=>{setMediaTab("local");setError("");}}><FolderOpen size={15}/> Arquivos locais</button><button className={mediaTab==="youtube"?"active":""} onClick={()=>{setMediaTab("youtube");setError("");}}><Youtube size={15}/> YouTube</button></div>
+      {mediaTab==="local" ? <div><div className="dropzone"><div className="dropzone-icon"><Upload size={23}/></div><b>Traga seus arquivos para o projeto</b><p>Selecione vídeos, imagens e áudios do computador.</p><button className="primary" disabled={busy} onClick={()=>void importLocalFiles()}>{busy?<LoaderCircle className="spin" size={15}/>:<FolderOpen size={15}/>} Selecionar arquivos</button><small>Até 100 arquivos por importação</small></div><div className="supported-formats"><b>FORMATOS ACEITOS</b><span>Vídeo: MP4, MOV, MKV, WebM, AVI</span><span>Áudio: MP3, WAV, M4A, AAC, FLAC, OGG</span><span>Imagem: PNG, JPG, WebP, GIF, BMP</span></div></div> :
+      <div className="youtube-import"><label className="field-label" htmlFor="youtube-url">Link do vídeo</label><div className="youtube-input"><Link2 size={16}/><input id="youtube-url" value={youtubeUrl} onChange={e=>{setYoutubeUrl(e.target.value);setYoutubeInfo(null);}} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();void inspectYoutube();}}} placeholder="Cole aqui o link do YouTube"/></div><button className="inspect-button" disabled={!youtubeUrl.trim()||busy} onClick={()=>void inspectYoutube()}>{busy&&!progress?<LoaderCircle className="spin" size={15}/>:<Search size={15}/>} Inspecionar vídeo</button>
+      {youtubeInfo&&<div className="youtube-preview">{youtubeInfo.thumbnail?<img src={youtubeInfo.thumbnail} alt="Miniatura do vídeo"/>:<div className="youtube-thumb-placeholder"><Youtube size={28}/></div>}<div className="youtube-details"><b>{youtubeInfo.title}</b><span>{youtubeInfo.channel||"Canal não identificado"}</span><small>{formatDuration(youtubeInfo.durationMs)} · ID {youtubeInfo.videoId}</small></div></div>}
+      {youtubeInfo&&<div className="quality-row"><label className="field-label" htmlFor="quality-select">Qualidade máxima</label><select id="quality-select" value={quality} onChange={e=>setQuality(Number(e.target.value))}><option value={0}>Melhor disponível</option>{youtubeInfo.qualities.map(q=><option key={q.height} value={q.height}>{q.label}</option>)}</select></div>}
+      {progress&&<div className="download-progress"><div className="progress-heading"><b>Baixando vídeo...</b><span>{progress.percent==null?"Preparando":Math.round(progress.percent)+"%"}</span></div><div className="progress-track"><i style={{width:Math.max(0,Math.min(100,progress.percent??0))+"%"}}/></div><small>{progress.speed||"Aguardando dados"} {progress.eta?"· Restante: "+progress.eta:""}</small></div>}
+      <div className="youtube-note"><Youtube size={13}/> Importe somente vídeos que você tenha autorização para baixar e reutilizar.</div></div>}
+      {error&&<div className="error modal-error">{error}</div>}
+      <div className="modal-footer"><button className="cancel-button" disabled={busy} onClick={()=>setMediaModal(false)}>Cancelar</button>{mediaTab==="youtube"&&youtubeInfo&&<button className="primary" disabled={busy} onClick={()=>void downloadYoutube()}>{busy?<><LoaderCircle className="spin" size={15}/> Baixando...</>:<><Download size={15}/> Baixar e importar</>}</button>}</div>
+    </section></div>}
+    {!desktop&&<div className="browser-warning">Prévia no navegador. Execute pelo Tauri para importar arquivos no computador.</div>}
   </main>;
 }
