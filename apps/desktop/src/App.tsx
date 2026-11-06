@@ -125,8 +125,8 @@ export default function App() {
     <aside className="sidebar">
       <div className="brand"><div className="brand-icon"><Clapperboard size={21}/></div><div><b>FRAME<span>LAB</span></b><small>CREATOR STUDIO</small></div></div>
       <label className="side-label">WORKSPACE</label>
-      <button className="nav active"><LayoutGrid size={17}/> Visão geral</button>
-      <button className="nav" onClick={()=>setCreating(true)}><Film size={17}/> Meus projetos</button>
+      <button className={"nav "+(view==="workspace"?"active":"")} onClick={returnToWorkspace}><LayoutGrid size={17}/> Visão geral</button>
+      <button className={"nav "+(view==="workspace"?"":"active")} onClick={returnToWorkspace}><Film size={17}/> Meus projetos</button>
       <div className="side-rule"/>
       <label className="side-label">COMECE POR AQUI</label>
       <div className="tip-card"><div className="tip-icon"><GraduationCap size={19}/></div><b>Conteúdo que ensina</b><p>Crie vídeos com cenas, narração e legendas sincronizadas.</p><button onClick={()=>setCreating(true)}>Criar projeto <ArrowUpRight size={14}/></button></div>
