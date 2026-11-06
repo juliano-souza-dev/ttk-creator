@@ -21,7 +21,7 @@ Supported local formats:
 - Audio: MP3, WAV, M4A, AAC, FLAC, OGG, OPUS
 - Image: PNG, JPG/JPEG, WebP, GIF, BMP
 
-YouTube inspection and download use the Rust `yt-dlp` integration. On first use, the application downloads and prepares the yt-dlp and FFmpeg binaries inside its application data directory. Subsequent uses reuse those binaries. No separate Python installation is required for this feature.
+YouTube inspection and downloads use the yt-dlp command-line tool. Install it in a Python environment available to the app with `py -m pip install --upgrade yt-dlp`. FFmpeg must also be installed separately and available on PATH so yt-dlp can merge separate audio/video streams and remux downloads to MP4. The app checks for `yt-dlp` on PATH, then tries `py -m yt_dlp`, `python -m yt_dlp`, and `python3 -m yt_dlp`.
 
 YouTube format availability is determined by the source. The importer offers the available video heights and remuxes the selected download to MP4. Only import videos that you have permission to download and reuse.
 
