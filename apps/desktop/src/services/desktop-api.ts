@@ -13,6 +13,9 @@ export const isDesktopRuntime =
 export const desktopApi = {
   listProjects: () => invoke<Project[]>("list_projects"),
 
+  openProject: (projectId: string) =>
+    invoke<Project>("open_project", { projectId }),
+
   createProject: (name: string) =>
     invoke<Project>("create_project", { name }),
 
