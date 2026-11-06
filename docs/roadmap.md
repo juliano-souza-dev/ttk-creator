@@ -13,7 +13,8 @@
 - [x] Record asset metadata in project.json
 - [x] YouTube URL inspection before download
 - [x] Available-height quality selection
-- [x] Managed yt-dlp and FFmpeg installation
+- [x] yt-dlp CLI integration with progress events
+- [ ] Detect and guide installation of FFmpeg and yt-dlp
 - [x] YouTube download progress events
 - [x] MP4 output and project asset registration
 - [ ] Probe local media duration, dimensions, frame rate, and codecs with FFprobe
