@@ -1,9 +1,37 @@
 # Desktop application
 
-Planned implementation: Tauri 2 + React + TypeScript.
+The first runnable desktop slice uses Tauri 2, React, TypeScript, and Vite.
 
-This application owns the desktop experience: project browser, media bin, preview, timeline, captions, and export controls.
+## Requirements
 
-The first implementation milestone will add the runnable shell and typed boundaries for project and media services. UI components must not construct FFmpeg commands or access arbitrary filesystem paths directly.
+- Node.js (LTS) and npm
+- Rust toolchain
+- Microsoft C++ Build Tools
+- WebView2 Runtime
 
-See [the architecture overview](../../docs/architecture.md).
+See the official [Tauri v2 Windows prerequisites](https://v2.tauri.app/start/prerequisites/).
+
+## Run in development
+
+From this directory in PowerShell:
+
+```powershell
+npm install
+npm run tauri dev
+```
+
+## Build a Windows installer
+
+```powershell
+npm run tauri build
+```
+
+## What works in this first slice
+
+- Desktop shell and studio dashboard.
+- Create a project with a name.
+- Save a versioned `project.json` under the app's local data directory.
+- List saved projects when the app starts.
+- Search projects by name.
+
+The project document starts with a 1080 × 1920 canvas at 30 FPS. Timeline editing, media import, playback, and export are future milestones.
