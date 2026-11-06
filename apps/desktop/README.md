@@ -1,6 +1,6 @@
 # Desktop application
 
-The first runnable desktop slice uses Tauri 2, React, TypeScript, and Vite.
+The desktop app uses Tauri 2, React, TypeScript, Vite, and a Rust backend.
 
 ## Requirements
 
@@ -26,12 +26,38 @@ npm run tauri dev
 npm run tauri build
 ```
 
-## What works in this first slice
+## Media import
 
-- Desktop shell and studio dashboard.
-- Create a project with a name.
-- Save a versioned `project.json` under the app's local data directory.
-- List saved projects when the app starts.
-- Search projects by name.
+The media library currently supports:
 
-The project document starts with a 1080 × 1920 canvas at 30 FPS. Timeline editing, media import, playback, and export are future milestones.
+- Local video: MP4, MOV, M4V, MKV, WebM, AVI.
+- Local audio: MP3, WAV, M4A, AAC, FLAC, OGG, OPUS.
+- Images: PNG, JPG, JPEG, WebP, GIF, BMP.
+- Up to 100 selected files per import operation.
+- Project-local copies under `projects/<id>/media/`; original files are not modified.
+- YouTube video inspection, quality selection, MP4 download, and progress reporting.
+
+### YouTube tools
+
+Install yt-dlp:
+
+```powershell
+py -m pip install -U yt-dlp
+```
+
+Install FFmpeg and make sure `ffmpeg.exe` is available in PATH. Verify both:
+
+```powershell
+yt-dlp --version
+ffmpeg -version
+```
+
+The app searches for `yt-dlp`, `yt-dlp.exe`, and Python module launchers (`py -m yt_dlp`, `python -m yt_dlp`, `python3 -m yt_dlp`). The standalone app bundle does not include these external tools yet.
+
+YouTube availability is not guaranteed for private, restricted, age-gated, region-blocked, or authentication-required videos. Only download content you have permission to use.
+
+## Project document
+
+Each project starts with a 1080 × 1920 canvas at 30 FPS and a versioned `project.json`. Imported assets are recorded in the document with a relative path, media type, source, and file metadata.
+
+Timeline editing, media playback, captions, and final rendering are upcoming milestones.
