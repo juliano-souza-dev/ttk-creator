@@ -738,6 +738,191 @@ mod tests {
     }
 }
 
+
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct YoutubeQuality { height: u32, label: String }
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct YoutubeInspection {
+    video_id: String,
+    url: String,
+    title: String,
+    channel: Option<String>,
+    duration_ms: Option<u64>,
+    thumbnail: Option<String>,
+    qualities: Vec<YoutubeQuality>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DownloadProgress {
+    project_id: String,
+    percent: f32,
+    status: String,
+}
+
+fn normalize_youtube_url(raw: &str) -> Result<(String, String), String> {
+    let candidate = raw.trim();
+    if candidate.is_empty() { return Err("Cole um link do YouTube.".into()); }
+    let value = if candidate.contains("://") { candidate.to_string() } else { format!("https://{candidate}") };
+    let parsed = url::Url::parse(&value).map_err(|_| "Link do YouTube inválido.".to_string())?;
+    let host = parsed.host_str().unwrap_or("").to_ascii_lowercase();
+    let segments: Vec<&str> = parsed.path_segments().map(|s| s.collect()).unwrap_or_default();
+    let id: Option<String> = if host == "youtu.be" {
+        segments.first().map(|s| (*s).to_string())
+    } else if ["youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com",
+        "youtube-nocookie.com", "www.youtube-nocookie.com"].contains(&host.as_str()) {
+        if parsed.path() == "/watch" {
+            parsed.query_pairs().find(|(key, _)| key == "v").map(|(_, value)| value.into_owned())
+        } else if segments.len() >= 2 && ["embed", "shorts", "live", "v"].contains(&segments[0]) {
+            segments.get(1).map(|s| (*s).to_string())
+        } else { None }
+    } else { return Err("O link precisa ser de um vídeo do YouTube.".into()); };
+    let id = id.ok_or("Não foi possível identificar o vídeo neste link.")?;
+    if id.len() != 11 || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+        return Err("O identificador do vídeo do YouTube é inválido.".into());
+    }
+    Ok((id.clone(), format!("https://www.youtube.com/watch?v={id}")))
+}
+
+async fn youtube_downloader(app: &AppHandle) -> Result<Downloader, String> {
+    let app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let tools = app_data.join("tools");
+    let output = app_data.join("youtube-cache");
+    fs::create_dir_all(&tools).map_err(|e| e.to_string())?;
+    fs::create_dir_all(&output).map_err(|e| e.to_string())?;
+    let builder = Downloader::with_new_binaries(tools, output).await
+        .map_err(|e| format!("Não foi possível preparar o importador do YouTube: {e}"))?;
+    builder.build().await.map_err(|e| format!("Não foi possível iniciar o importador do YouTube: {e}"))
+}
+
+fn youtube_inspection(video: &yt_dlp::model::Video, canonical: String, video_id: String) -> YoutubeInspection {
+    let mut heights = std::collections::BTreeSet::new();
+    for format in &video.formats {
+        if format.is_video() {
+            if let Some(height) = format.video_resolution.height {
+                if height > 0 && height <= 2160 { heights.insert(height); }
+            }
+        }
+    }
+    let mut qualities: Vec<YoutubeQuality> = heights.into_iter().rev()
+        .map(|height| YoutubeQuality { height, label: format!("{height}p") }).collect();
+    if qualities.is_empty() {
+        qualities.push(YoutubeQuality { height: 720, label: "Melhor disponível".into() });
+    }
+    YoutubeInspection {
+        video_id,
+        url: canonical,
+        title: video.title.chars().take(255).collect(),
+        channel: video.channel.clone().or_else(|| video.uploader.clone()),
+        duration_ms: video.duration.map(|seconds| (seconds.max(0) as u64) * 1000),
+        thumbnail: video.thumbnail.clone(),
+        qualities,
+    }
+}
+
+#[tauri::command]
+async fn inspect_youtube(app: AppHandle, url: String) -> Result<YoutubeInspection, String> {
+    let (video_id, canonical) = normalize_youtube_url(&url)?;
+    let downloader = youtube_downloader(&app).await?;
+    let video = downloader.fetch_video_infos(canonical.clone()).await
+        .map_err(|e| format!("Não foi possível inspecionar o vídeo: {e}"))?;
+    if video.id != video_id { return Err("O YouTube retornou um vídeo diferente do link informado.".into()); }
+    Ok(youtube_inspection(&video, canonical, video_id))
+}
+
+#[tauri::command]
+async fn download_youtube(
+    app: AppHandle,
+    project_id: String,
+    url: String,
+    max_height: Option<u32>,
+) -> Result<MediaAsset, String> {
+    let (video_id, canonical) = normalize_youtube_url(&url)?;
+    let height = max_height.unwrap_or(1080);
+    if height != 0 && !(144..=2160).contains(&height) { return Err("Qualidade selecionada inválida.".into()); }
+
+    let project = project_folder(&app, &project_id)?;
+    let media_folder = project.join("media");
+    fs::create_dir_all(&media_folder).map_err(|e| e.to_string())?;
+    let downloader = youtube_downloader(&app).await?;
+    let video = downloader.fetch_video_infos(canonical.clone()).await
+        .map_err(|e| format!("Não foi possível acessar o vídeo: {e}"))?;
+    if video.id != video_id { return Err("O YouTube retornou um vídeo diferente do link informado.".into()); }
+
+    let asset_id = Uuid::new_v4().to_string();
+    let destination = media_folder.join(format!("{asset_id}.mp4"));
+    let app_for_progress = app.clone();
+    let project_for_progress = project_id.clone();
+    let quality = if height == 0 { VideoQuality::Best } else { VideoQuality::CustomHeight(height) };
+    let downloaded = downloader.download(&video, destination.clone())
+        .video_quality(quality)
+        .with_progress(move |fraction| {
+            let _ = app_for_progress.emit("youtube-download-progress", DownloadProgress {
+                project_id: project_for_progress.clone(),
+                percent: (fraction * 100.0) as f32,
+                status: "downloading".into(),
+            });
+        })
+        .execute().await
+        .map_err(|e| format!("Falha ao baixar o vídeo: {e}"))?;
+
+    if !downloaded.is_file() {
+        return Err("O download terminou, mas o arquivo MP4 não foi encontrado.".into());
+    }
+    let size = fs::metadata(&downloaded).map_err(|e| e.to_string())?.len();
+    if size == 0 { return Err("O arquivo baixado está vazio.".into()); }
+    if downloaded != destination {
+        fs::copy(&downloaded, &destination).map_err(|e| e.to_string())?;
+        let _ = fs::remove_file(&downloaded);
+    }
+
+    let title = video.title.clone();
+    let safe_name: String = title.chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .take(48).collect();
+    let asset = MediaAsset {
+        id: asset_id.clone(),
+        name: title.clone(),
+        original_name: format!("{safe_name}.mp4"),
+        kind: "video".into(),
+        mime_type: "video/mp4".into(),
+        size_bytes: size,
+        relative_path: format!("media/{asset_id}.mp4"),
+        source: "youtube".into(),
+        source_url: Some(canonical),
+        duration_ms: video.duration.map(|seconds| (seconds.max(0) as u64) * 1000),
+        width: None,
+        height: if height == 0 { video.formats.iter().filter_map(|f| f.video_resolution.height).max() } else { Some(height) },
+        created_at: timestamp_millis(),
+    };
+    append_assets(&app, &project_id, &[asset.clone()], &[destination])?;
+    let _ = app.emit("youtube-download-progress", DownloadProgress {
+        project_id, percent: 100.0, status: "completed".into(),
+    });
+    Ok(asset)
+}
+
+
+#[cfg(test)]
+mod youtube_url_tests {
+    use super::normalize_youtube_url;
+    #[test]
+    fn parses_supported_youtube_links() {
+        let id = "abcdefghijk";
+        assert_eq!(normalize_youtube_url(&format!("https://youtube.com/watch?v={id}")).unwrap().0, id);
+        assert_eq!(normalize_youtube_url(&format!("https://youtu.be/{id}")).unwrap().0, id);
+        assert_eq!(normalize_youtube_url(&format!("https://youtube.com/shorts/{id}")).unwrap().0, id);
+    }
+    #[test]
+    fn rejects_non_youtube_hosts() {
+        assert!(normalize_youtube_url("https://example.com/watch?v=abcdefghijk").is_err());
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
