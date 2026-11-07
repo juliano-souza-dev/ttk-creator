@@ -124,3 +124,22 @@
 .timeline-footer .secondary-action{font-size:9px;padding:7px 9px}
 @media(max-width:900px){.editor-grid{grid-template-columns:1fr}.editor-preview{min-height:360px}.preview-stage{min-height:260px}}
 @media(max-width:600px){.editor-topline{align-items:flex-start;flex-direction:column}.timeline-track{grid-template-columns:95px minmax(0,1fr)}.timeline-ruler{padding-left:108px}.timeline-footer{align-items:flex-start;flex-direction:column}}
+
+
+/* Editing transport and timeline controls */
+.editor-transport{display:flex;align-items:center;justify-content:center;gap:10px;padding:11px 14px;border-top:1px solid #302b37;background:#19171f}
+.transport-button{width:32px;height:32px;border:1px solid #40384b;border-radius:7px;background:#24212a;color:#c7b5e5;display:grid;place-items:center;cursor:pointer}
+.transport-play{height:34px;padding:0 15px;border:0;border-radius:7px;background:#a78be2;color:#17131d;display:flex;align-items:center;gap:7px;font-size:10px;font-weight:700;cursor:pointer}
+.transport-play:disabled,.transport-button:disabled{opacity:.4;cursor:not-allowed}
+.transport-time{margin-left:8px;color:#aaa0b7;font:10px 'DM Mono'}
+.timeline-playhead{display:grid;grid-template-columns:62px minmax(0,1fr) 52px;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #302b37}
+.timeline-playhead label{font:9px 'DM Mono';color:#8b8295;letter-spacing:.7px}
+.timeline-playhead input{width:100%;accent-color:#b69be9}
+.timeline-playhead strong{font:10px 'DM Mono';color:#c7b5e5;text-align:right}
+.timeline-actions{display:flex;align-items:center;flex-wrap:wrap;gap:7px;padding:11px 14px;border-top:1px solid #302b37}
+.timeline-actions .secondary-action{font-size:9px;padding:7px 9px}
+.timeline-actions .danger-action{color:#e6a3a3;border-color:#604044}
+.volume-control{display:grid;grid-template-columns:1fr auto;align-items:center;gap:5px}
+.volume-control span{display:flex;align-items:center;gap:5px}
+.volume-control input{grid-column:1/-1;width:100%;accent-color:#a78be2}
+@media(max-width:600px){.editor-transport{gap:6px}.transport-time{font-size:9px;margin-left:2px}.timeline-playhead{grid-template-columns:50px minmax(0,1fr) 45px;padding:9px}.timeline-actions{gap:5px}}
