@@ -134,6 +134,10 @@ pub struct ExportMotion {
     font_weight: u32,
     #[serde(default)]
     text_align: String,
+    #[serde(default)]
+    preset: String,
+    #[serde(default)]
+    duration_ms: u64,
 }
 
 #[derive(serde::Deserialize)]
@@ -279,7 +283,6 @@ pub async fn export_timeline(
         }
 
         for (index, item) in request.motion.iter().enumerate() {
-            let text = ffmpeg_escape_text(&item.text);
             let color = if item.color.starts_with('#') && item.color.len() == 7 { format!("0x{}", &item.color[1..]) } else { "white".into() };
             let (font_name, bold_suffix) = match item.font_family.as_str() {
                 "Georgia" => ("georgia", "bd"), "Impact" => ("impact", ""),
@@ -289,10 +292,45 @@ pub async fn export_timeline(
             let font_suffix = if item.font_weight >= 700 { bold_suffix } else { "" };
             let font_file = format!("C\\:/Windows/Fonts/{font_name}{font_suffix}.ttf");
             let anchor_x = (item.x.clamp(0.0, 100.0) / 100.0) * 1080.0;
-            let x = match item.text_align.as_str() { "left" => format!("{anchor_x}"), "right" => format!("{anchor_x}-text_w"), _ => format!("{anchor_x}-text_w/2") };
-            let y = (item.y.clamp(0.0, 100.0) / 100.0) * 1920.0;
+            let anchor_y = (item.y.clamp(0.0, 100.0) / 100.0) * 1920.0;
+            let base_x = match item.text_align.as_str() { "left" => format!("{anchor_x}"), "right" => format!("{anchor_x}-text_w"), _ => format!("{anchor_x}-text_w/2") };
+            let start = item.start_ms as f64 / 1000.0;
+            let end = item.end_ms as f64 / 1000.0;
+            let duration_ms = if item.duration_ms > 0 { item.duration_ms.min(item.end_ms.saturating_sub(item.start_ms)) } else { item.end_ms.saturating_sub(item.start_ms) };
+            let duration = (duration_ms.max(1) as f64) / 1000.0;
+
+            if item.preset == "typewriter" {
+                // Render successive text prefixes in non-overlapping time slices. This
+                // produces a true character-by-character reveal in the exported frames.
+                let characters: Vec<char> = item.text.chars().collect();
+                if characters.is_empty() { continue; }
+                let mut prefix = String::new();
+                let mut current = previous.clone();
+                for (step, character) in characters.iter().enumerate() {
+                    prefix.push(*character);
+                    let text = ffmpeg_escape_text(&prefix);
+                    let step_start = start + duration * (step as f64 / characters.len() as f64);
+                    let step_end = if step + 1 == characters.len() { end } else { start + duration * ((step + 1) as f64 / characters.len() as f64) };
+                    let next = format!("typewriter{index}_{step}");
+                    filter_parts.push(format!("[{current}]drawtext=fontfile='{font_file}':text='{text}':fontcolor={color}:fontsize={}:x='{base_x}':y='{anchor_y}-text_h/2':enable='between(t,{step_start:.6},{step_end:.6})'[{next}]", item.font_size.clamp(18, 180)));
+                    current = next;
+                }
+                previous = current;
+                continue;
+            }
+
+            // Keep these curves in sync with motionPreviewState() in EditorWorkspace.tsx.
+            let progress = format!("clip((t-{start:.6})/{duration:.6},0,1)");
+            let eased = format!("(1-pow(1-{progress},3))");
+            let (scale, x, alpha) = match item.preset.as_str() {
+                "pop" => (format!("0.35+0.65*{eased}"), base_x.clone(), "1".to_string()),
+                "slide" => ("1".to_string(), format!("({base_x})+text_w*(1-{eased})"), "1".to_string()),
+                "zoom" => (format!("2.4-1.4*{eased}"), base_x.clone(), format!("min(1,{progress}*4)")),
+                "impact" => (format!("if(lt({progress},0.65),3-2.12*({progress}/0.65),0.88+0.12*(({progress}-0.65)/0.35))"), base_x.clone(), format!("min(1,{progress}*4)")),
+                _ => ("1".to_string(), base_x.clone(), "1".to_string()),
+            };
             let next = format!("text{index}");
-            filter_parts.push(format!("[{previous}]drawtext=fontfile='{font_file}':text='{text}':fontcolor={color}:fontsize={}:x='{x}':y='{}-text_h/2':enable='between(t,{:.3},{:.3})'[{next}]", item.font_size.clamp(18, 180), y, item.start_ms as f64 / 1000.0, item.end_ms as f64 / 1000.0));
+            filter_parts.push(format!("[{previous}]drawtext=fontfile='{font_file}':text='{}':fontcolor={color}:fontsize='max(1,{}*({scale}))':alpha='{alpha}':x='{x}':y='{anchor_y}-text_h/2':enable='between(t,{start:.3},{end:.3})'[{next}]", ffmpeg_escape_text(&item.text), item.font_size.clamp(18, 180)));
             previous = next;
         }
         filter_parts.push(format!("[{previous}]format=yuv420p[vout]"));
