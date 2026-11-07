@@ -10,6 +10,7 @@ pub struct AppState {
     pub projects: ProjectService,
     pub media: MediaService,
     pub media_storage: MediaStorage,
+    pub sound_library_directory: std::path::PathBuf,
     // The worker must remain alive so buffered log records are flushed.
     pub(crate) _log_guard: Mutex<Option<WorkerGuard>>,
 }
