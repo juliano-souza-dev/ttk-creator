@@ -138,11 +138,21 @@ pub struct ExportMotion {
 
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ExportSoundEffect {
+    sound_id: String,
+    timeline_start_ms: u64,
+    volume: f64,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ExportRequest {
     project_id: String,
     destination: String,
     clips: Vec<ExportClip>,
     motion: Vec<ExportMotion>,
+    #[serde(default)]
+    sound_effects: Vec<ExportSoundEffect>,
 }
 
 #[tauri::command]
@@ -180,6 +190,7 @@ pub async fn export_timeline(
 ) -> Result<String, String> {
     let assets = state.media.list(&request.project_id)?;
     let storage = state.media_storage.clone();
+    let sound_directory = state.sound_library_directory.clone();
 
     tauri::async_runtime::spawn_blocking(move || {
         use std::{path::PathBuf, process::Command};
@@ -195,6 +206,7 @@ pub async fn export_timeline(
         let mut filter_parts: Vec<String> = Vec::new();
         let mut visual_inputs: Vec<(usize, &ExportClip)> = Vec::new();
         let mut audio_inputs: Vec<(usize, &ExportClip)> = Vec::new();
+        let mut sound_inputs: Vec<(usize, &ExportSoundEffect)> = Vec::new();
         let mut total_ms = 0u64;
 
         for clip in &request.clips {
@@ -232,6 +244,21 @@ pub async fn export_timeline(
         if visual_inputs.is_empty() {
             return Err("A timeline precisa conter pelo menos um vídeo ou uma imagem.".into());
         }
+        let registered_sounds = read_sound_manifest(&sound_directory)?;
+        for sound in &request.sound_effects {
+            let registered = registered_sounds.iter().find(|item| item.id == sound.sound_id)
+                .ok_or_else(|| format!("O efeito sonoro {} não está mais na biblioteca global.", sound.sound_id))?;
+            let path = sound_directory.join(&registered.file_name).canonicalize()
+                .map_err(|error| format!("Arquivo de efeito sonoro não encontrado: {error}"))?;
+            let canonical_directory = sound_directory.canonicalize().map_err(|error| error.to_string())?;
+            if !path.starts_with(&canonical_directory) || !path.is_file() {
+                return Err("Caminho de efeito sonoro inválido.".into());
+            }
+            let input_index = visual_inputs.len() + audio_inputs.len() + sound_inputs.len();
+            args.extend(["-i".into(), path.to_string_lossy().into_owned()]);
+            sound_inputs.push((input_index, sound));
+        }
+
         for item in &request.motion {
             total_ms = total_ms.max(item.end_ms);
         }
@@ -275,6 +302,13 @@ pub async fn export_timeline(
             let label = format!("audio{index}");
             let delay = clip.timeline_start_ms;
             let volume = if clip.muted.unwrap_or(false) { 0.0 } else { clip.volume.clamp(0.0, 100.0) / 100.0 };
+            filter_parts.push(format!("[{input_index}:a]asetpts=PTS-STARTPTS,volume={volume:.3},adelay={delay}|{delay}[{label}]"));
+            audio_labels.push(format!("[{label}]"));
+        }
+        for (index, (input_index, sound)) in sound_inputs.iter().enumerate() {
+            let label = format!("sfx{index}");
+            let delay = sound.timeline_start_ms;
+            let volume = sound.volume.clamp(0.0, 100.0) / 100.0;
             filter_parts.push(format!("[{input_index}:a]asetpts=PTS-STARTPTS,volume={volume:.3},adelay={delay}|{delay}[{label}]"));
             audio_labels.push(format!("[{label}]"));
         }
