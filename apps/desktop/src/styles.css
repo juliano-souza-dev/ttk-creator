@@ -117,8 +117,15 @@
 .timeline-clip>small{font:8px 'DM Mono';opacity:.7}
 .clip-controls{display:flex;gap:3px;position:absolute;right:5px;top:5px;opacity:0;transition:opacity .15s}
 .timeline-clip:hover .clip-controls,.timeline-clip:focus-visible .clip-controls{opacity:1}
-.clip-controls i{width:17px;height:17px;border-radius:3px;background:#17131dcc;display:grid;place-items:center;font-style:normal;cursor:pointer}
-.clip-controls i:hover{background:#65517f}
+.clip-controls button{width:22px;height:22px;padding:0;border:0;border-radius:4px;background:#17131dcc;color:#eee;display:grid;place-items:center;cursor:pointer}
+.clip-controls button:hover{background:#65517f}
+.timeline-clip{cursor:grab}
+.timeline-clip:active{cursor:grabbing}
+.clip-order-controls{display:grid;gap:7px;margin:12px 0;padding:10px;border:1px solid #393241;border-radius:7px}
+.clip-order-controls>span{font-size:10px;color:#aaa0b7}
+.clip-order-controls>div{display:flex;gap:7px}
+.clip-order-controls button{display:flex;align-items:center;gap:4px}
+.clip-order-controls button:disabled{opacity:.35;cursor:not-allowed}
 .audio-track .track-clips{background:linear-gradient(90deg,#191715,#211a17)}
 .timeline-footer{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px 0;color:#77717f;font-size:9px}
 .timeline-footer .secondary-action{font-size:9px;padding:7px 9px}
