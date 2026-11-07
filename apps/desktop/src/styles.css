@@ -313,6 +313,15 @@
 .property-section .motion-position-controls button{width:100%}
 .property-delete{align-self:stretch;border:1px solid #604044;border-radius:5px;background:#302023;color:#e6a3a3;padding:8px;font-size:9px}
 .property-control input{grid-column:1/-1;width:100%;accent-color:#a78be2}
+.property-control .numeric-time-input{grid-column:1/-1;width:88px;max-width:100%;min-height:28px;padding:4px 7px;border:1px solid #494052;border-radius:5px;background:#17141c;color:#eee;font:11px 'DM Mono';accent-color:auto}
+.property-control .numeric-time-input:focus{outline:1px solid #b99ae8;border-color:#b99ae8}
+.motion-timeline-clip{overflow:visible}
+.motion-trim-edge{position:absolute;top:0;bottom:0;width:9px;z-index:4;cursor:ew-resize;background:#c7a6f2;opacity:.55;touch-action:none}
+.motion-trim-edge:hover{opacity:1}
+.motion-trim-edge.left{left:0;border-radius:5px 0 0 5px}
+.motion-trim-edge.right{right:0;border-radius:0 5px 5px 0}
+.motion-timeline-clip>b,.motion-timeline-clip>small{pointer-events:none}
+
 .property-control strong{font:9px 'DM Mono';color:#c5b4df}
 .editor-properties .clip-toggle-row{padding:9px 0;border-top:1px solid #302b37;border-bottom:1px solid #302b37}
 .editor-properties .volume-control{display:grid;grid-template-columns:1fr auto;gap:7px;color:#8c8694;font-size:9px}
