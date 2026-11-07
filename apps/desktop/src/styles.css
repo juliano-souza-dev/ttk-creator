@@ -455,3 +455,21 @@
 .motion-overlay span.motion-main-text{font-family:var(--motion-font,Arial,sans-serif);font-weight:var(--motion-weight,900);text-transform:none;letter-spacing:normal;display:flex;align-items:center;justify-content:center;gap:.22em;width:100%;max-width:100%;text-align:inherit}
 .motion-overlay .motion-inline-icon{display:inline-block;flex:none;font-style:normal;font-family:"Segoe UI Emoji","Apple Color Emoji",sans-serif;font-size:.82em;line-height:1}
 .property-hint{display:block;color:#918b9c;font-size:11px;line-height:1.4;margin-top:-5px}
+
+/* Global sound effects library */
+.sound-library-import{display:grid;gap:10px;padding:14px;border:1px solid #332d3d;border-radius:9px;background:#19171f;margin-bottom:14px}
+.sound-library-import label{display:grid;gap:6px;font-size:10px;color:#c7c2d0}
+.sound-library-import input{height:36px;background:#111115;border:1px solid #45404e;border-radius:7px;padding:0 10px;color:#fff;font:11px 'DM Sans',sans-serif;outline:0}
+.sound-library-import input:focus{border-color:#a98af0}
+.sound-library-import .primary{width:100%}
+.sound-library-import>small{font-size:9px;line-height:1.5;color:#817b8b}
+.sound-library-message{padding:9px 11px;margin-bottom:12px;border:1px solid #49405b;border-radius:7px;background:#211d29;color:#cbb9ed;font-size:10px;line-height:1.5}
+.sound-library-list{display:grid;gap:7px}
+.sound-library-row{display:flex;align-items:center;gap:9px;min-height:58px;padding:9px;border:1px solid #302c37;border-radius:8px;background:#19181e}
+.sound-library-icon{width:34px;height:34px;flex:0 0 34px;display:grid;place-items:center;border-radius:8px;background:#382b24;color:#e5a574}
+.sound-library-info{min-width:0;flex:1}
+.sound-library-info b,.sound-library-info small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sound-library-info b{font-size:10px;color:#eee}
+.sound-library-info small{margin-top:4px;font-size:8px;color:#777480}
+.sound-library-row .icon-action{width:29px;height:29px;flex:0 0 29px}
+.sound-library-row .icon-action.danger{color:#d78e91}
