@@ -89,7 +89,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
     element.volume = Math.max(0, Math.min(1, (activeClip.volume ?? 100) / 100));
     void element.play().catch(() => { setLoadError("Não foi possível reproduzir este formato de mídia."); setPlaying(false); });
     return () => element.pause();
-  }, [playing, activeClip?.id, activeAsset?.id, activeUrl, activeIndex, localPlayhead, totalDuration, clipOffsets, stopPlayback]);
+  }, [playing, activeClip?.id, activeAsset?.id, activeUrl, activeIndex, totalDuration, clipOffsets, stopPlayback]);
 
   function addToTimeline(asset: MediaAsset, targetIndex = clips.length) {
     const duration = defaultDuration(asset);
