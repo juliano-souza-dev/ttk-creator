@@ -138,6 +138,8 @@ pub struct ExportMotion {
     preset: String,
     #[serde(default)]
     duration_ms: u64,
+    #[serde(default)]
+    is_caption: bool,
 }
 
 #[derive(serde::Deserialize)]
@@ -332,6 +334,7 @@ pub async fn export_timeline(
             let end = item.end_ms as f64 / 1000.0;
             let duration_ms = if item.duration_ms > 0 { item.duration_ms.min(item.end_ms.saturating_sub(item.start_ms)) } else { item.end_ms.saturating_sub(item.start_ms) };
             let duration = (duration_ms.max(1) as f64) / 1000.0;
+            let caption_box = if item.is_caption { format!(":box=1:boxcolor=black@0.76:boxborderw={}", (item.font_size.clamp(18, 180) / 3).max(6)) } else { String::new() };
 
             if item.preset == "typewriter" {
                 // Render successive text prefixes in non-overlapping time slices. This
@@ -352,7 +355,7 @@ pub async fn export_timeline(
                     } else {
                         format!("gte(t,{step_start:.6})*lt(t,{step_end:.6})")
                     };
-                    filter_parts.push(format!("[{current}]drawtext=fontfile='{font_file}':text='{text}':fontcolor={color}:fontsize={}:x='{base_x}':y='{anchor_y}-text_h/2':enable='{enable}'[{next}]", item.font_size.clamp(18, 180)));
+                    filter_parts.push(format!("[{current}]drawtext=fontfile='{font_file}':text='{text}':fontcolor={color}{caption_box}:fontsize={}:x='{base_x}':y='{anchor_y}-text_h/2':enable='{enable}'[{next}]", item.font_size.clamp(18, 180)));
                     current = next;
                 }
                 previous = current;
@@ -370,7 +373,7 @@ pub async fn export_timeline(
                 _ => ("1".to_string(), base_x.clone(), "1".to_string()),
             };
             let next = format!("text{index}");
-            filter_parts.push(format!("[{previous}]drawtext=fontfile='{font_file}':text='{}':fontcolor={color}:fontsize='max(1,{}*({scale}))':alpha='{alpha}':x='{x}':y='{anchor_y}-text_h/2':enable='between(t,{start:.3},{end:.3})'[{next}]", ffmpeg_escape_text(&wrap_text_for_export(&item.text, item.font_size)), item.font_size.clamp(18, 180)));
+            filter_parts.push(format!("[{previous}]drawtext=fontfile='{font_file}':text='{}':fontcolor={color}{caption_box}:fontsize='max(1,{}*({scale}))':alpha='{alpha}':x='{x}':y='{anchor_y}-text_h/2':enable='between(t,{start:.3},{end:.3})'[{next}]", ffmpeg_escape_text(&wrap_text_for_export(&item.text, item.font_size)), item.font_size.clamp(18, 180)));
             previous = next;
         }
         filter_parts.push(format!("[{previous}]format=yuv420p[vout]"));
