@@ -580,13 +580,13 @@ pub async fn export_timeline(
             // Preserve o contexto do erro. A última linha isolada ("Filter not
             // found", por exemplo) esconde a causa útil ("No such filter: drawtext").
             let detail = stderr.lines().rev().take(12).collect::<Vec<_>>()
-                .into_iter().rev().collect::<Vec<_>>().join("\\n");
+                .into_iter().rev().collect::<Vec<_>>().join("\n");
             let detail = if detail.trim().is_empty() {
                 "O FFmpeg encerrou com erro, mas não forneceu detalhes.".to_string()
             } else {
                 detail
             };
-            return Err(format!("Falha ao exportar o vídeo:\\n{detail}"));
+            return Err(format!("Falha ao exportar o vídeo:\n{detail}"));
         }
         Ok(destination.to_string_lossy().into_owned())
     }).await.map_err(|error| format!("A exportação foi interrompida: {error}"))?
