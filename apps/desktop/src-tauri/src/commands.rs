@@ -155,9 +155,10 @@ pub async fn check_ffmpeg() -> Result<String, String> {
 }
 
 fn ffmpeg_escape_text(value: &str) -> String {
-        .replace("'", "\\'")
+    value
+        .replace('\\', "\\\\")
+        .replace('\'', "\\'")
         .replace(':', "\\:")
-        .replace('\\'', "\\\\'")
         .replace('%', "\\%")
         .replace(',', "\\,")
         .replace('[', "\\[")
