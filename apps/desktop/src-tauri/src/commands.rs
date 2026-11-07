@@ -220,6 +220,28 @@ fn resolve_ffmpeg_executable() -> Result<(std::path::PathBuf, String), String> {
     ))
 }
 
+fn media_has_audio_stream(ffmpeg_path: &std::path::Path, media_path: &std::path::Path) -> Result<bool, String> {
+    use std::process::Command;
+    let probe_name = if cfg!(windows) { "ffprobe.exe" } else { "ffprobe" };
+    let sibling = ffmpeg_path.parent().map(|directory| directory.join(probe_name));
+    let mut candidates = Vec::new();
+    if let Some(path) = sibling { candidates.push(path); }
+    if let Some(path_value) = std::env::var_os("PATH") {
+        candidates.extend(std::env::split_paths(&path_value).map(|directory| directory.join(probe_name)));
+    }
+    let probe = candidates.into_iter().find(|candidate| candidate.is_file())
+        .ok_or_else(|| "Não foi possível localizar o ffprobe ao lado do FFmpeg. Instale a distribuição completa do FFmpeg para incluir o áudio original dos vídeos.".to_string())?;
+    let output = Command::new(probe)
+        .args(["-v", "error", "-select_streams", "a:0", "-show_entries", "stream=index", "-of", "csv=p=0"])
+        .arg(media_path)
+        .output()
+        .map_err(|error| format!("Não foi possível analisar o áudio do vídeo: {error}"))?;
+    if !output.status.success() {
+        return Err(format!("O ffprobe não conseguiu analisar {}: {}", media_path.display(), String::from_utf8_lossy(&output.stderr).trim()));
+    }
+    Ok(!String::from_utf8_lossy(&output.stdout).trim().is_empty())
+}
+
 fn ensure_ffmpeg_capabilities(
     ffmpeg_path: &std::path::Path,
     required_filters: &[&str],
@@ -404,6 +426,24 @@ pub async fn export_timeline(
         if visual_inputs.is_empty() {
             return Err("A timeline precisa conter pelo menos um vídeo ou uma imagem.".into());
         }
+        let (ffmpeg_path, _) = resolve_ffmpeg_executable()?;
+        let mut video_audio_inputs: Vec<(usize, &ExportClip)> = Vec::new();
+        for (input_index, clip) in &visual_inputs {
+            if clip.kind != "video" || clip.muted.unwrap_or(false) {
+                continue;
+            }
+            let asset = assets.iter().find(|asset| asset.id == clip.asset_id)
+                .ok_or_else(|| format!("A mídia do clipe {} não está mais na biblioteca.", clip.id))?;
+            let relative = PathBuf::from(&asset.relative_path);
+            let media_dir = storage.project_media_directory(&request.project_id)?;
+            let project_dir = media_dir.parent().ok_or("Diretório do projeto inválido.")?
+                .canonicalize().map_err(|error| error.to_string())?;
+            let media_path = project_dir.join(relative).canonicalize()
+                .map_err(|error| format!("Arquivo de vídeo não encontrado: {error}"))?;
+            if media_has_audio_stream(&ffmpeg_path, &media_path)? {
+                video_audio_inputs.push((*input_index, *clip));
+            }
+        }
         let registered_sounds = read_sound_manifest(&sound_directory)?;
         for sound in &request.sound_effects {
             let registered = registered_sounds.iter().find(|item| item.id == sound.sound_id)
@@ -506,6 +546,13 @@ pub async fn export_timeline(
             filter_parts.push(format!("[{input_index}:a]asetpts=PTS-STARTPTS,volume={volume:.3},adelay={delay}|{delay}[{label}]"));
             audio_labels.push(format!("[{label}]"));
         }
+        for (index, (input_index, clip)) in video_audio_inputs.iter().enumerate() {
+            let label = format!("videoaudio{index}");
+            let delay = clip.timeline_start_ms;
+            let volume = clip.volume.clamp(0.0, 100.0) / 100.0;
+            filter_parts.push(format!("[{input_index}:a]asetpts=PTS-STARTPTS,volume={volume:.3},adelay={delay}|{delay}[{label}]"));
+            audio_labels.push(format!("[{label}]"));
+        }
         for (index, (input_index, sound)) in sound_inputs.iter().enumerate() {
             let label = format!("sfx{index}");
             let delay = sound.timeline_start_ms;
@@ -514,7 +561,7 @@ pub async fn export_timeline(
             audio_labels.push(format!("[{label}]"));
         }
         if !audio_labels.is_empty() {
-            filter_parts.push(format!("{}amix=inputs={}:duration=longest:dropout_transition=0,atrim=duration={:.3}[aout]", audio_labels.join(""), audio_labels.len(), total_ms as f64 / 1000.0));
+            filter_parts.push(format!("{}amix=inputs={}:duration=longest:dropout_transition=0:normalize=0,alimiter=limit=0.95,atrim=duration={:.3}[aout]", audio_labels.join(""), audio_labels.len(), total_ms as f64 / 1000.0));
         }
 
         // Valide os recursos reais do binário antes de iniciar a exportação.
@@ -527,7 +574,7 @@ pub async fn export_timeline(
             required_filters.push("drawtext");
         }
         if !audio_labels.is_empty() {
-            required_filters.extend(["asetpts", "volume", "adelay", "amix", "atrim"]);
+            required_filters.extend(["asetpts", "volume", "adelay", "amix", "alimiter", "atrim"]);
         }
         ensure_ffmpeg_capabilities(&ffmpeg_path, &required_filters)?;
 
