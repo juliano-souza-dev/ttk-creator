@@ -432,7 +432,7 @@
 .motion-overlay.motion-composition{inset:0;width:100%;height:100%;transform:none}
 .motion-overlay span.motion-composition{position:absolute;inset:0;display:block;width:100%;height:100%;min-width:0;max-width:none;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;backdrop-filter:none;overflow:visible}
 .motion-overlay span.motion-composition:after{display:none}
-.motion-overlay span.motion-free-element{position:absolute;display:block;width:auto;max-width:90%;min-width:8px;min-height:8px;padding:3px 6px;border:1px solid transparent;border-radius:4px;background:transparent;color:inherit;font:800 inherit/1.08 'Space Grotesk',sans-serif;letter-spacing:normal;text-align:center;text-transform:none;text-shadow:0 3px 16px #000b;white-space:pre-wrap;overflow-wrap:anywhere;pointer-events:auto;cursor:move;animation:motion-pop-in .55s cubic-bezier(.16,1.2,.35,1) both}
+.motion-overlay span.motion-free-element{position:absolute;display:block;width:auto;max-width:90%;min-width:8px;min-height:8px;padding:3px 6px;border:1px solid transparent;border-radius:4px;background:transparent;color:inherit;font-family:'Space Grotesk',sans-serif;font-weight:800;line-height:1.08;letter-spacing:normal;text-align:center;text-transform:none;text-shadow:0 3px 16px #000b;white-space:pre-wrap;overflow-wrap:anywhere;pointer-events:auto;cursor:move;animation:motion-pop-in .55s cubic-bezier(.16,1.2,.35,1) both}
 .motion-overlay span.motion-free-element:after{display:none}
 .motion-overlay span.motion-free-element.selected{border:1px dashed #65d6c0;background:#14252b66}
 .motion-overlay span.motion-free-element.motion-element-icon{font-family:'DM Sans',sans-serif}
