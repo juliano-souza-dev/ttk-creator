@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, DragEvent, PointerEvent as ReactPointerEvent } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { save } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import { desktopApi, isDesktopRuntime } from "./services/desktop-api";
+import type { GlobalSound } from "./services/desktop-api";
 import type { MediaAsset } from "./shared/types";
 import { AudioLines, Film, Plus, Play, Pause, Trash2, Scissors, Copy, SkipBack, SkipForward, Volume2, VolumeX, Music2, Type, WandSparkles, MousePointer2, ChevronLeft, ChevronRight, Download, LoaderCircle } from "lucide-react";
 
@@ -22,7 +23,7 @@ type Props = { projectId: string; assets: MediaAsset[]; onAddMedia: () => void }
 type TrimDrag = { clipId: string; edge: "start" | "end"; startX: number; sourceStartMs: number; sourceEndMs: number; timelineStartMs: number; scaleMs: number };
 type ClipMoveDrag = { clipId: string; startX: number; timelineStartMs: number };
 type MotionTrimDrag = { id: string; edge: "start" | "end" | "move"; startX: number; startMs: number; endMs: number };
-type MotionGraphic = { id: string; text: string; icon?: string; elements?: Array<{ type: string; content: string }>; fontFamily?: string; fontWeight?: number; textAlign?: "left" | "center" | "right"; startMs: number; endMs: number; durationMs: number; preset: "pop" | "slide" | "zoom" | "typewriter" | "impact" | "composition"; color: string; accent: string; fontSize: number; x: number; y: number; sound: "pop" | "whoosh" | "impact" | "click" | "none" };
+type MotionGraphic = { id: string; text: string; icon?: string; elements?: Array<{ type: string; content: string }>; fontFamily?: string; fontWeight?: number; textAlign?: "left" | "center" | "right"; startMs: number; endMs: number; durationMs: number; preset: "pop" | "slide" | "zoom" | "typewriter" | "impact" | "composition"; color: string; accent: string; fontSize: number; x: number; y: number; sound: "pop" | "whoosh" | "impact" | "click" | "none"; soundId?: string; soundVolume?: number };
 const motionPresets = [{id:"pop",label:"Pop Impact",sound:"pop"},{id:"slide",label:"Slide + Whoosh",sound:"whoosh"},{id:"zoom",label:"Zoom + Impact",sound:"impact"},{id:"typewriter",label:"Typewriter",sound:"click"},{id:"impact",label:"Big Impact",sound:"impact"}] as const;
 const defaultDuration = (asset: MediaAsset) => asset.durationMs && asset.durationMs > 0 ? asset.durationMs : asset.kind === "image" ? 5000 : 30000;
 const clipDuration = (clip: TimelineClip) => Math.max(0, clip.sourceEndMs - clip.sourceStartMs);
@@ -38,6 +39,11 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
   const [clips, setClips] = useState<TimelineClip[]>([]);
   const motionKey = "ttk-creator:motion:" + projectId;
   const [motion, setMotion] = useState<MotionGraphic[]>([]);
+  const [globalSounds, setGlobalSounds] = useState<GlobalSound[]>([]);
+  const [soundUrls, setSoundUrls] = useState<Record<string, string>>({});
+  const [newSoundName, setNewSoundName] = useState("");
+  const [soundBusy, setSoundBusy] = useState(false);
+  const [soundMessage, setSoundMessage] = useState("");
   const [selectedMotionId, setSelectedMotionId] = useState<string | null>(null);
   const [activeTool, setActiveTool] = useState<"media" | "audio" | "text" | "effects">("media");
   const [timelineZoom, setTimelineZoom] = useState(100);
@@ -56,7 +62,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
   const [previewTick, setPreviewTick] = useState(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRefs = useRef<Record<string, HTMLAudioElement | null>>({});
-  const motionAudioContext = useRef<AudioContext | null>(null);
+  const motionSoundPlayers = useRef<Record<string, HTMLAudioElement>>({});
   const lastTickRef = useRef(0);
   const trimDragRef = useRef<TrimDrag | null>(null);
   const clipMoveDragRef = useRef<ClipMoveDrag | null>(null);
@@ -124,6 +130,50 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
 
   useEffect(() => {
     let cancelled = false;
+    async function loadGlobalSounds() {
+      if (!isDesktopRuntime) return;
+      try {
+        const sounds = await desktopApi.listGlobalSounds();
+        const entries = await Promise.all(sounds.map(async sound => {
+          try { return [sound.id, convertFileSrc(await desktopApi.getGlobalSoundPath(sound.id))] as const; }
+          catch { return [sound.id, ""] as const; }
+        }));
+        if (!cancelled) { setGlobalSounds(sounds); setSoundUrls(Object.fromEntries(entries)); }
+      } catch (error) { if (!cancelled) setSoundMessage("Não foi possível carregar a biblioteca: " + String(error)); }
+    }
+    void loadGlobalSounds();
+    return () => { cancelled = true; };
+  }, []);
+
+  async function importGlobalSound() {
+    if (!isDesktopRuntime || soundBusy) return;
+    const selected = await open({ multiple: false, filters: [{ name: "Áudio", extensions: ["mp3", "wav", "ogg", "m4a", "aac", "flac"] }] });
+    if (!selected || Array.isArray(selected)) return;
+    const fallbackName = selected.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, "") || "Novo efeito";
+    const name = newSoundName.trim() || fallbackName;
+    setSoundBusy(true); setSoundMessage("");
+    try {
+      const sound = await desktopApi.importGlobalSound(selected, name);
+      const url = convertFileSrc(await desktopApi.getGlobalSoundPath(sound.id));
+      setGlobalSounds(current => [...current, sound]);
+      setSoundUrls(current => ({ ...current, [sound.id]: url }));
+      setNewSoundName(""); setSoundMessage("Efeito cadastrado na biblioteca global.");
+    } catch (error) { setSoundMessage("Não foi possível importar: " + String(error)); }
+    finally { setSoundBusy(false); }
+  }
+
+  async function removeGlobalSound(soundId: string) {
+    if (!window.confirm("Excluir este efeito da biblioteca global? Os textos que o utilizam ficarão sem áudio.")) return;
+    try {
+      await desktopApi.deleteGlobalSound(soundId);
+      setGlobalSounds(current => current.filter(sound => sound.id !== soundId));
+      setSoundUrls(current => { const next = { ...current }; delete next[soundId]; return next; });
+      setMotion(current => current.map(item => item.soundId === soundId ? { ...item, soundId: "" } : item));
+      setSoundMessage("Efeito removido da biblioteca.");
+    } catch (error) { setSoundMessage("Não foi possível excluir: " + String(error)); }
+  }
+  useEffect(() => {
+    let cancelled = false;
     async function loadUrls() {
       const missing = assets.filter(asset => !mediaUrls[asset.id]);
       if (!missing.length) return;
@@ -175,6 +225,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
     setPlaying(false);
     videoRef.current?.pause();
     Object.values(audioRefs.current).forEach(node => node?.pause());
+    Object.values(motionSoundPlayers.current).forEach(node => { node.pause(); node.currentTime = 0; });
   }, []);
 
   useEffect(() => () => {
@@ -281,6 +332,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
         destination,
         clips: exportClips,
         motion: motion.map(item => ({startMs:item.startMs,endMs:item.endMs,x:item.x,y:item.y,text:(item.icon ? item.icon + " " : "") + item.text,color:item.color,fontSize:item.fontSize,fontFamily:item.fontFamily || "Arial",fontWeight:item.fontWeight || 900,textAlign:item.textAlign || "center"})),
+        soundEffects: motion.filter(item => !!item.soundId).map(item => ({ soundId: item.soundId!, timelineStartMs: item.startMs, volume: item.soundVolume ?? 80 })),
       });
       setExportMessage("Vídeo exportado: " + result);
     } catch (error) {
@@ -292,7 +344,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
 
   function addMotion(preset: MotionGraphic["preset"]) {
     const definition = motionPresets.find(item => item.id === preset)!;
-    const item: MotionGraphic = { id: crypto.randomUUID(), text: preset === "typewriter" ? "YOUR WORD" : "WATCH", icon: "", fontFamily: "Arial", fontWeight: 900, textAlign: "center", startMs: playheadMs, endMs: playheadMs + 3000, durationMs: 3000, preset, color: "#ffffff", accent: "#65d6c0", fontSize: 64, x: 50, y: 50, sound: definition.sound };
+    const item: MotionGraphic = { id: crypto.randomUUID(), text: preset === "typewriter" ? "YOUR WORD" : "WATCH", icon: "", fontFamily: "Arial", fontWeight: 900, textAlign: "center", startMs: playheadMs, endMs: playheadMs + 3000, durationMs: 3000, preset, color: "#ffffff", accent: "#65d6c0", fontSize: 64, x: 50, y: 50, sound: "none", soundId: "", soundVolume: 80 };
     setMotion(current => [...current, item]); setSelectedMotionId(item.id); stopPlayback();
   }
   function updateMotion(id: string, patch: Partial<MotionGraphic>) { setMotion(current => current.map(item => { if (item.id !== id) return item; const nextStart = patch.startMs !== undefined ? Math.max(0, patch.startMs) : item.startMs; let nextEnd = patch.endMs !== undefined ? patch.endMs : item.endMs; if (patch.durationMs !== undefined && patch.endMs === undefined) nextEnd = nextStart + Math.max(300, patch.durationMs); nextEnd = Math.max(nextStart + 300, nextEnd); return { ...item, ...patch, startMs: nextStart, endMs: nextEnd, durationMs: nextEnd - nextStart }; })); }
@@ -300,22 +352,15 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
   useEffect(() => {
     if (!playing) return;
     for (const item of motion) {
-      if (playheadMs >= item.startMs && playheadMs < item.startMs + 80 && lastMotionSounds.current[item.id] !== item.startMs && item.sound !== "none") {
+      if (item.soundId && soundUrls[item.soundId] && playheadMs >= item.startMs && playheadMs < item.startMs + 100 && lastMotionSounds.current[item.id] !== item.startMs) {
         lastMotionSounds.current[item.id] = item.startMs;
-        try {
-          const ctx = motionAudioContext.current;
-          if (!ctx) continue;
-          if (ctx.state === "suspended") void ctx.resume();
-          const osc = ctx.createOscillator(); const gain = ctx.createGain(); const now = ctx.currentTime;
-          const tones: Record<string, number[]> = { pop: [620,150], click: [1200,700], whoosh: [260,70], impact: [105,35] };
-          const tone = tones[item.sound] || tones.pop; osc.type = item.sound === "impact" ? "triangle" : "sine";
-          osc.frequency.setValueAtTime(tone[0], now); osc.frequency.exponentialRampToValueAtTime(tone[1], now + 0.18);
-          gain.gain.setValueAtTime(0.0001, now); gain.gain.exponentialRampToValueAtTime(0.22, now + 0.01); gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.2);
-          osc.connect(gain); gain.connect(ctx.destination); osc.start(now); osc.stop(now + 0.22);
-        } catch { /* Sound effects are optional if audio is unavailable. */ }
+        const player = new Audio(soundUrls[item.soundId]);
+        player.volume = Math.max(0, Math.min(1, (item.soundVolume ?? 80) / 100));
+        motionSoundPlayers.current[item.id] = player;
+        void player.play().catch(() => setLoadError("Não foi possível reproduzir o efeito sonoro."));
       }
     }
-  }, [playheadMs, playing, motion]);
+  }, [playheadMs, playing, motion, soundUrls]);
   function updateClip(id: string, patch: Partial<TimelineClip>) {
     setClips(current => current.map(clip => clip.id === id ? { ...clip, ...patch } : clip));
   }
@@ -527,8 +572,18 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
         <div className="motion-presets editor-preset-grid">{motionPresets.map(preset => <button key={preset.id} className="motion-preset" onClick={() => addMotion(preset.id)}><b>{preset.label}</b><small>Som: {preset.sound}</small><span>+ Adicionar</span></button>)}</div>
       </>}
       {activeTool === "effects" && <>
-        <div className="editor-panel-head"><div><b>Efeitos</b><small>Recursos visuais e sonoros</small></div></div>
-        <div className="editor-media-grid"><article className="editor-media-card"><div className="editor-media-thumb"><WandSparkles size={22}/></div><b>Efeitos visuais</b><small>Em preparação</small></article><article className="editor-media-card"><div className="editor-media-thumb audio"><AudioLines size={22}/></div><b>Efeitos sonoros</b><small>Disponíveis em Texto</small></article></div>
+        <div className="editor-panel-head"><div><b>Biblioteca de sons</b><small>{globalSounds.length} efeito(s) global(is), disponíveis em todos os projetos</small></div></div>
+        <div className="sound-library-import">
+          <label>Nome do efeito<input value={newSoundName} onChange={event => setNewSoundName(event.target.value)} placeholder="Ex.: Pop, Check, Whoosh"/></label>
+          <button className="primary" onClick={() => void importGlobalSound()} disabled={soundBusy}><Plus size={14}/>{soundBusy ? "Importando..." : "Importar áudio"}</button>
+          <small>MP3, WAV, OGG, M4A, AAC ou FLAC. O arquivo será copiado para a biblioteca global.</small>
+        </div>
+        {soundMessage && <div className="sound-library-message" role="status">{soundMessage}</div>}
+        {globalSounds.length ? <div className="sound-library-list">{globalSounds.map(sound => <article className="sound-library-row" key={sound.id}>
+          <div className="sound-library-icon"><AudioLines size={18}/></div><div className="sound-library-info"><b>{sound.name}</b><small>{sound.fileName}</small></div>
+          <button className="icon-action" title="Ouvir efeito" onClick={() => { const audio = new Audio(soundUrls[sound.id]); void audio.play().catch(() => setSoundMessage("Não foi possível reproduzir este arquivo.")); }} disabled={!soundUrls[sound.id]}><Play size={14}/></button>
+          <button className="icon-action danger" title="Excluir efeito" onClick={() => void removeGlobalSound(sound.id)}><Trash2 size={14}/></button>
+        </article>)}</div> : <div className="editor-empty"><AudioLines size={24}/><b>Sua biblioteca está vazia</b><p>Importe efeitos reais para usar nas animações de texto.</p></div>}
       </>}
     </aside>
     <section className="editor-center">
@@ -568,7 +623,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
             <label>Peso<select value={selectedMotion.fontWeight || 900} onChange={event => updateMotion(selectedMotion.id, { fontWeight: Number(event.target.value) })}><option value={400}>Normal</option><option value={600}>Semibold</option><option value={700}>Negrito</option><option value={900}>Extra negrito</option></select></label>
             <label>Alinhamento<select value={selectedMotion.textAlign || "center"} onChange={event => updateMotion(selectedMotion.id, { textAlign: event.target.value as MotionGraphic["textAlign"] })}><option value="left">Esquerda</option><option value="center">Centralizado</option><option value="right">Direita</option></select></label>
             <label>Animação<select value={selectedMotion.preset} onChange={event => updateMotion(selectedMotion.id, { preset: event.target.value as MotionGraphic["preset"] })}>{motionPresets.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}</select></label>
-            <label>Efeito sonoro<select value={selectedMotion.sound} onChange={event => updateMotion(selectedMotion.id, { sound: event.target.value as MotionGraphic["sound"] })}><option value="pop">Pop</option><option value="whoosh">Whoosh</option><option value="impact">Impacto</option><option value="click">Click</option><option value="none">Sem som</option></select></label>
+            <label>Efeito sonoro<select value={selectedMotion.soundId || ""} onChange={event => updateMotion(selectedMotion.id, { soundId: event.target.value, sound: "none" })}><option value="">Sem efeito sonoro</option>{globalSounds.map(sound => <option key={sound.id} value={sound.id}>{sound.name}</option>)}</select></label><label>Volume do efeito <strong>{selectedMotion.soundVolume ?? 80}%</strong><input type="range" min="0" max="100" value={selectedMotion.soundVolume ?? 80} onChange={event => updateMotion(selectedMotion.id, { soundVolume: Number(event.target.value) })}/></label>
             <div className="motion-colors"><label>Texto<input type="color" value={selectedMotion.color} onChange={event => updateMotion(selectedMotion.id, { color: event.target.value })}/></label><label>Destaque<input type="color" value={selectedMotion.accent} onChange={event => updateMotion(selectedMotion.id, { accent: event.target.value })}/></label></div>
           </details>
           <details open className="property-section"><summary>Posição</summary><div className="motion-position-controls"><label>Horizontal <strong>{Math.round(selectedMotion.x)}%</strong><input type="range" min="0" max="100" value={selectedMotion.x} onChange={event => updateMotion(selectedMotion.id, { x: Number(event.target.value) })}/></label><label>Vertical <strong>{Math.round(selectedMotion.y)}%</strong><input type="range" min="0" max="100" value={selectedMotion.y} onChange={event => updateMotion(selectedMotion.id, { y: Number(event.target.value) })}/></label><button className="secondary-action" onClick={() => updateMotion(selectedMotion.id, { x: 50, y: 50 })}>Centralizar</button></div></details>
