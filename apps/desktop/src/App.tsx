@@ -152,11 +152,7 @@ export default function App() {
         </section>
         <section className="project-workspace-status"><div><span className="workspace-status-dot"/><b>Projeto aberto</b><small>As mídias são armazenadas neste dispositivo e vinculadas a este projeto.</small></div><button className="secondary-action" onClick={returnToWorkspace}><LayoutGrid size={14}/> Todos os projetos</button></section>
         {error&&!mediaModal&&<div className="error">{error}</div>}
-        <section className="media-library">
-          <div className="section-head"><div><label className="eyebrow muted">BIBLIOTECA DE MÍDIA</label><h2>{activeProject.name}</h2><p className="section-subtitle">{assets.length} arquivo(s) · {formatBytes(assets.reduce((sum,a)=>sum+a.sizeBytes,0))} armazenados</p></div><button className="primary" onClick={()=>{setMediaTab("local");setMediaModal(true);}}><Plus size={15}/> Adicionar mídia</button></div>
-          {assets.length===0 ? <div className="asset-empty"><div className="asset-empty-icon"><HardDrive size={22}/></div><b>Esta biblioteca ainda está vazia</b><p>Importe arquivos do computador ou traga um vídeo do YouTube.</p><div><button className="secondary-action" onClick={()=>{setMediaTab("local");setMediaModal(true);}}><Upload size={14}/> Arquivos locais</button><button className="secondary-action" onClick={()=>{setMediaTab("youtube");setMediaModal(true);}}><Youtube size={14}/> YouTube</button></div></div> :
-          <EditorWorkspace projectId={activeProject.id} assets={assets} onAddMedia={()=>{setMediaTab("local");setMediaModal(true);}}/>}
-        </section>
+        <EditorWorkspace projectId={activeProject.id} assets={assets} onAddMedia={()=>{setMediaTab("local");setMediaModal(true);}}/>
         </> : null}
         <footer>FRAME LAB · FEITO PARA IDEIAS EM MOVIMENTO <span>EARLY ACCESS · 0.2.0</span></footer>
       </div>
