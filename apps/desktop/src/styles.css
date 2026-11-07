@@ -237,8 +237,9 @@
 .motion-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
 .motion-position-controls{grid-template-columns:1fr 1fr}
 .motion-position-controls button{grid-column:1/-1}
-.motion-overlay{width:100%;max-width:100%;box-sizing:border-box}
-.motion-overlay span{display:block;width:100%;max-width:100%;box-sizing:border-box;padding:.08em .12em;white-space:normal;overflow-wrap:anywhere}
+/* Keep the overlay sized to its text so left/center/right anchors match export. */
+.motion-overlay{width:max-content;max-width:90%;box-sizing:border-box}
+.motion-overlay span{display:block;width:max-content;max-width:100%;box-sizing:border-box;padding:.08em .12em;white-space:pre-wrap;overflow-wrap:anywhere}
 .motion-overlay.motion-selected span{outline:none;outline-offset:0;border-radius:0}
 .motion-overlay span:after{display:none}
 @media(max-width:900px){
