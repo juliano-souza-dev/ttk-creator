@@ -46,6 +46,7 @@ pub fn run() {
             commands::open_project,
             commands::create_project,
             commands::list_project_assets,
+            commands::get_project_asset_path,
             commands::import_media_files,
             commands::inspect_youtube,
             commands::download_youtube

@@ -22,6 +22,9 @@ export const desktopApi = {
   listProjectAssets: (projectId: string) =>
     invoke<MediaAsset[]>("list_project_assets", { projectId }),
 
+  getAssetPath: (projectId: string, assetId: string) =>
+    invoke<string>("get_project_asset_path", { projectId, assetId }),
+
   importMediaFiles: (projectId: string, paths: string[]) =>
     invoke<MediaAsset[]>("import_media_files", { projectId, paths }),
 
