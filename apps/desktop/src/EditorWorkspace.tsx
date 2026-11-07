@@ -16,7 +16,7 @@ type TimelineClip = {
 };
 type Props = { projectId: string; assets: MediaAsset[]; onAddMedia: () => void };
 type TrimDrag = { clipId: string; edge: "start" | "end"; startX: number; sourceStartMs: number; sourceEndMs: number; timelineStartMs: number };
-type MotionGraphic = { id: string; text: string; startMs: number; durationMs: number; preset: "pop" | "slide" | "zoom" | "typewriter" | "impact"; color: string; accent: string; fontSize: number; x: number; y: number; sound: "pop" | "whoosh" | "impact" | "click" | "none" };
+type MotionGraphic = { id: string; text: string; startMs: number; endMs: number; durationMs: number; preset: "pop" | "slide" | "zoom" | "typewriter" | "impact"; color: string; accent: string; fontSize: number; x: number; y: number; sound: "pop" | "whoosh" | "impact" | "click" | "none" };
 const motionPresets = [{id:"pop",label:"Pop Impact",sound:"pop"},{id:"slide",label:"Slide + Whoosh",sound:"whoosh"},{id:"zoom",label:"Zoom + Impact",sound:"impact"},{id:"typewriter",label:"Typewriter",sound:"click"},{id:"impact",label:"Big Impact",sound:"impact"}] as const;
 const defaultDuration = (asset: MediaAsset) => asset.durationMs && asset.durationMs > 0 ? asset.durationMs : asset.kind === "image" ? 5000 : 30000;
 const clipDuration = (clip: TimelineClip) => Math.max(0, clip.sourceEndMs - clip.sourceStartMs);
@@ -83,7 +83,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
     if (loadedStorageKey === storageKey) window.localStorage.setItem(storageKey, JSON.stringify(clips));
   }, [storageKey, clips, loadedStorageKey]);
   useEffect(() => {
-    try { const raw = window.localStorage.getItem(motionKey); const value = raw ? JSON.parse(raw) : []; setMotion(Array.isArray(value) ? value.map((item: MotionGraphic) => ({ ...item, x: Number.isFinite(item.x) ? item.x : 50, y: Number.isFinite(item.y) ? item.y : 50 })) : []); }
+    try { const raw = window.localStorage.getItem(motionKey); const value = raw ? JSON.parse(raw) : []; setMotion(Array.isArray(value) ? value.map((item: MotionGraphic) => { const startMs = Math.max(0, Number(item.startMs) || 0); const legacyDuration = Math.max(300, Number(item.durationMs) || 1800); const endMs = Number.isFinite(item.endMs) ? Math.max(startMs + 300, Number(item.endMs)) : startMs + legacyDuration; return { ...item, startMs, endMs, durationMs: endMs - startMs, x: Number.isFinite(item.x) ? item.x : 50, y: Number.isFinite(item.y) ? item.y : 50 }; }) : []); }
     catch { setMotion([]); }
   }, [motionKey]);
   useEffect(() => { window.localStorage.setItem(motionKey, JSON.stringify(motion)); }, [motionKey, motion]);
@@ -103,9 +103,9 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
     return () => { cancelled = true; };
   }, [assets, projectId, mediaUrls]);
 
-  const totalDuration = Math.max(clips.reduce((max, clip) => Math.max(max, clipEnd(clip)), 0), motion.reduce((max, item) => Math.max(max, item.startMs + item.durationMs), 0));
+  const totalDuration = Math.max(clips.reduce((max, clip) => Math.max(max, clipEnd(clip)), 0), motion.reduce((max, item) => Math.max(max, item.endMs), 0));
   const selectedMotion = motion.find(item => item.id === selectedMotionId) ?? null;
-  const activeMotion = motion.filter(item => playheadMs >= item.startMs && playheadMs < item.startMs + item.durationMs);
+  const activeMotion = motion.filter(item => playheadMs >= item.startMs && playheadMs < item.endMs);
   const selectedClip = clips.find(clip => clip.id === selectedId) ?? clips[0] ?? null;
   const selectedAsset = selectedClip ? assets.find(asset => asset.id === selectedClip.assetId) ?? null : null;
   const visualClips = useMemo(() => clips.filter(clip => assets.find(asset => asset.id === clip.assetId)?.kind !== "audio"), [clips, assets]);
@@ -196,10 +196,10 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
 
   function addMotion(preset: MotionGraphic["preset"]) {
     const definition = motionPresets.find(item => item.id === preset)!;
-    const item: MotionGraphic = { id: crypto.randomUUID(), text: preset === "typewriter" ? "YOUR WORD" : "WATCH", startMs: playheadMs, durationMs: 1800, preset, color: "#ffffff", accent: "#c4a5ff", fontSize: 64, x: 50, y: 50, sound: definition.sound };
+    const item: MotionGraphic = { id: crypto.randomUUID(), text: preset === "typewriter" ? "YOUR WORD" : "WATCH", startMs: playheadMs, endMs: playheadMs + 1800, durationMs: 1800, preset, color: "#ffffff", accent: "#c4a5ff", fontSize: 64, x: 50, y: 50, sound: definition.sound };
     setMotion(current => [...current, item]); setSelectedMotionId(item.id); stopPlayback();
   }
-  function updateMotion(id: string, patch: Partial<MotionGraphic>) { setMotion(current => current.map(item => item.id === id ? { ...item, ...patch } : item)); }
+  function updateMotion(id: string, patch: Partial<MotionGraphic>) { setMotion(current => current.map(item => { if (item.id !== id) return item; const nextStart = patch.startMs !== undefined ? Math.max(0, patch.startMs) : item.startMs; let nextEnd = patch.endMs !== undefined ? patch.endMs : item.endMs; if (patch.durationMs !== undefined && patch.endMs === undefined) nextEnd = nextStart + Math.max(300, patch.durationMs); nextEnd = Math.max(nextStart + 300, nextEnd); return { ...item, ...patch, startMs: nextStart, endMs: nextEnd, durationMs: nextEnd - nextStart }; })); }
   function removeMotion(id: string) { setMotion(current => current.filter(item => item.id !== id)); if (selectedMotionId === id) setSelectedMotionId(null); }
   useEffect(() => {
     if (!playing) return;
@@ -391,7 +391,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
         <div className="editor-panel-head"><div><b>Propriedades do texto</b><small>Motion Graphics selecionado</small></div></div>
         <div className="properties-scroll">
           <details open className="property-section"><summary>Texto</summary><label>Texto<input value={selectedMotion.text} onChange={event => updateMotion(selectedMotion.id, { text: event.target.value })} maxLength={32}/></label></details>
-          <details open className="property-section"><summary>Tempo</summary><div className="motion-fields two"><label>Início (s)<input type="number" min="0" step="0.1" value={(selectedMotion.startMs / 1000).toFixed(1)} onChange={event => updateMotion(selectedMotion.id, { startMs: Math.max(0, Number(event.target.value) * 1000) })}/></label><label>Duração (s)<input type="number" min="0.3" step="0.1" value={(selectedMotion.durationMs / 1000).toFixed(1)} onChange={event => updateMotion(selectedMotion.id, { durationMs: Math.max(300, Number(event.target.value) * 1000) })}/></label></div></details>
+          <details open className="property-section"><summary>Tempo</summary><div className="motion-fields two"><label>Início (s)<input type="number" min="0" step="0.1" value={(selectedMotion.startMs / 1000).toFixed(1)} onChange={event => updateMotion(selectedMotion.id, { startMs: Math.max(0, Number(event.target.value) * 1000) })}/></label><label>Saída (s)<input type="number" min={(selectedMotion.startMs / 1000 + 0.3).toFixed(1)} step="0.1" value={(selectedMotion.endMs / 1000).toFixed(1)} onChange={event => updateMotion(selectedMotion.id, { endMs: Math.max(selectedMotion.startMs + 300, Number(event.target.value) * 1000) })}/></label><label>Duração calculada (s)<input type="number" value={(selectedMotion.durationMs / 1000).toFixed(1)} readOnly title="Calculada automaticamente pelo início e pelo horário de saída"/></label></div></details>
           <details open className="property-section"><summary>Estilo</summary><label>Tamanho<input type="number" min="18" max="140" value={selectedMotion.fontSize} onChange={event => updateMotion(selectedMotion.id, { fontSize: Math.max(18, Math.min(140, Number(event.target.value))) })}/></label><label>Animação<select value={selectedMotion.preset} onChange={event => updateMotion(selectedMotion.id, { preset: event.target.value as MotionGraphic["preset"] })}>{motionPresets.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}</select></label><label>Efeito sonoro<select value={selectedMotion.sound} onChange={event => updateMotion(selectedMotion.id, { sound: event.target.value as MotionGraphic["sound"] })}><option value="pop">Pop</option><option value="whoosh">Whoosh</option><option value="impact">Impacto</option><option value="click">Click</option><option value="none">Sem som</option></select></label><div className="motion-colors"><label>Texto<input type="color" value={selectedMotion.color} onChange={event => updateMotion(selectedMotion.id, { color: event.target.value })}/></label><label>Destaque<input type="color" value={selectedMotion.accent} onChange={event => updateMotion(selectedMotion.id, { accent: event.target.value })}/></label></div></details>
           <details open className="property-section"><summary>Posição</summary><div className="motion-position-controls"><label>Horizontal <strong>{Math.round(selectedMotion.x)}%</strong><input type="range" min="0" max="100" value={selectedMotion.x} onChange={event => updateMotion(selectedMotion.id, { x: Number(event.target.value) })}/></label><label>Vertical <strong>{Math.round(selectedMotion.y)}%</strong><input type="range" min="0" max="100" value={selectedMotion.y} onChange={event => updateMotion(selectedMotion.id, { y: Number(event.target.value) })}/></label><button className="secondary-action" onClick={() => updateMotion(selectedMotion.id, { x: 50, y: 50 })}>Centralizar</button></div></details>
           <button className="danger-action property-delete" onClick={() => removeMotion(selectedMotion.id)}>Excluir elemento</button>
@@ -431,7 +431,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
           {!audioClips.length&&<span className="track-hint">Arraste um áudio para cá. Ele tocará junto com o vídeo</span>}<div className="timeline-cursor" style={{left:playheadMs/scale*100+"%"}}/>
         </div></div>
         <div className="motion-track-row timeline-motion-row"><div className="track-label">TEXTO</div><div className="track-clips timeline-canvas motion-timeline" style={{width:timelineZoom+"%"}} onDragOver={event=>event.preventDefault()} onDrop={event=>{event.preventDefault();const id=event.dataTransfer.getData("text/motion-graphic-id");if(!id)return;const rect=event.currentTarget.getBoundingClientRect();updateMotion(id,{startMs:Math.max(0,(event.clientX-rect.left)/rect.width*scale)});}}>
-          {motion.map(item=><button key={item.id} draggable onDragStart={event=>{event.dataTransfer.setData("text/motion-graphic-id",item.id);event.dataTransfer.effectAllowed="move";}} className={"motion-timeline-clip"+(selectedMotionId===item.id?" selected":"")} style={{left:item.startMs/scale*100+"%",width:Math.max(3,item.durationMs/scale*100)+"%"}} onClick={()=>{setSelectedMotionId(item.id);setSelectedId(null);seekTo(item.startMs);}}><b>{item.text}</b><small>{item.preset}</small></button>)}
+          {motion.map(item=><button key={item.id} draggable onDragStart={event=>{event.dataTransfer.setData("text/motion-graphic-id",item.id);event.dataTransfer.effectAllowed="move";}} className={"motion-timeline-clip"+(selectedMotionId===item.id?" selected":"")} style={{left:item.startMs/scale*100+"%",width:Math.max(3,(item.endMs-item.startMs)/scale*100)+"%"}} onClick={()=>{setSelectedMotionId(item.id);setSelectedId(null);seekTo(item.startMs);}}><b>{item.text}</b><small>{item.preset}</small></button>)}
           <div className="timeline-cursor" style={{left:playheadMs/scale*100+"%"}}/>
         </div></div>
       </div>
