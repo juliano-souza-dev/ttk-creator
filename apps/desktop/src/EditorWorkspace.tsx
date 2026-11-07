@@ -148,7 +148,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
   const previewAsset = activeVisualClip ? activeVisualAsset : selectedAsset;
   const previewUrl = previewAsset ? mediaUrls[previewAsset.id] : "";
   const selectedDuration = selectedClip ? clipDuration(selectedClip) : 0;
-  const selectedSourceDuration = selectedAsset ? defaultDuration(selectedAsset) : 0;
+  const selectedSourceDuration = selectedAsset ? Math.max(defaultDuration(selectedAsset), selectedClip?.sourceEndMs ?? 0) : 0;
   const scale = Math.max(totalDuration, 10000);
 
   const stopPlayback = useCallback(() => {
@@ -431,11 +431,6 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
       const asset = assets.find(item => item.id === assetId);
       if (asset) addToTimeline(asset, atMs);
     }
-  }
-
-  function handleClipDragStart(event: DragEvent<HTMLDivElement>, clip: TimelineClip) {
-    event.dataTransfer.setData("text/timeline-clip-id", clip.id);
-    event.dataTransfer.effectAllowed = "move";
   }
 
   const percentLeft = (clip: TimelineClip) => (clip.timelineStartMs / scale) * 100;
