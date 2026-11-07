@@ -312,7 +312,12 @@ pub async fn export_timeline(
                     let step_start = start + duration * (step as f64 / characters.len() as f64);
                     let step_end = if step + 1 == characters.len() { end } else { start + duration * ((step + 1) as f64 / characters.len() as f64) };
                     let next = format!("typewriter{index}_{step}");
-                    filter_parts.push(format!("[{current}]drawtext=fontfile='{font_file}':text='{text}':fontcolor={color}:fontsize={}:x='{base_x}':y='{anchor_y}-text_h/2':enable='between(t,{step_start:.6},{step_end:.6})'[{next}]", item.font_size.clamp(18, 180)));
+                    let enable = if step + 1 == characters.len() {
+                        format!("gte(t,{step_start:.6})*lte(t,{step_end:.6})")
+                    } else {
+                        format!("gte(t,{step_start:.6})*lt(t,{step_end:.6})")
+                    };
+                    filter_parts.push(format!("[{current}]drawtext=fontfile='{font_file}':text='{text}':fontcolor={color}:fontsize={}:x='{base_x}':y='{anchor_y}-text_h/2':enable='{enable}'[{next}]", item.font_size.clamp(18, 180)));
                     current = next;
                 }
                 previous = current;
