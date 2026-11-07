@@ -3,7 +3,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { desktopApi, isDesktopRuntime } from "./services/desktop-api";
 import EditorWorkspace from "./EditorWorkspace";
 import type { DownloadProgress, MediaAsset, Project, YoutubeInspection } from "./shared/types";
-import { Clapperboard, LayoutGrid, Film, GraduationCap, Settings2, Plus, Search, FolderOpen, FolderPlus, Clock3, Video, Sparkles, Play, X, ArrowUpRight, Upload, Youtube, CheckCircle2, LoaderCircle, Link2, Download, Undo2, Redo2 } from "lucide-react"
+import { Clapperboard, LayoutGrid, Film, GraduationCap, Settings2, Plus, Search, FolderOpen, FolderPlus, Clock3, Video, Sparkles, Play, X, ArrowUpRight, Upload, Youtube, CheckCircle2, LoaderCircle, Link2, Download, Undo2, Redo2, ArrowLeft } from "lucide-react"
 
 const formatDuration = (n?:number|null) => !n ? "Duração não informada" : Math.floor(n/60000)+":"+String(Math.floor(n/1000)%60).padStart(2,"0");
 
@@ -133,7 +133,7 @@ export default function App() {
       <div className="profile"><div className="avatar">J</div><div><b>Seu estúdio</b><small>Ambiente local</small></div><Settings2 size={17}/></div>
     </aside>
     <section className="main">
-      <header className="topbar"><div>Workspace <span>/</span> <b>{view==="project"&&activeProject?activeProject.name:"Visão geral"}</b></div><div className="top-right"><small><i/> Salvamento automático ativo</small>{view==="project"&&<><button className="secondary-action" disabled title="Histórico de desfazer ainda não disponível"><Undo2 size={15}/> Desfazer</button><button className="secondary-action" disabled title="Histórico de refazer ainda não disponível"><Redo2 size={15}/> Refazer</button></>}</div></header>
+      <header className="topbar"><div className="topbar-location">{view==="project"&&<button className="secondary-action back-to-projects" onClick={returnToWorkspace} title="Voltar para a página de projetos"><ArrowLeft size={15}/> Projetos</button>}<span>Workspace</span> <span>/</span> <b>{view==="project"&&activeProject?activeProject.name:"Visão geral"}</b></div><div className="top-right"><small><i/> Salvamento automático ativo</small>{view==="project"&&<><button className="secondary-action" disabled title="Histórico de desfazer ainda não disponível"><Undo2 size={15}/> Desfazer</button><button className="secondary-action" disabled title="Histórico de refazer ainda não disponível"><Redo2 size={15}/> Refazer</button></>}</div></header>
       <div className={"content " + (view === "project" ? "project-content" : "")}>
         {view==="workspace" ? <>
         <section className="hero"><div><label className="eyebrow"><Sparkles size={13}/> SEU PRÓXIMO VÍDEO COMEÇA AQUI</label><h1>Boas ideias merecem<br/><em>uma boa edição.</em></h1><p>Seu espaço para transformar ideias em vídeos que prendem a atenção.</p></div><div className="hero-visual"><div className="preview-art"><div className="rec">REC <i/></div><div className="play"><Play size={22} fill="currentColor"/></div><strong>IDEIA <span>EM MOVIMENTO.</span></strong><div className="scrub">00:18 <div><i/><i/><i/><i/><i/></div> 00:55</div></div><div className="float-tag"><Sparkles size={13}/> MAKE IT MATTER</div></div></section>
