@@ -138,8 +138,6 @@ pub struct ExportMotion {
 
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-#[derive(serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct ExportSoundEffect {
     sound_id: String,
     timeline_start_ms: u64,
