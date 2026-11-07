@@ -343,7 +343,6 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
   }
 
   function addMotion(preset: MotionGraphic["preset"]) {
-    const definition = motionPresets.find(item => item.id === preset)!;
     const item: MotionGraphic = { id: crypto.randomUUID(), text: preset === "typewriter" ? "YOUR WORD" : "WATCH", icon: "", fontFamily: "Arial", fontWeight: 900, textAlign: "center", startMs: playheadMs, endMs: playheadMs + 3000, durationMs: 3000, preset, color: "#ffffff", accent: "#65d6c0", fontSize: 64, x: 50, y: 50, sound: "none", soundId: "", soundVolume: 80 };
     setMotion(current => [...current, item]); setSelectedMotionId(item.id); stopPlayback();
   }
@@ -515,14 +514,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
   function togglePlayback() {
     if (playing) { stopPlayback(); return; }
     if (!clips.length) return;
-    // Initialize/resume Web Audio directly from the user gesture so browser autoplay policies allow SFX.
-    try {
-      if (!motionAudioContext.current) {
-        const Ctx = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-        if (Ctx) motionAudioContext.current = new Ctx();
-      }
-      if (motionAudioContext.current?.state === "suspended") void motionAudioContext.current.resume();
-    } catch { /* Motion sound is optional when Web Audio is unavailable. */ }
+    lastMotionSounds.current = {};
     if (playheadMs >= totalDuration) setPlayheadMs(0);
     setPlaying(true);
   }
