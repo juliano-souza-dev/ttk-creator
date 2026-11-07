@@ -132,6 +132,8 @@ pub struct ExportMotion {
     font_family: String,
     #[serde(default)]
     font_weight: u32,
+    #[serde(default)]
+    text_align: String,
 }
 
 #[derive(serde::Deserialize)]
@@ -259,10 +261,11 @@ pub async fn export_timeline(
             };
             let font_suffix = if item.font_weight >= 700 { bold_suffix } else { "" };
             let font_file = format!("C\\:/Windows/Fonts/{font_name}{font_suffix}.ttf");
-            let x = (item.x.clamp(0.0, 100.0) / 100.0) * 1080.0;
+            let anchor_x = (item.x.clamp(0.0, 100.0) / 100.0) * 1080.0;
+            let x = match item.text_align.as_str() { "left" => format!("{anchor_x}"), "right" => format!("{anchor_x}-text_w"), _ => format!("{anchor_x}-text_w/2") };
             let y = (item.y.clamp(0.0, 100.0) / 100.0) * 1920.0;
             let next = format!("text{index}");
-            filter_parts.push(format!("[{previous}]drawtext=fontfile='{font_file}':text='{text}':fontcolor={color}:fontsize={}:x='{}-text_w/2':y='{}-text_h/2':enable='between(t,{:.3},{:.3})'[{next}]", item.font_size.clamp(18, 180), x, y, item.start_ms as f64 / 1000.0, item.end_ms as f64 / 1000.0));
+            filter_parts.push(format!("[{previous}]drawtext=fontfile='{font_file}':text='{text}':fontcolor={color}:fontsize={}:x='{x}':y='{}-text_h/2':enable='between(t,{:.3},{:.3})'[{next}]", item.font_size.clamp(18, 180), y, item.start_ms as f64 / 1000.0, item.end_ms as f64 / 1000.0));
             previous = next;
         }
         filter_parts.push(format!("[{previous}]format=yuv420p[vout]"));
