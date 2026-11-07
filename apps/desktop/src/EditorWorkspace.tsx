@@ -735,7 +735,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
         <div className="timeline-toolbar-actions">
           <button className="secondary-action" onClick={createGroup} disabled={selectedMembers.length < 2}><Copy size={13}/> Agrupar ({selectedMembers.length})</button>
           <button className="secondary-action" onClick={ungroupSelection} disabled={!groups.some(group => group.members.some(member => selectedMembers.includes(member)))}>Desagrupar</button>
-          <button className="secondary-action" onClick={splitAtPlayhead disabled={!activeVisualClip || playheadMs <= activeVisualClip.timelineStartMs + 250 || playheadMs >= clipEnd(activeVisualClip) - 250}><Scissors size={13}/> Dividir no cursor</button>
+          <button className="secondary-action" onClick={splitAtPlayhead} disabled={!activeVisualClip || playheadMs <= activeVisualClip.timelineStartMs + 250 || playheadMs >= clipEnd(activeVisualClip) - 250}><Scissors size={13}/> Dividir no cursor</button>
           <button className="secondary-action" onClick={() => selectedClip && duplicateClip(selectedClip)} disabled={!selectedClip}><Copy size={13}/> Duplicar</button>
           <button className="secondary-action danger-action" onClick={() => selectedClip && removeClip(selectedClip.id)} disabled={!selectedClip}><Trash2 size={13}/> Excluir selecionado</button>
           <button className="secondary-action" onClick={() => { stopPlayback(); setClips([]); setSelectedId(null); setPlayheadMs(0); }} disabled={!clips.length}><Trash2 size={13}/> Limpar timeline</button>
