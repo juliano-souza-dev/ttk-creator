@@ -175,7 +175,7 @@ pub async fn export_timeline(
     let storage = state.media_storage.clone();
 
     tauri::async_runtime::spawn_blocking(move || {
-        use std::{collections::HashMap, path::PathBuf, process::Command};
+        use std::{path::PathBuf, process::Command};
 
         if request.clips.is_empty() {
             return Err("Adicione pelo menos uma mídia à timeline antes de exportar.".to_string());
@@ -236,9 +236,9 @@ pub async fn export_timeline(
         let mut previous = "base0".to_string();
         for (position, (input_index, clip)) in visual_inputs.iter().enumerate() {
             let label = format!("visual{position}");
-            filter_parts.push(format!("[{input_index}:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,setsar=1,setpts=PTS-STARTPTS[{label}]"));
-            let next = format!("base{}", position + 1);
             let start = clip.timeline_start_ms as f64 / 1000.0;
+            filter_parts.push(format!("[{input_index}:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,setsar=1,setpts=PTS-STARTPTS+{start:.3}/TB[{label}]"));
+            let next = format!("base{}", position + 1);
             let end = (clip.timeline_start_ms + clip.source_end_ms - clip.source_start_ms) as f64 / 1000.0;
             filter_parts.push(format!("[{previous}][{label}]overlay=0:0:eof_action=pass:shortest=0:enable='between(t,{start:.3},{end:.3})'[{next}]"));
             previous = next;
@@ -259,7 +259,8 @@ pub async fn export_timeline(
         for (index, (input_index, clip)) in audio_inputs.iter().enumerate() {
             let label = format!("audio{index}");
             let delay = clip.timeline_start_ms;
-            filter_parts.push(format!("[{input_index}:a]asetpts=PTS-STARTPTS,volume={:.3},adelay={delay}|{delay}[{label}]", clip.volume.clamp(0.0, 100.0) / 100.0));
+            let volume = if clip.muted.unwrap_or(false) { 0.0 } else { clip.volume.clamp(0.0, 100.0) / 100.0 };
+            filter_parts.push(format!("[{input_index}:a]asetpts=PTS-STARTPTS,volume={volume:.3},adelay={delay}|{delay}[{label}]"));
             audio_labels.push(format!("[{label}]"));
         }
         if !audio_labels.is_empty() {
