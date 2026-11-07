@@ -174,7 +174,7 @@
 /* Motion Graphics studio and animated typography */
 .preview-stage{position:relative}
 .preview-media-frame{position:relative;width:min(236px,100%);height:min(420px,100%);aspect-ratio:9/16;flex:0 1 auto;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#09090b;border-radius:5px}
-.preview-media-frame>video,.preview-media-frame>img{display:block;width:100%;height:100%;max-width:100%;max-height:100%;object-fit:contain;border-radius:5px};will-change:transform,opacity;transform-origin:center center
+.preview-media-frame>video,.preview-media-frame>img{display:block;width:100%;height:100%;max-width:100%;max-height:100%;object-fit:cover;border-radius:5px};will-change:transform,opacity;transform-origin:center center
 .preview-media-frame>.preview-placeholder,.preview-media-frame>.audio-preview{position:relative;z-index:0}
 .motion-overlay{position:absolute;left:var(--motion-x,50%);top:var(--motion-y,50%);transform:translate(-50%,-50%);display:block;pointer-events:none;overflow:visible;z-index:5}
 .motion-overlay span{pointer-events:auto;cursor:grab;touch-action:none;user-select:none}
@@ -453,6 +453,11 @@
 .back-to-projects:hover{border-color:#8b7da5;background:#2a2632}
 
 .motion-overlay span.motion-main-text{font-family:var(--motion-font,Arial,sans-serif);font-weight:var(--motion-weight,900);text-transform:none;letter-spacing:normal;display:flex;align-items:center;justify-content:center;gap:.22em;width:100%;max-width:100%;text-align:inherit}
+/* WYSIWYG: the preview uses the export's 1080x1920 coordinate system.
+   Motion text is static in the current FFmpeg export, so do not preview CSS-only animations. */
+.motion-overlay span.motion-main-text{display:block;width:max-content;max-width:90%;padding:0;line-height:.95;letter-spacing:normal;text-transform:none;text-shadow:0 1px 3px #000,0 5px 24px #000b;animation:none!important}
+.motion-overlay span.motion-main-text:after{display:none!important}
+
 .motion-overlay .motion-inline-icon{display:inline-block;flex:none;font-style:normal;font-family:"Segoe UI Emoji","Apple Color Emoji",sans-serif;font-size:.82em;line-height:1}
 .property-hint{display:block;color:#918b9c;font-size:11px;line-height:1.4;margin-top:-5px}
 
