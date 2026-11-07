@@ -152,7 +152,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
   const previewAsset = activeVisualClip ? activeVisualAsset : selectedAsset;
   const previewUrl = previewAsset ? mediaUrls[previewAsset.id] : "";
   const selectedDuration = selectedClip ? clipDuration(selectedClip) : 0;
-  const selectedSourceDuration = selectedAsset ? Math.max(defaultDuration(selectedAsset), selectedClip?.sourceEndMs ?? 0) : 0;
+  const selectedSourceDuration = selectedAsset ? (selectedAsset.kind === "image" ? Math.max(10 * 60 * 1000, selectedClip?.sourceEndMs ?? 0) : Math.max(defaultDuration(selectedAsset), selectedClip?.sourceEndMs ?? 0)) : 0;
   const scale = Math.max(totalDuration, 10000);
 
   const stopPlayback = useCallback(() => {
