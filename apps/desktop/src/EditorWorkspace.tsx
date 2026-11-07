@@ -11,6 +11,7 @@ type TimelineClip = {
   assetId: string;
   sourceStartMs: number;
   sourceEndMs: number;
+  sourceDurationMs?: number;
   timelineStartMs: number;
   volume: number;
   muted?: boolean;
@@ -79,6 +80,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
           assetId: raw.assetId,
           sourceStartMs: isNew ? Number(raw.sourceStartMs) : oldStart,
           sourceEndMs: isNew ? Number(raw.sourceEndMs) : oldEnd,
+          sourceDurationMs: Number.isFinite(raw.sourceDurationMs) ? Math.max(0, Number(raw.sourceDurationMs)) : undefined,
           timelineStartMs: isNew ? Math.max(0, Number(raw.timelineStartMs)) : legacyCursor,
           volume: Number.isFinite(raw.volume) ? Math.max(0, Math.min(100, Number(raw.volume))) : 100,
           muted: raw.muted === true,
@@ -158,14 +160,14 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
   const previewAsset = activeVisualClip ? activeVisualAsset : selectedAsset;
   const previewUrl = previewAsset ? mediaUrls[previewAsset.id] : "";
   const selectedDuration = selectedClip ? clipDuration(selectedClip) : 0;
-  const selectedSourceDuration = selectedAsset ? (selectedAsset.kind === "image" ? Math.max(10 * 60 * 1000, selectedClip?.sourceEndMs ?? 0) : Math.max(mediaDurations[selectedAsset.id] ?? defaultDuration(selectedAsset), selectedClip?.sourceEndMs ?? 0)) : 0;
+  const selectedSourceDuration = selectedAsset ? (selectedAsset.kind === "image" ? Math.max(10 * 60 * 1000, selectedClip?.sourceEndMs ?? 0) : Math.max(selectedClip?.sourceDurationMs ?? mediaDurations[selectedAsset.id] ?? defaultDuration(selectedAsset), selectedClip?.sourceEndMs ?? 0)) : 0;
   // Keep the timeline's time-to-pixel scale anchored to the full source duration.
   // If scale followed the trimmed clip end, a 60s clip would visually expand to fill
   // the canvas as soon as it was shortened, making the trim handle impossible to
   // drag back out past the new end.
   const sourceTimelineDuration = clips.reduce((max, clip) => {
     const asset = assets.find(item => item.id === clip.assetId);
-    return Math.max(max, asset ? (mediaDurations[asset.id] ?? defaultDuration(asset)) : clip.sourceEndMs);
+    return Math.max(max, asset ? (clip.sourceDurationMs ?? mediaDurations[asset.id] ?? defaultDuration(asset)) : clip.sourceEndMs);
   }, 0);
   const scale = Math.max(totalDuration, sourceTimelineDuration, 10000);
 
@@ -346,7 +348,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
       const shift = sourceStartMs - drag.sourceStartMs;
       updateClip(drag.clipId, { sourceStartMs, timelineStartMs: Math.max(0, drag.timelineStartMs + shift) });
     } else {
-      const maxSourceEndMs = asset.kind === "image" ? 10 * 60 * 1000 : (mediaDurations[asset.id] ?? defaultDuration(asset));
+      const maxSourceEndMs = asset.kind === "image" ? 10 * 60 * 1000 : (clip.sourceDurationMs ?? mediaDurations[asset.id] ?? defaultDuration(asset));
       const sourceEndMs = Math.max(drag.sourceStartMs + 250, Math.min(maxSourceEndMs, drag.sourceEndMs + deltaMs));
       updateClip(drag.clipId, { sourceEndMs });
     }
@@ -608,7 +610,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
           <div className="timeline-cursor" style={{left:playheadMs/scale*100+"%"}}/>
         </div></div>
       </div>
-      {audioClips.map(clip=>{const asset=assets.find(item=>item.id===clip.assetId);const url=mediaUrls[clip.assetId];return asset&&url?<audio key={clip.id} ref={node=>{audioRefs.current[clip.id]=node;}} src={url} preload="metadata" onLoadedMetadata={event=>{const durationMs=event.currentTarget.duration*1000;if(!Number.isFinite(durationMs)||durationMs<=0)return;const measuredDurationMs=Math.round(durationMs);setMediaDurations(current=>({...current,[asset.id]:measuredDurationMs}));setClips(current=>current.map(item=>item.id===clip.id&&(item.sourceEndMs===30000||item.sourceEndMs>durationMs)?{...item,sourceEndMs:measuredDurationMs}:item));}}/>:null;})}
+      {audioClips.map(clip=>{const asset=assets.find(item=>item.id===clip.assetId);const url=mediaUrls[clip.assetId];return asset&&url?<audio key={clip.id} ref={node=>{audioRefs.current[clip.id]=node;}} src={url} preload="metadata" onLoadedMetadata={event=>{const durationMs=event.currentTarget.duration*1000;if(!Number.isFinite(durationMs)||durationMs<=0)return;const measuredDurationMs=Math.round(durationMs);setMediaDurations(current=>({...current,[asset.id]:measuredDurationMs}));setClips(current=>current.map(item=>{if(item.assetId!==asset.id)return item;const shouldExpandDefault=item.sourceDurationMs==null&&item.sourceEndMs===30000;const shouldClamp=item.sourceEndMs>durationMs;return {...item,sourceDurationMs:measuredDurationMs,sourceEndMs:shouldExpandDefault||shouldClamp?measuredDurationMs:item.sourceEndMs};}));}}/>:null;})}
     </section>
   </section>;
 }
