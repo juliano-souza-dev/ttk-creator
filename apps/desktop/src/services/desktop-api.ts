@@ -34,6 +34,11 @@ export const desktopApi = {
   downloadYoutube: (projectId: string, url: string, maxHeight: number) =>
     invoke<MediaAsset>("download_youtube", { projectId, url, maxHeight }),
 
+  checkFfmpeg: () => invoke<string>("check_ffmpeg"),
+
+  exportTimeline: (request: { projectId: string; destination: string; clips: Array<{ id: string; assetId: string; kind: "video" | "audio" | "image"; sourceStartMs: number; sourceEndMs: number; timelineStartMs: number; volume: number; muted?: boolean }>; motion: Array<{ text: string; startMs: number; endMs: number; color: string; fontSize: number; x: number; y: number }> }) =>
+    invoke<string>("export_timeline", { request }),
+
   subscribeToYoutubeProgress: (
     onProgress: (progress: DownloadProgress) => void,
   ) =>
