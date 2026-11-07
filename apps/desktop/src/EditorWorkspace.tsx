@@ -61,12 +61,26 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
   const [playheadMs, setPlayheadMs] = useState(0);
   const [previewTick, setPreviewTick] = useState(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const previewFrameRef = useRef<HTMLDivElement | null>(null);
+  const [previewScale, setPreviewScale] = useState(420 / 1920);
   const audioRefs = useRef<Record<string, HTMLAudioElement | null>>({});
   const motionSoundPlayers = useRef<Record<string, HTMLAudioElement>>({});
   const lastTickRef = useRef(0);
   const trimDragRef = useRef<TrimDrag | null>(null);
   const clipMoveDragRef = useRef<ClipMoveDrag | null>(null);
   const motionTrimDragRef = useRef<MotionTrimDrag | null>(null);
+
+  // The editor preview is a scaled 1080x1920 render canvas. Font sizes therefore
+  // use the exact same pixel values as FFmpeg, scaled only for the editor viewport.
+  useEffect(() => {
+    const node = previewFrameRef.current;
+    if (!node) return;
+    const updateScale = () => setPreviewScale(node.clientHeight / 1920);
+    updateScale();
+    const observer = new ResizeObserver(updateScale);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     try {
@@ -579,14 +593,14 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
       </>}
     </aside>
     <section className="editor-center">
-      <div className="preview-stage"><div className="preview-media-frame">
+      <div className="preview-stage"><div className="preview-media-frame" ref={previewFrameRef}>
         {!previewAsset ? <div className="preview-placeholder"><Play size={27}/><span>Seu vídeo aparecerá aqui</span><small>Adicione uma mídia à timeline para visualizar</small></div> :
           !previewUrl ? <div className="preview-placeholder"><span>Não foi possível carregar esta mídia.</span><small>{loadError || "Verifique se o arquivo continua na pasta do projeto."}</small></div> :
           previewAsset.kind === "video" ? <video key={previewAsset.id} ref={videoRef} src={previewUrl} muted={!!previewClip?.muted} controls={!playing} style={{ opacity: previewOpacity, transition: "opacity 40ms linear" }} onError={() => setLoadError("Formato não suportado pelo preview do sistema.")}/> :
           previewAsset.kind === "audio" ? <div className="audio-preview"><AudioLines size={48}/><b>{previewAsset.name}</b><span>Áudio na timeline</span></div> :
           <img src={previewUrl} alt={previewAsset.name} style={{ opacity: previewOpacity, transform: cameraTransform, transition: "opacity 40ms linear" }}/>}
-        {activeMotion.map(item => <div key={item.id} className={"motion-overlay motion-" + item.preset + (selectedMotionId === item.id ? " motion-selected" : "")} style={{ "--motion-color": item.color, "--motion-accent": item.accent, "--motion-size": item.fontSize + "px", "--motion-delay": "-" + Math.min(650, playheadMs - item.startMs) + "ms", "--motion-x": item.x + "%", "--motion-y": item.y + "%" } as CSSProperties}>
-          <span className="motion-main-text" style={{fontFamily:item.fontFamily || "Arial",fontWeight:item.fontWeight || 900,textAlign:item.textAlign || "center",justifyContent:item.textAlign === "left" ? "flex-start" : item.textAlign === "right" ? "flex-end" : "center"}} onPointerDown={event => { setSelectedId(null); setSelectedMotionId(item.id); event.preventDefault(); event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={event => { if (!event.currentTarget.hasPointerCapture(event.pointerId)) return; const rect = event.currentTarget.closest(".preview-media-frame")?.getBoundingClientRect(); if (!rect) return; updateMotion(item.id, { x: Math.max(0, Math.min(100, ((event.clientX - rect.left) / rect.width) * 100)), y: Math.max(0, Math.min(100, ((event.clientY - rect.top) / rect.height) * 100)) }); }} onPointerUp={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); }}>{item.icon && <i className="motion-inline-icon">{item.icon}</i>}{item.text}</span>
+        {activeMotion.map(item => <div key={item.id} className={"motion-overlay motion-" + item.preset + (selectedMotionId === item.id ? " motion-selected" : "")} style={{ "--motion-color": item.color, "--motion-accent": item.accent, "--motion-size": (item.fontSize * previewScale) + "px", "--motion-x": item.x + "%", "--motion-y": item.y + "%" , transform: item.textAlign === "left" ? "translate(0,-50%)" : item.textAlign === "right" ? "translate(-100%,-50%)" : "translate(-50%,-50%)" } as CSSProperties}>
+          <span className="motion-main-text" style={{fontFamily:item.fontFamily || "Arial",fontWeight:(item.fontWeight || 900) >= 700 ? 700 : 400,fontSize:item.fontSize * previewScale,textAlign:item.textAlign || "center"}} onPointerDown={event => { setSelectedId(null); setSelectedMotionId(item.id); event.preventDefault(); event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={event => { if (!event.currentTarget.hasPointerCapture(event.pointerId)) return; const rect = event.currentTarget.closest(".preview-media-frame")?.getBoundingClientRect(); if (!rect) return; updateMotion(item.id, { x: Math.max(0, Math.min(100, ((event.clientX - rect.left) / rect.width) * 100)), y: Math.max(0, Math.min(100, ((event.clientY - rect.top) / rect.height) * 100)) }); }} onPointerUp={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); }}>{(item.icon ? item.icon + " " : "") + item.text}</span>
         </div>)}
       </div></div>
       <div className="editor-transport">
