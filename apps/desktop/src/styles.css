@@ -477,3 +477,7 @@
 .sound-library-info small{margin-top:4px;font-size:8px;color:#777480}
 .sound-library-row .icon-action{width:29px;height:29px;flex:0 0 29px}
 .sound-library-row .icon-action.danger{color:#d78e91}
+
+/* Synchronized timeline groups */
+.timeline-clip.grouped,.motion-timeline-clip.grouped{border-style:dashed;border-width:2px}
+.timeline-clip.multi-selected,.motion-timeline-clip.multi-selected{outline:2px solid #f0c674;outline-offset:2px}
