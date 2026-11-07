@@ -361,3 +361,11 @@
 .clip-trim-edge.left{left:0;border-radius:5px 0 0 5px}
 .clip-trim-edge.right{right:0;border-radius:0 5px 5px 0}
 .editor-media-thumb video{width:100%;height:100%;object-fit:cover}
+
+
+.timeline-lanes .timeline-track,.timeline-lanes .motion-track-row{overflow:visible}
+.timeline-lanes .timeline-grid-ruler{height:28px;min-height:28px;display:grid;grid-template-columns:110px minmax(0,1fr);padding:0;border:0}
+.timeline-lanes .timeline-track-label-spacer{border-right:1px solid #302b37}
+.timeline-lanes .timeline-ruler-canvas{height:28px;position:relative;min-width:100%;border-bottom:1px solid #302b37}
+.timeline-lanes .timeline-ruler-canvas span{position:absolute;top:6px;transform:translateX(-50%);font:8px 'DM Mono';color:#827b8d}
+.timeline-lanes .timeline-ruler-canvas span.major{color:#b7a8cc}
