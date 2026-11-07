@@ -33,6 +33,43 @@ const timeLabel = (ms: number) => {
   return String(Math.floor(total / 60)).padStart(2, "0") + ":" + String(total % 60).padStart(2, "0");
 };
 
+function motionPreviewState(item: MotionGraphic, playheadMs: number) {
+  const duration = Math.max(1, item.durationMs || item.endMs - item.startMs);
+  const progress = Math.max(0, Math.min(1, (playheadMs - item.startMs) / duration));
+  const eased = 1 - Math.pow(1 - progress, 3);
+  let transform = "none";
+  let opacity = 1;
+  let text = (item.icon ? item.icon + " " : "") + item.text;
+
+  switch (item.preset) {
+    case "typewriter": {
+      const characters = Array.from(text);
+      const visible = characters.length ? Math.max(1, Math.ceil(progress * characters.length)) : 0;
+      text = characters.slice(0, visible).join("");
+      break;
+    }
+    case "pop":
+      transform = `scale(${0.35 + 0.65 * eased})`;
+      break;
+    case "slide":
+      transform = `translateX(${(1 - eased) * 100}%)`;
+      break;
+    case "zoom":
+      transform = `scale(${2.4 - 1.4 * eased})`;
+      opacity = Math.min(1, progress * 4);
+      break;
+    case "impact": {
+      const scale = progress < 0.65
+        ? 3 - 2.12 * (progress / 0.65)
+        : 0.88 + 0.12 * ((progress - 0.65) / 0.35);
+      transform = `scale(${scale})`;
+      opacity = Math.min(1, progress * 4);
+      break;
+    }
+  }
+  return { text, transform, opacity };
+}
+
 export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props) {
   const storageKey = `ttk-creator:timeline:${projectId}`;
   const sessionKey = `ttk-creator:session:${projectId}`;
@@ -345,7 +382,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
         projectId,
         destination,
         clips: exportClips,
-        motion: motion.map(item => ({startMs:item.startMs,endMs:item.endMs,x:item.x,y:item.y,text:(item.icon ? item.icon + " " : "") + item.text,color:item.color,fontSize:item.fontSize,fontFamily:item.fontFamily || "Arial",fontWeight:item.fontWeight || 900,textAlign:item.textAlign || "center"})),
+        motion: motion.map(item => ({startMs:item.startMs,endMs:item.endMs,durationMs:item.durationMs,preset:item.preset,x:item.x,y:item.y,text:(item.icon ? item.icon + " " : "") + item.text,color:item.color,fontSize:item.fontSize,fontFamily:item.fontFamily || "Arial",fontWeight:item.fontWeight || 900,textAlign:item.textAlign || "center"})),
         soundEffects: motion.filter(item => !!item.soundId).map(item => ({ soundId: item.soundId!, timelineStartMs: item.startMs, volume: item.soundVolume ?? 80 })),
       });
       setExportMessage("Vídeo exportado: " + result);
@@ -599,9 +636,12 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
           previewAsset.kind === "video" ? <video key={previewAsset.id} ref={videoRef} src={previewUrl} muted={!!previewClip?.muted} controls={!playing} style={{ opacity: previewOpacity, transition: "opacity 40ms linear" }} onError={() => setLoadError("Formato não suportado pelo preview do sistema.")}/> :
           previewAsset.kind === "audio" ? <div className="audio-preview"><AudioLines size={48}/><b>{previewAsset.name}</b><span>Áudio na timeline</span></div> :
           <img src={previewUrl} alt={previewAsset.name} style={{ opacity: previewOpacity, transform: cameraTransform, transition: "opacity 40ms linear" }}/>}
-        {activeMotion.map(item => <div key={item.id} className={"motion-overlay motion-" + item.preset + (selectedMotionId === item.id ? " motion-selected" : "")} style={{ "--motion-color": item.color, "--motion-accent": item.accent, "--motion-size": (item.fontSize * previewScale) + "px", "--motion-x": item.x + "%", "--motion-y": item.y + "%" , transform: item.textAlign === "left" ? "translate(0,-50%)" : item.textAlign === "right" ? "translate(-100%,-50%)" : "translate(-50%,-50%)" } as CSSProperties}>
-          <span className="motion-main-text" style={{fontFamily:item.fontFamily || "Arial",fontWeight:(item.fontWeight || 900) >= 700 ? 700 : 400,fontSize:item.fontSize * previewScale,textAlign:item.textAlign || "center"}} onPointerDown={event => { setSelectedId(null); setSelectedMotionId(item.id); event.preventDefault(); event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={event => { if (!event.currentTarget.hasPointerCapture(event.pointerId)) return; const rect = event.currentTarget.closest(".preview-media-frame")?.getBoundingClientRect(); if (!rect) return; updateMotion(item.id, { x: Math.max(0, Math.min(100, ((event.clientX - rect.left) / rect.width) * 100)), y: Math.max(0, Math.min(100, ((event.clientY - rect.top) / rect.height) * 100)) }); }} onPointerUp={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); }}>{(item.icon ? item.icon + " " : "") + item.text}</span>
-        </div>)}
+        {activeMotion.map(item => {
+          const animation = motionPreviewState(item, playheadMs);
+          return <div key={item.id} className={"motion-overlay motion-" + item.preset + (selectedMotionId === item.id ? " motion-selected" : "")} style={{ "--motion-color": item.color, "--motion-accent": item.accent, "--motion-size": (item.fontSize * previewScale) + "px", "--motion-x": item.x + "%", "--motion-y": item.y + "%" , transform: item.textAlign === "left" ? "translate(0,-50%)" : item.textAlign === "right" ? "translate(-100%,-50%)" : "translate(-50%,-50%)" } as CSSProperties}>
+            <span className="motion-main-text" style={{fontFamily:item.fontFamily || "Arial",fontWeight:(item.fontWeight || 900) >= 700 ? 700 : 400,fontSize:item.fontSize * previewScale,textAlign:item.textAlign || "center",transform:animation.transform,opacity:animation.opacity,willChange:"transform,opacity"}} onPointerDown={event => { setSelectedId(null); setSelectedMotionId(item.id); event.preventDefault(); event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={event => { if (!event.currentTarget.hasPointerCapture(event.pointerId)) return; const rect = event.currentTarget.closest(".preview-media-frame")?.getBoundingClientRect(); if (!rect) return; updateMotion(item.id, { x: Math.max(0, Math.min(100, ((event.clientX - rect.left) / rect.width) * 100)), y: Math.max(0, Math.min(100, ((event.clientY - rect.top) / rect.height) * 100)) }); }} onPointerUp={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); }}>{animation.text}</span>
+          </div>;
+        })}
       </div></div>
       <div className="editor-transport">
         <button className="transport-button" title="Voltar ao início" onClick={() => { stopPlayback(); seekTo(0); }}><SkipBack size={15}/></button>
