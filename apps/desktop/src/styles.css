@@ -427,3 +427,23 @@
 .composition-element-row>b{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}
 .composition-element-row>small{color:#93899f}
 .composition-element-row>i{font-style:normal;color:#e69b9b;font-size:18px;padding:0 4px}
+
+/* A composition occupies the full preview; each child is positioned independently. */
+.motion-overlay.motion-composition{inset:0;width:100%;height:100%;transform:none}
+.motion-overlay span.motion-composition{position:absolute;inset:0;display:block;width:100%;height:100%;min-width:0;max-width:none;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;backdrop-filter:none;overflow:visible}
+.motion-overlay span.motion-composition:after{display:none}
+.motion-overlay span.motion-free-element{position:absolute;display:block;width:auto;max-width:90%;min-width:8px;min-height:8px;padding:3px 6px;border:1px solid transparent;border-radius:4px;background:transparent;color:inherit;font:800 inherit/1.08 'Space Grotesk',sans-serif;letter-spacing:normal;text-align:center;text-transform:none;text-shadow:0 3px 16px #000b;white-space:pre-wrap;overflow-wrap:anywhere;pointer-events:auto;cursor:move;animation:motion-pop-in .55s cubic-bezier(.16,1.2,.35,1) both}
+.motion-overlay span.motion-free-element:after{display:none}
+.motion-overlay span.motion-free-element.selected{border:1px dashed #65d6c0;background:#14252b66}
+.motion-overlay span.motion-free-element.motion-element-icon{font-family:'DM Sans',sans-serif}
+.motion-free-shape{display:block;width:64px;height:44px;border:3px solid currentColor;background:color-mix(in srgb,currentColor 20%,transparent)}
+.motion-free-shape.circle{width:54px;height:54px;border-radius:50%}
+.motion-free-shape.line{width:90px;height:0;border:0;border-top:4px solid currentColor;background:none}
+.composition-add-tools{display:flex;gap:6px;flex-wrap:wrap;padding:10px 0}
+.composition-element-list{display:flex;flex-direction:column;gap:5px;margin:4px 0 12px}
+.composition-element-row{display:flex;align-items:center;gap:8px;width:100%;padding:8px 9px;border:1px solid #37313f;border-radius:7px;background:#1b1821;color:#eee;text-align:left;cursor:pointer}
+.composition-element-row.selected{border-color:#65d6c0;background:#1d2b2d}
+.composition-element-row>span{width:22px;height:22px;display:grid;place-items:center;border-radius:5px;background:#34303b;color:#65d6c0;font-weight:800}
+.composition-element-row>b{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}
+.composition-element-row>small{color:#93899f}
+.composition-element-row>i{font-style:normal;color:#e69b9b;font-size:18px;padding:0 4px}
