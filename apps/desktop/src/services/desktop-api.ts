@@ -10,7 +10,13 @@ import type {
 export const isDesktopRuntime =
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
+export type GlobalSound = { id: string; name: string; fileName: string };
+
 export const desktopApi = {
+  listGlobalSounds: () => invoke<GlobalSound[]>("list_global_sounds"),
+  importGlobalSound: (sourcePath: string, name: string) => invoke<GlobalSound>("import_global_sound", { sourcePath, name }),
+  getGlobalSoundPath: (soundId: string) => invoke<string>("get_global_sound_path", { soundId }),
+  deleteGlobalSound: (soundId: string) => invoke<void>("delete_global_sound", { soundId }),
   listProjects: () => invoke<Project[]>("list_projects"),
 
   openProject: (projectId: string) =>
@@ -36,7 +42,7 @@ export const desktopApi = {
 
   checkFfmpeg: () => invoke<string>("check_ffmpeg"),
 
-  exportTimeline: (request: { projectId: string; destination: string; clips: Array<{ id: string; assetId: string; kind: "video" | "audio" | "image"; sourceStartMs: number; sourceEndMs: number; timelineStartMs: number; volume: number; muted?: boolean }>; motion: Array<{ text: string; startMs: number; endMs: number; color: string; fontSize: number; x: number; y: number; fontFamily?: string; fontWeight?: number; textAlign?: "left" | "center" | "right" }> }) =>
+  exportTimeline: (request: { projectId: string; destination: string; clips: Array<{ id: string; assetId: string; kind: "video" | "audio" | "image"; sourceStartMs: number; sourceEndMs: number; timelineStartMs: number; volume: number; muted?: boolean }>; motion: Array<{ text: string; startMs: number; endMs: number; color: string; fontSize: number; x: number; y: number; fontFamily?: string; fontWeight?: number; textAlign?: "left" | "center" | "right"; soundId?: string; soundVolume?: number }>; soundEffects?: Array<{ soundId: string; timelineStartMs: number; volume: number }> }) =>
     invoke<string>("export_timeline", {
       request: {
         ...request,
@@ -48,6 +54,7 @@ export const desktopApi = {
           sourceEndMs: Math.max(0, Math.round(clip.sourceEndMs)),
           timelineStartMs: Math.max(0, Math.round(clip.timelineStartMs)),
         })),
+        soundEffects: (request.soundEffects ?? []).map((item) => ({ ...item, timelineStartMs: Math.max(0, Math.round(item.timelineStartMs)), volume: Math.max(0, Math.min(100, item.volume)) })),
         motion: request.motion.map((item) => ({
           ...item,
           startMs: Math.max(0, Math.round(item.startMs)),
