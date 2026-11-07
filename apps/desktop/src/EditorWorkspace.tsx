@@ -44,7 +44,7 @@ function motionPreviewState(item: MotionGraphic, playheadMs: number) {
   switch (item.preset) {
     case "typewriter": {
       const characters = Array.from(text);
-      const visible = characters.length ? Math.max(1, Math.ceil(progress * characters.length)) : 0;
+      const visible = characters.length ? Math.min(characters.length, Math.floor(progress * characters.length) + 1) : 0;
       text = characters.slice(0, visible).join("");
       break;
     }
