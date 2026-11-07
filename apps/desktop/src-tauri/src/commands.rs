@@ -358,7 +358,7 @@ fn ffmpeg_escape_text(value: &str) -> String {
         .replace('\r', "")
 }
 
-#[derive(serde::Serialize)]
+#[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ExportProgress {
     percent: f64,
