@@ -3,7 +3,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { desktopApi, isDesktopRuntime } from "./services/desktop-api";
 import EditorWorkspace from "./EditorWorkspace";
 import type { DownloadProgress, MediaAsset, Project, YoutubeInspection } from "./shared/types";
-import { Clapperboard, LayoutGrid, Film, GraduationCap, Settings2, Plus, Search, FolderOpen, FolderPlus, Clock3, Video, Sparkles, Play, X, ArrowUpRight, Upload, Youtube, CheckCircle2, LoaderCircle, Link2, Download } from "lucide-react"
+import { Clapperboard, LayoutGrid, Film, GraduationCap, Settings2, Plus, Search, FolderOpen, FolderPlus, Clock3, Video, Sparkles, Play, X, ArrowUpRight, Upload, Youtube, CheckCircle2, LoaderCircle, Link2, Download, Undo2, Redo2 } from "lucide-react"
 
 const formatDuration = (n?:number|null) => !n ? "Duração não informada" : Math.floor(n/60000)+":"+String(Math.floor(n/1000)%60).padStart(2,"0");
 
@@ -121,7 +121,7 @@ export default function App() {
   }
 
   const visible = projects.filter(p=>p.name.toLowerCase().includes(search.toLowerCase()));
-  return <main className="shell">
+  return <main className={"shell " + (view === "project" ? "project-shell" : "")}>
     <aside className="sidebar">
       <div className="brand"><div className="brand-icon"><Clapperboard size={21}/></div><div><b>FRAME<span>LAB</span></b><small>CREATOR STUDIO</small></div></div>
       <label className="side-label">WORKSPACE</label>
@@ -133,8 +133,8 @@ export default function App() {
       <div className="profile"><div className="avatar">J</div><div><b>Seu estúdio</b><small>Ambiente local</small></div><Settings2 size={17}/></div>
     </aside>
     <section className="main">
-      <header className="topbar"><div>Workspace <span>/</span> <b>{view==="project"&&activeProject?activeProject.name:"Visão geral"}</b></div><div className="top-right"><small><i/> Salvo neste dispositivo</small>{view==="project"&&<button className="secondary-action" onClick={returnToWorkspace}><LayoutGrid size={15}/> Voltar à workspace</button>}<button className="secondary-action" disabled={!activeProject||view!=="project"} onClick={()=>{setMediaTab("local");setMediaModal(true);}}><Upload size={15}/> Importar mídia</button><button className="primary" onClick={()=>setCreating(true)}><Plus size={16}/> Novo projeto</button></div></header>
-      <div className="content">
+      <header className="topbar"><div>Workspace <span>/</span> <b>{view==="project"&&activeProject?activeProject.name:"Visão geral"}</b></div><div className="top-right"><small><i/> Salvo neste dispositivo</small>{view==="project"&&<><button className="secondary-action" disabled title="Histórico de desfazer ainda não disponível"><Undo2 size={15}/> Desfazer</button><button className="secondary-action" disabled title="Histórico de refazer ainda não disponível"><Redo2 size={15}/> Refazer</button><button className="primary export-action" disabled title="A exportação ainda não está disponível neste projeto"><Download size={15}/> Exportar</button></>}</div></header>
+      <div className={"content " + (view === "project" ? "project-content" : "")}>
         {view==="workspace" ? <>
         <section className="hero"><div><label className="eyebrow"><Sparkles size={13}/> SEU PRÓXIMO VÍDEO COMEÇA AQUI</label><h1>Boas ideias merecem<br/><em>uma boa edição.</em></h1><p>Seu espaço para transformar ideias em vídeos que prendem a atenção.</p></div><div className="hero-visual"><div className="preview-art"><div className="rec">REC <i/></div><div className="play"><Play size={22} fill="currentColor"/></div><strong>IDEIA <span>EM MOVIMENTO.</span></strong><div className="scrub">00:18 <div><i/><i/><i/><i/><i/></div> 00:55</div></div><div className="float-tag"><Sparkles size={13}/> MAKE IT MATTER</div></div></section>
         <section className="stats"><div><span className="stat-icon purple"><Film size={17}/></span><label>PROJETOS<strong>{String(projects.length).padStart(2,"0")}</strong></label></div><div><span className="stat-icon orange"><Clock3 size={17}/></span><label>FORMATO PADRÃO<strong>9:16 <small>VERTICAL</small></strong></label></div><div><span className="stat-icon green"><Video size={17}/></span><label>SEU ESTÚDIO<strong>LOCAL <small>WINDOWS</small></strong></label></div></section>
@@ -145,12 +145,7 @@ export default function App() {
           <div className="empty"><div className="empty-icon"><FolderOpen size={27}/><i><Plus size={13}/></i></div><b>{search?"Nenhum projeto encontrado":"Seu primeiro projeto começa aqui"}</b><p>{search?"Tente buscar por outro nome.":"Crie um espaço para reunir vídeos, áudios, cenas e ideias."}</p>{!search&&<button className="primary" onClick={()=>setCreating(true)}><FolderPlus size={16}/> Criar meu primeiro projeto</button>}</div>}
         </section>
         </> : activeProject ? <>
-        <section className="project-workspace-heading">
-          <div className="project-workspace-copy"><label className="eyebrow muted">PROJETO ABERTO</label><h1>{activeProject.name}</h1><p>Importe suas mídias, organize os clipes e comece a montar seu vídeo.</p></div>
-          <div className="project-workspace-actions"><span className="project-format">1080 × 1920 <i>·</i> 30 FPS</span><button className="primary" onClick={()=>{setMediaTab("local");setMediaModal(true);}}><Plus size={15}/> Adicionar mídia</button></div>
-        </section>
-        <section className="project-workspace-status"><div><span className="workspace-status-dot"/><b>Projeto aberto</b><small>As mídias são armazenadas neste dispositivo e vinculadas a este projeto.</small></div><button className="secondary-action" onClick={returnToWorkspace}><LayoutGrid size={14}/> Todos os projetos</button></section>
-        {error&&!mediaModal&&<div className="error">{error}</div>}
+        {error&&!mediaModal&&<div className="error editor-error">{error}</div>}
         <EditorWorkspace projectId={activeProject.id} assets={assets} onAddMedia={()=>{setMediaTab("local");setMediaModal(true);}}/>
         </> : null}
         <footer>FRAME LAB · FEITO PARA IDEIAS EM MOVIMENTO <span>EARLY ACCESS · 0.2.0</span></footer>
