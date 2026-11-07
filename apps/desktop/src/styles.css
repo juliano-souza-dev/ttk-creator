@@ -143,3 +143,23 @@
 .volume-control span{display:flex;align-items:center;gap:5px}
 .volume-control input{grid-column:1/-1;width:100%;accent-color:#a78be2}
 @media(max-width:600px){.editor-transport{gap:6px}.transport-time{font-size:9px;margin-left:2px}.timeline-playhead{grid-template-columns:50px minmax(0,1fr) 45px;padding:9px}.timeline-actions{gap:5px}}
+
+
+/* Independent, time-positioned audio/video timeline */
+.timeline-positioned-track{min-height:88px}
+.timeline-positioned-track .timeline-canvas{position:relative;display:block;min-height:88px;overflow:hidden;padding:0;background-color:#19171f;background-image:repeating-linear-gradient(90deg,transparent 0,transparent calc(10% - 1px),#ffffff08 calc(10% - 1px),#ffffff08 10%)}
+.audio-track .timeline-canvas{background-color:#1d1916}
+.positioned-clip{position:absolute;top:15px;bottom:15px;min-width:0;max-width:none;margin:0;z-index:1}
+.positioned-clip>b{padding-right:35px}
+.positioned-clip .clip-controls{opacity:0}
+.positioned-clip:hover .clip-controls,.positioned-clip:focus-visible .clip-controls{opacity:1}
+.timeline-cursor{position:absolute;z-index:3;top:0;bottom:0;width:2px;background:#f2d58a;pointer-events:none;box-shadow:0 0 7px #f2d58a88}
+.timeline-cursor:before{content:"";position:absolute;top:0;left:-4px;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #f2d58a}
+.clip-toggle-row{display:flex;align-items:center;justify-content:space-between;gap:10px;color:#aaa1b2;font-size:9px}
+.clip-toggle-row>span{display:flex;align-items:center;gap:6px}
+.mute-toggle{display:flex;align-items:center;gap:6px;padding:7px 10px;border:1px solid #4b624f;border-radius:6px;background:#1c2b22;color:#a7d8b1;font-size:9px;cursor:pointer}
+.mute-toggle.muted{border-color:#67464a;background:#302023;color:#e3a5a9}
+.timeline-position-control{display:grid;grid-template-columns:1fr auto;gap:5px;color:#8c8694;font-size:9px}
+.timeline-position-control strong{font:9px 'DM Mono';color:#c5b4df}
+.timeline-position-control input{grid-column:1/-1;width:100%;accent-color:#a78be2}
+.timeline-canvas>audio{display:none}
