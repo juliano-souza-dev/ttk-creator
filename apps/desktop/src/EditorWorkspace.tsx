@@ -3,7 +3,7 @@ import type { CSSProperties, DragEvent } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { desktopApi } from "./services/desktop-api";
 import type { MediaAsset } from "./shared/types";
-import { AudioLines, Film, Image as ImageIcon, Plus, Play, Pause, Trash2, Scissors, Clock3, Copy, SkipBack, SkipForward, Volume2, VolumeX, Music2, Type, WandSparkles, MousePointer2 } from "lucide-react";
+import { AudioLines, Film, Plus, Play, Pause, Trash2, Scissors, Copy, SkipBack, SkipForward, Volume2, VolumeX, Music2, Type, WandSparkles, MousePointer2 } from "lucide-react";
 
 type TimelineClip = {
   id: string;
@@ -115,7 +115,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
   const previewUrl = previewAsset ? mediaUrls[previewAsset.id] : "";
   const selectedDuration = selectedClip ? clipDuration(selectedClip) : 0;
   const selectedSourceDuration = selectedAsset ? defaultDuration(selectedAsset) : 0;
-  const scale = Math.max(totalDuration, 10000) * 100 / timelineZoom;
+  const scale = Math.max(totalDuration, 10000);
 
   const stopPlayback = useCallback(() => {
     setPlaying(false);
