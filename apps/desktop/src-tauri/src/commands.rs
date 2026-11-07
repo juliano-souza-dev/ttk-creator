@@ -177,7 +177,7 @@ pub async fn check_ffmpeg() -> Result<String, String> {
 fn wrap_text_for_export(value: &str, font_size: u32) -> String {
     // drawtext does not automatically wrap at a maximum width. Estimate a
     // conservative character count so exported lines stay inside 90% of 1080px.
-    let max_chars = ((972.0 / (font_size.max(1) as f64 * 0.58)).floor() as usize).max(8);
+    let max_chars = ((972.0 / (font_size.max(1) as f64 * 0.65)).floor() as usize).max(8);
     value.split('\n').map(|line| {
         let mut lines = Vec::new();
         let mut current = String::new();
@@ -327,7 +327,7 @@ pub async fn export_timeline(
             let font_file = format!("C\\:/Windows/Fonts/{font_name}{font_suffix}.ttf");
             let anchor_x = 54.0 + (item.x.clamp(0.0, 100.0) / 100.0) * 972.0;
             let anchor_y = (item.y.clamp(0.0, 100.0) / 100.0) * 1920.0;
-            let base_x = match item.text_align.as_str() { "left" => format!("{anchor_x}"), "right" => format!("{anchor_x}-text_w"), _ => format!("{anchor_x}-text_w/2") };
+            let base_x = match item.text_align.as_str() { "left" => format!("max(54,min(1026-text_w,{anchor_x}))"), "right" => format!("max(54,min(1026-text_w,{anchor_x}-text_w))"), _ => format!("max(54,min(1026-text_w,{anchor_x}-text_w/2))") };
             let start = item.start_ms as f64 / 1000.0;
             let end = item.end_ms as f64 / 1000.0;
             let duration_ms = if item.duration_ms > 0 { item.duration_ms.min(item.end_ms.saturating_sub(item.start_ms)) } else { item.end_ms.saturating_sub(item.start_ms) };
