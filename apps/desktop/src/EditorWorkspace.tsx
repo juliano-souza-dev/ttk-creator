@@ -41,6 +41,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
   const [previewTick, setPreviewTick] = useState(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRefs = useRef<Record<string, HTMLAudioElement | null>>({});
+  const motionAudioContext = useRef<AudioContext | null>(null);
   const lastTickRef = useRef(0);
 
   useEffect(() => {
@@ -202,14 +203,15 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
       if (playheadMs >= item.startMs && playheadMs < item.startMs + 80 && lastMotionSounds.current[item.id] !== item.startMs && item.sound !== "none") {
         lastMotionSounds.current[item.id] = item.startMs;
         try {
-          const Ctx = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-          if (!Ctx) continue;
-          const ctx = new Ctx(); const osc = ctx.createOscillator(); const gain = ctx.createGain(); const now = ctx.currentTime;
+          const ctx = motionAudioContext.current;
+          if (!ctx) continue;
+          if (ctx.state === "suspended") void ctx.resume();
+          const osc = ctx.createOscillator(); const gain = ctx.createGain(); const now = ctx.currentTime;
           const tones: Record<string, number[]> = { pop: [620,150], click: [1200,700], whoosh: [260,70], impact: [105,35] };
           const tone = tones[item.sound] || tones.pop; osc.type = item.sound === "impact" ? "triangle" : "sine";
           osc.frequency.setValueAtTime(tone[0], now); osc.frequency.exponentialRampToValueAtTime(tone[1], now + 0.18);
           gain.gain.setValueAtTime(0.0001, now); gain.gain.exponentialRampToValueAtTime(0.22, now + 0.01); gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.2);
-          osc.connect(gain); gain.connect(ctx.destination); osc.start(now); osc.stop(now + 0.22); window.setTimeout(() => void ctx.close(), 500);
+          osc.connect(gain); gain.connect(ctx.destination); osc.start(now); osc.stop(now + 0.22);
         } catch { /* Sound effects are optional if audio is unavailable. */ }
       }
     }
@@ -267,6 +269,14 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
   function togglePlayback() {
     if (playing) { stopPlayback(); return; }
     if (!clips.length) return;
+    // Initialize/resume Web Audio directly from the user gesture so browser autoplay policies allow SFX.
+    try {
+      if (!motionAudioContext.current) {
+        const Ctx = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (Ctx) motionAudioContext.current = new Ctx();
+      }
+      if (motionAudioContext.current?.state === "suspended") void motionAudioContext.current.resume();
+    } catch { /* Motion sound is optional when Web Audio is unavailable. */ }
     if (playheadMs >= totalDuration) setPlayheadMs(0);
     setPlaying(true);
   }
