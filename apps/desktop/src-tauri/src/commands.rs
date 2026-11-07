@@ -466,9 +466,17 @@ pub async fn export_timeline(
             .split("version ")
             .nth(1)
             .and_then(|value| value.split('.').next())
+            .and_then(|value| value.trim_start_matches('n').parse::<u32>().ok())
+            .unwrap_or(0);
+        // Nightly builds may report a git hash instead of a semantic FFmpeg
+        // version. libavcodec 63 is the ABI shipped with FFmpeg 8.
+        let libavcodec_major = ffmpeg_version
+            .split("libavcodec")
+            .nth(1)
+            .and_then(|value| value.trim().split('.').next())
             .and_then(|value| value.parse::<u32>().ok())
             .unwrap_or(0);
-        let filter_file_option = if ffmpeg_major >= 8 {
+        let filter_file_option = if ffmpeg_major >= 8 || libavcodec_major >= 63 {
             "-/filter_complex"
         } else {
             "-filter_complex_script"
