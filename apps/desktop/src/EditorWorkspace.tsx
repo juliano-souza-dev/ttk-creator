@@ -96,11 +96,15 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
     catch { setMotion([]); }
   }, [motionKey]);
   useEffect(() => { if (loadedStorageKey === storageKey) window.localStorage.setItem(motionKey, JSON.stringify(motion)); }, [motionKey, motion, loadedStorageKey, storageKey]);
+  const lastSessionSaveAt = useRef(0);
   useEffect(() => {
     if (loadedStorageKey !== storageKey) return;
-    const session = { playheadMs, timelineZoom, activeTool, selectedId, selectedMotionId, savedAt: Date.now() };
+    const now = Date.now();
+    if (playing && now - lastSessionSaveAt.current < 1000) return;
+    const session = { playheadMs, timelineZoom, activeTool, selectedId, selectedMotionId, savedAt: now };
     window.localStorage.setItem(sessionKey, JSON.stringify(session));
-  }, [sessionKey, storageKey, loadedStorageKey, playheadMs, timelineZoom, activeTool, selectedId, selectedMotionId]);
+    lastSessionSaveAt.current = now;
+  }, [sessionKey, storageKey, loadedStorageKey, playheadMs, timelineZoom, activeTool, selectedId, selectedMotionId, playing]);
 
   useEffect(() => {
     let cancelled = false;
