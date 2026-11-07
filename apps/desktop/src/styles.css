@@ -304,7 +304,7 @@
 .property-section[open] summary:after{content:"⌃"}
 .property-section label,.property-control{display:grid;grid-template-columns:1fr auto;gap:6px;margin:0 0 10px;color:#958da0;font-size:9px}
 .property-section label:last-child{margin-bottom:0}
-.property-section input:not([type=color]),.property-section select{grid-column:1/-1;width:100%;height:32px;padding:0 8px;border:1px solid #45404e;border-radius:5px;background:#111115;color:#e9e1f0;font-size:10px}
+.property-section input:not([type=color]),.property-section select{grid-column:1/-1;width:100%;height:32px;padding:0 8px;border:1px solid #45404e;border-radius:5px;background:#111115;color:#e9e1f0;font-size:10px}.property-section textarea{grid-column:1/-1;width:100%;min-height:112px;padding:9px 10px;resize:vertical;border:1px solid #45404e;border-radius:6px;background:#111115;color:#e9e1f0;font:11px/1.55 "DM Sans",sans-serif;white-space:pre-wrap;overflow-wrap:anywhere}.property-section textarea:focus{outline:1px solid #a98af0;border-color:#a98af0}.property-section .motion-textarea{min-height:132px}
 .property-section .motion-fields{grid-template-columns:1fr 1fr;gap:8px}
 .property-section .motion-colors{display:flex;gap:18px}
 .property-section .motion-colors label{display:flex;align-items:center}
@@ -454,7 +454,7 @@
 
 .motion-overlay span.motion-main-text{font-family:var(--motion-font,Arial,sans-serif);font-weight:var(--motion-weight,900);text-transform:none;letter-spacing:normal;display:flex;align-items:center;justify-content:center;gap:.22em;width:100%;max-width:100%;text-align:inherit}
 /* Motion animation state is calculated from the timeline playhead and mirrored by FFmpeg. */
-.motion-overlay span.motion-main-text{display:block;width:max-content;max-width:none;padding:0;line-height:.95;letter-spacing:normal;text-transform:none;text-shadow:none;white-space:pre;overflow-wrap:normal;animation:none!important;transform-origin:center center}
+.motion-overlay span.motion-main-text{display:block;width:90%;max-width:90%;min-width:0;padding:0;line-height:1.12;letter-spacing:normal;text-transform:none;text-shadow:none;white-space:pre-wrap;overflow-wrap:anywhere;word-break:normal;animation:none!important;transform-origin:center center}
 .motion-overlay span.motion-main-text:after{display:none!important}
 
 .motion-overlay .motion-inline-icon{display:inline-block;flex:none;font-style:normal;font-family:"Segoe UI Emoji","Apple Color Emoji",sans-serif;font-size:.82em;line-height:1}
