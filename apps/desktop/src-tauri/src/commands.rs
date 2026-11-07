@@ -138,6 +138,8 @@ pub struct ExportMotion {
 
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ExportSoundEffect {
     sound_id: String,
     timeline_start_ms: u64,
@@ -360,6 +362,7 @@ fn write_sound_manifest(directory: &std::path::Path, sounds: &[GlobalSound]) -> 
     let temporary = directory.join("library.json.tmp");
     let json = serde_json::to_vec_pretty(sounds).map_err(|error| error.to_string())?;
     std::fs::write(&temporary, json).map_err(|error| error.to_string())?;
+    if path.exists() { std::fs::remove_file(&path).map_err(|error| error.to_string())?; }
     std::fs::rename(temporary, path).map_err(|error| error.to_string())
 }
 
