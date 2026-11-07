@@ -474,7 +474,7 @@ pub async fn export_timeline(
             filter_parts.push(format!("[{input_index}:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,setsar=1,setpts=PTS-STARTPTS+{start:.3}/TB[{label}]"));
             let next = format!("base{}", position + 1);
             let end = (clip.timeline_start_ms + clip.source_end_ms - clip.source_start_ms) as f64 / 1000.0;
-            filter_parts.push(format!("[{previous}][{label}]overlay=0:0:eof_action=pass:shortest=0:enable='between(t,{start:.3},{end:.3})'[{next}]"));
+            filter_parts.push(format!("[{previous}][{label}]overlay=0:0:eof_action=pass:shortest=0:enable='gte(t,{start:.6})*lt(t,{end:.6})'[{next}]"));
             previous = next;
         }
 
@@ -522,10 +522,11 @@ pub async fn export_timeline(
                     let step_start = start + duration * (step as f64 / steps as f64);
                     let step_end = start + duration * ((step + 1) as f64 / steps as f64);
                     let next = format!("typewriter{index}_{step}");
+                    // The preview removes the element exactly at endMs. Keep
+                    // the final prefix bounded by that same lifetime instead of
+                    // leaving it on screen for the rest of the exported video.
                     let enable = if step + 1 == steps {
-                        // Keep the complete text visible through the final frame,
-                        // even when the clip duration is not an exact frame multiple.
-                        format!("gte(t,{step_start:.6})")
+                        format!("gte(t,{step_start:.6})*lt(t,{end:.6})")
                     } else {
                         format!("gte(t,{step_start:.6})*lt(t,{step_end:.6})")
                     };
