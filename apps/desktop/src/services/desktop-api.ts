@@ -36,7 +36,7 @@ export const desktopApi = {
 
   checkFfmpeg: () => invoke<string>("check_ffmpeg"),
 
-  exportTimeline: (request: { projectId: string; destination: string; clips: Array<{ id: string; assetId: string; kind: "video" | "audio" | "image"; sourceStartMs: number; sourceEndMs: number; timelineStartMs: number; volume: number; muted?: boolean }>; motion: Array<{ text: string; startMs: number; endMs: number; color: string; fontSize: number; x: number; y: number; fontFamily?: string; fontWeight?: number }> }) =>
+  exportTimeline: (request: { projectId: string; destination: string; clips: Array<{ id: string; assetId: string; kind: "video" | "audio" | "image"; sourceStartMs: number; sourceEndMs: number; timelineStartMs: number; volume: number; muted?: boolean }>; motion: Array<{ text: string; startMs: number; endMs: number; color: string; fontSize: number; x: number; y: number; fontFamily?: string; fontWeight?: number; textAlign?: "left" | "center" | "right" }> }) =>
     invoke<string>("export_timeline", {
       request: {
         ...request,
