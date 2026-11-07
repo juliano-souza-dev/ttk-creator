@@ -3,7 +3,7 @@ import type { CSSProperties, DragEvent } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { desktopApi } from "./services/desktop-api";
 import type { MediaAsset } from "./shared/types";
-import { AudioLines, Film, Image as ImageIcon, Plus, Play, Pause, Trash2, Scissors, Clock3, Copy, SkipBack, SkipForward, Volume2, VolumeX } from "lucide-react";
+import { AudioLines, Film, Image as ImageIcon, Plus, Play, Pause, Trash2, Scissors, Clock3, Copy, SkipBack, SkipForward, Volume2, VolumeX, Music2, Type, WandSparkles, MousePointer2 } from "lucide-react";
 
 type TimelineClip = {
   id: string;
@@ -31,6 +31,8 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
   const motionKey = "ttk-creator:motion:" + projectId;
   const [motion, setMotion] = useState<MotionGraphic[]>([]);
   const [selectedMotionId, setSelectedMotionId] = useState<string | null>(null);
+  const [activeTool, setActiveTool] = useState<"media" | "audio" | "text" | "effects">("media");
+  const [timelineZoom, setTimelineZoom] = useState(100);
   const lastMotionSounds = useRef<Record<string, number>>({});
   const [loadedStorageKey, setLoadedStorageKey] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -113,7 +115,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
   const previewUrl = previewAsset ? mediaUrls[previewAsset.id] : "";
   const selectedDuration = selectedClip ? clipDuration(selectedClip) : 0;
   const selectedSourceDuration = selectedAsset ? defaultDuration(selectedAsset) : 0;
-  const scale = Math.max(totalDuration, 10000);
+  const scale = Math.max(totalDuration, 10000) * 100 / timelineZoom;
 
   const stopPlayback = useCallback(() => {
     setPlaying(false);
