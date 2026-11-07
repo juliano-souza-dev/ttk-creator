@@ -49,7 +49,9 @@ pub fn run() {
             commands::get_project_asset_path,
             commands::import_media_files,
             commands::inspect_youtube,
-            commands::download_youtube
+            commands::download_youtube,
+            commands::check_ffmpeg,
+            commands::export_timeline
         ])
         .run(tauri::generate_context!())
         .expect("error while running TikTok Media Creator");
