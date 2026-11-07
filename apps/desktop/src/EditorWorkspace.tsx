@@ -158,6 +158,17 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
     if (playheadMs >= totalDuration) setPlayheadMs(0);
     setPlaying(true);
   }
+  function onMediaEnded() {
+    if (!activeClip || activeIndex < 0) return;
+    const nextTime = clipOffsets[activeIndex]?.end ?? totalDuration;
+    if (nextTime >= totalDuration) {
+      setPlayheadMs(totalDuration);
+      stopPlayback();
+      return;
+    }
+    setPlayheadMs(nextTime + 1);
+  }
+
   function onMediaTimeUpdate() {
     const element = mediaRef.current;
     if (!element || !activeClip || activeIndex < 0) return;
