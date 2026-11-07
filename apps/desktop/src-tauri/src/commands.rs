@@ -628,11 +628,16 @@ pub async fn export_timeline(
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn();
-        // Remova o arquivo temporário mesmo quando o processo não conseguir iniciar.
-        let _ = std::fs::remove_file(&filter_script_path);
-        let mut child = output_result.map_err(|error| {
-            format!("Não foi possível iniciar o FFmpeg em {}: {error}", ffmpeg_path.display())
-        })?;
+        let mut child = match output_result {
+            Ok(child) => child,
+            Err(error) => {
+                let _ = std::fs::remove_file(&filter_script_path);
+                return Err(format!(
+                    "Não foi possível iniciar o FFmpeg em {}: {error}",
+                    ffmpeg_path.display()
+                ));
+            }
+        };
         // stderr é drenado em paralelo para evitar bloqueio do processo caso o FFmpeg
         // produza muitas mensagens de diagnóstico durante a renderização.
         let stderr_pipe = child.stderr.take();
@@ -655,7 +660,12 @@ pub async fn export_timeline(
                 }
             }
         }
-        let status = child.wait().map_err(|error| format!("Não foi possível aguardar o FFmpeg: {error}"))?;
+        // O FFmpeg lê o grafo de filtros depois de iniciar. Só podemos remover
+        // o arquivo temporário quando o processo terminar, nunca logo após spawn().
+        let status_result = child.wait();
+        let _ = std::fs::remove_file(&filter_script_path);
+        let status = status_result
+            .map_err(|error| format!("Não foi possível aguardar o FFmpeg: {error}"))?;
         let stderr = stderr_reader.join().unwrap_or_else(|_| "Não foi possível ler o diagnóstico do FFmpeg.".into());
         if !status.success() {
             let stderr = stderr.as_str();
