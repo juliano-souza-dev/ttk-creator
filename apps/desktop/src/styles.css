@@ -455,7 +455,7 @@
 .motion-overlay span.motion-main-text{font-family:var(--motion-font,Arial,sans-serif);font-weight:var(--motion-weight,900);text-transform:none;letter-spacing:normal;display:flex;align-items:center;justify-content:center;gap:.22em;width:100%;max-width:100%;text-align:inherit}
 /* WYSIWYG: the preview uses the export's 1080x1920 coordinate system.
    Motion text is static in the current FFmpeg export, so do not preview CSS-only animations. */
-.motion-overlay span.motion-main-text{display:block;width:max-content;max-width:90%;padding:0;line-height:.95;letter-spacing:normal;text-transform:none;text-shadow:0 1px 3px #000,0 5px 24px #000b;animation:none!important}
+.motion-overlay span.motion-main-text{display:block;width:max-content;max-width:none;padding:0;line-height:.95;letter-spacing:normal;text-transform:none;text-shadow:none;white-space:pre;overflow-wrap:normal;animation:none!important}
 .motion-overlay span.motion-main-text:after{display:none!important}
 
 .motion-overlay .motion-inline-icon{display:inline-block;flex:none;font-style:normal;font-family:"Segoe UI Emoji","Apple Color Emoji",sans-serif;font-size:.82em;line-height:1}
