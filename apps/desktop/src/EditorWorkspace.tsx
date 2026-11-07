@@ -387,7 +387,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
           <button className="secondary-action danger-action" onClick={() => selectedClip && removeClip(selectedClip.id)} disabled={!selectedClip}><Trash2 size={13}/> Excluir selecionado</button>
           <button className="secondary-action" onClick={() => { stopPlayback(); setClips([]); setSelectedId(null); setPlayheadMs(0); }} disabled={!clips.length}><Trash2 size={13}/> Limpar timeline</button>
         </div>
-        <label className="timeline-zoom">Zoom <input type="range" min="50" max="200" step="10" value={timelineZoom} onChange={event => setTimelineZoom(Number(event.target.value)}/></label>
+        <label className="timeline-zoom">Zoom <input type="range" min="50" max="200" step="10" value={timelineZoom} onChange={event => setTimelineZoom(Number(event.target.value))}/></label>
       </div>
       <div className="timeline-ruler timeline-grid-ruler"><div className="timeline-track-label-spacer"/><div className="timeline-ruler-canvas" style={{width:timelineZoom+"%"}}>{Array.from({length:Math.ceil(scale/1000)+1},(_,second)=>second).map(second=><span key={second} className={second%5===0?"major":""} style={{left:(second*1000/scale*100)+"%"}}>{second%5===0?timeLabel(second*1000):""}</span>)}</div></div>
       <div className="timeline-lanes">
