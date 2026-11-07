@@ -22,8 +22,6 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
   const [previewTick, setPreviewTick] = useState(0);
   const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
   const imageTimerRef = useRef<number | null>(null);
-  const clipsRef = useRef(clips);
-  clipsRef.current = clips;
 
   useEffect(() => {
     try {
