@@ -161,18 +161,70 @@ pub struct ExportRequest {
     sound_effects: Vec<ExportSoundEffect>,
 }
 
+fn resolve_ffmpeg_executable() -> Result<(std::path::PathBuf, String), String> {
+    use std::{collections::HashSet, path::PathBuf, process::Command};
+
+    let executable_name = if cfg!(windows) { "ffmpeg.exe" } else { "ffmpeg" };
+    let mut candidates: Vec<PathBuf> = Vec::new();
+
+    // Primeiro, respeita o PATH recebido pelo processo do FrameLab.
+    if let Some(path_value) = std::env::var_os("PATH") {
+        candidates.extend(std::env::split_paths(&path_value).map(|directory| directory.join(executable_name)));
+    }
+
+    // O WinGet disponibiliza aliases nesta pasta. Ela pode não estar no PATH
+    // herdado quando o aplicativo é iniciado pelo menu Iniciar/atalho.
+    if cfg!(windows) {
+        if let Some(local_app_data) = std::env::var_os("LOCALAPPDATA") {
+            candidates.push(PathBuf::from(local_app_data)
+                .join("Microsoft").join("WinGet").join("Links").join(executable_name));
+        }
+        if let Some(user_profile) = std::env::var_os("USERPROFILE") {
+            candidates.push(PathBuf::from(user_profile)
+                .join("AppData").join("Local").join("Microsoft")
+                .join("WinGet").join("Links").join(executable_name));
+        }
+    }
+
+    let mut checked = HashSet::new();
+    let mut failures: Vec<String> = Vec::new();
+
+    for candidate in candidates {
+        if !checked.insert(candidate.clone()) || !candidate.is_file() {
+            continue;
+        }
+
+        match Command::new(&candidate).arg("-version").output() {
+            Ok(output) if output.status.success() => {
+                let version = String::from_utf8_lossy(&output.stdout)
+                    .lines().next().unwrap_or("FFmpeg disponível").to_string();
+                return Ok((candidate, version));
+            }
+            Ok(output) => {
+                failures.push(format!("{} (código de saída: {})",
+                    candidate.display(), output.status));
+            }
+            Err(error) => {
+                failures.push(format!("{} ({error})", candidate.display()));
+            }
+        }
+    }
+
+    let details = if failures.is_empty() {
+        "Nenhum ffmpeg.exe válido foi encontrado nos diretórios do PATH ou no alias conhecido do WinGet.".to_string()
+    } else {
+        format!("Executáveis encontrados, mas que não iniciaram corretamente: {}", failures.join("; "))
+    };
+    Err(format!(
+        "Não foi possível localizar e iniciar o FFmpeg. Verifique a instalação ou o PATH do Windows. {details}"
+    ))
+}
+
 #[tauri::command]
 pub async fn check_ffmpeg() -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(|| {
-        let output = std::process::Command::new("ffmpeg")
-            .arg("-version")
-            .output()
-            .map_err(|_| "FFmpeg não foi encontrado no PATH do Windows. Instale o FFmpeg e reinicie o FrameLab.".to_string())?;
-        if !output.status.success() {
-            return Err("O FFmpeg foi encontrado, mas não conseguiu iniciar.".into());
-        }
-        let version = String::from_utf8_lossy(&output.stdout);
-        Ok(version.lines().next().unwrap_or("FFmpeg disponível").to_string())
+        let (_, version) = resolve_ffmpeg_executable()?;
+        Ok(version)
     }).await.map_err(|error| format!("A verificação do FFmpeg foi interrompida: {error}"))?
 }
 
@@ -405,8 +457,9 @@ pub async fn export_timeline(
         }
         args.extend(["-t".into(), format!("{:.3}", total_ms as f64 / 1000.0), "-c:v".into(), "libx264".into(), "-preset".into(), "medium".into(), "-crf".into(), "20".into(), "-pix_fmt".into(), "yuv420p".into(), "-movflags".into(), "+faststart".into(), destination.to_string_lossy().into_owned()]);
 
-        let output = Command::new("ffmpeg").args(&args).output()
-            .map_err(|_| "FFmpeg não foi encontrado no PATH. Instale-o e reinicie o FrameLab.".to_string())?;
+        let (ffmpeg_path, _) = resolve_ffmpeg_executable()?;
+        let output = Command::new(&ffmpeg_path).args(&args).output()
+            .map_err(|error| format!("Não foi possível iniciar o FFmpeg em {}: {error}", ffmpeg_path.display()))?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             let detail = stderr.lines().last().unwrap_or("Erro desconhecido do FFmpeg");
