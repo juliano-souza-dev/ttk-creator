@@ -449,7 +449,22 @@ pub async fn export_timeline(
             filter_parts.push(format!("{}amix=inputs={}:duration=longest:dropout_transition=0,atrim=duration={:.3}[aout]", audio_labels.join(""), audio_labels.len(), total_ms as f64 / 1000.0));
         }
 
-        args.extend(["-filter_complex".into(), filter_parts.join(";"), "-map".into(), "[vout]".into()]);
+        // O grafo pode ficar muito grande (principalmente com typewriter,
+        // que cria uma etapa drawtext por caractere). No Windows, passar todo
+        // esse conteúdo como argumento pode ultrapassar o limite do CreateProcess
+        // e gerar ERROR_FILENAME_EXCED_RANGE (os error 206). Grave-o em arquivo.
+        let filter_script_path = std::env::temp_dir()
+            .join(format!("framelab-filter-{}.txt", uuid::Uuid::new_v4()));
+        let filter_script = filter_parts.join(";\\n");
+        std::fs::write(&filter_script_path, filter_script.as_bytes())
+            .map_err(|error| format!("Não foi possível preparar os filtros de exportação: {error}"))?;
+
+        args.extend([
+            "-filter_complex_script".into(),
+            filter_script_path.to_string_lossy().into_owned(),
+            "-map".into(),
+            "[vout]".into(),
+        ]);
         if !audio_labels.is_empty() {
             args.extend(["-map".into(), "[aout]".into(), "-c:a".into(), "aac".into(), "-b:a".into(), "192k".into()]);
         } else {
@@ -458,8 +473,12 @@ pub async fn export_timeline(
         args.extend(["-t".into(), format!("{:.3}", total_ms as f64 / 1000.0), "-c:v".into(), "libx264".into(), "-preset".into(), "medium".into(), "-crf".into(), "20".into(), "-pix_fmt".into(), "yuv420p".into(), "-movflags".into(), "+faststart".into(), destination.to_string_lossy().into_owned()]);
 
         let (ffmpeg_path, _) = resolve_ffmpeg_executable()?;
-        let output = Command::new(&ffmpeg_path).args(&args).output()
-            .map_err(|error| format!("Não foi possível iniciar o FFmpeg em {}: {error}", ffmpeg_path.display()))?;
+        let output_result = Command::new(&ffmpeg_path).args(&args).output();
+        // Remova o arquivo temporário mesmo quando o processo não conseguir iniciar.
+        let _ = std::fs::remove_file(&filter_script_path);
+        let output = output_result.map_err(|error| {
+            format!("Não foi possível iniciar o FFmpeg em {}: {error}", ffmpeg_path.display())
+        })?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             let detail = stderr.lines().last().unwrap_or("Erro desconhecido do FFmpeg");
