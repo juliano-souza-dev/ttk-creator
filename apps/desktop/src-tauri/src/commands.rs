@@ -174,6 +174,40 @@ pub async fn check_ffmpeg() -> Result<String, String> {
     }).await.map_err(|error| format!("A verificação do FFmpeg foi interrompida: {error}"))?
 }
 
+fn wrap_text_for_export(value: &str, font_size: u32) -> String {
+    // drawtext does not automatically wrap at a maximum width. Estimate a
+    // conservative character count so exported lines stay inside 90% of 1080px.
+    let max_chars = ((972.0 / (font_size.max(1) as f64 * 0.58)).floor() as usize).max(8);
+    value.split('\n').map(|line| {
+        let mut lines = Vec::new();
+        let mut current = String::new();
+        for word in line.split_whitespace() {
+            if current.is_empty() {
+                current.push_str(word);
+            } else if current.chars().count() + 1 + word.chars().count() <= max_chars {
+                current.push(' ');
+                current.push_str(word);
+            } else {
+                lines.push(std::mem::take(&mut current));
+                if word.chars().count() <= max_chars {
+                    current.push_str(word);
+                } else {
+                    let mut chunk = String::new();
+                    for character in word.chars() {
+                        chunk.push(character);
+                        if chunk.chars().count() >= max_chars {
+                            lines.push(std::mem::take(&mut chunk));
+                        }
+                    }
+                    current = chunk;
+                }
+            }
+        }
+        if !current.is_empty() { lines.push(current); }
+        lines.join("\n")
+    }).collect::<Vec<_>>().join("\n")
+}
+
 fn ffmpeg_escape_text(value: &str) -> String {
     value
         .replace('\\', "\\\\")
@@ -183,8 +217,8 @@ fn ffmpeg_escape_text(value: &str) -> String {
         .replace(',', "\\,")
         .replace('[', "\\[")
         .replace(']', "\\]")
-        .replace('\n', " ")
-        .replace('\r', " ")
+        .replace('\n', "\\n")
+        .replace('\r', "")
 }
 
 #[tauri::command]
@@ -291,7 +325,7 @@ pub async fn export_timeline(
             };
             let font_suffix = if item.font_weight >= 700 { bold_suffix } else { "" };
             let font_file = format!("C\\:/Windows/Fonts/{font_name}{font_suffix}.ttf");
-            let anchor_x = (item.x.clamp(0.0, 100.0) / 100.0) * 1080.0;
+            let anchor_x = 54.0 + (item.x.clamp(0.0, 100.0) / 100.0) * 972.0;
             let anchor_y = (item.y.clamp(0.0, 100.0) / 100.0) * 1920.0;
             let base_x = match item.text_align.as_str() { "left" => format!("{anchor_x}"), "right" => format!("{anchor_x}-text_w"), _ => format!("{anchor_x}-text_w/2") };
             let start = item.start_ms as f64 / 1000.0;
@@ -302,7 +336,8 @@ pub async fn export_timeline(
             if item.preset == "typewriter" {
                 // Render successive text prefixes in non-overlapping time slices. This
                 // produces a true character-by-character reveal in the exported frames.
-                let characters: Vec<char> = item.text.chars().collect();
+                let wrapped_text = wrap_text_for_export(&item.text, item.font_size);
+                let characters: Vec<char> = wrapped_text.chars().collect();
                 if characters.is_empty() { continue; }
                 let mut prefix = String::new();
                 let mut current = previous.clone();
@@ -335,7 +370,7 @@ pub async fn export_timeline(
                 _ => ("1".to_string(), base_x.clone(), "1".to_string()),
             };
             let next = format!("text{index}");
-            filter_parts.push(format!("[{previous}]drawtext=fontfile='{font_file}':text='{}':fontcolor={color}:fontsize='max(1,{}*({scale}))':alpha='{alpha}':x='{x}':y='{anchor_y}-text_h/2':enable='between(t,{start:.3},{end:.3})'[{next}]", ffmpeg_escape_text(&item.text), item.font_size.clamp(18, 180)));
+            filter_parts.push(format!("[{previous}]drawtext=fontfile='{font_file}':text='{}':fontcolor={color}:fontsize='max(1,{}*({scale}))':alpha='{alpha}':x='{x}':y='{anchor_y}-text_h/2':enable='between(t,{start:.3},{end:.3})'[{next}]", ffmpeg_escape_text(&wrap_text_for_export(&item.text, item.font_size)), item.font_size.clamp(18, 180)));
             previous = next;
         }
         filter_parts.push(format!("[{previous}]format=yuv420p[vout]"));
