@@ -453,9 +453,10 @@ pub async fn export_timeline(
         // que cria uma etapa drawtext por caractere). No Windows, passar todo
         // esse conteúdo como argumento pode ultrapassar o limite do CreateProcess
         // e gerar ERROR_FILENAME_EXCED_RANGE (os error 206). Grave-o em arquivo.
+        let (ffmpeg_path, _) = resolve_ffmpeg_executable()?;
         let filter_script_path = std::env::temp_dir()
             .join(format!("framelab-filter-{}.txt", uuid::Uuid::new_v4()));
-        let filter_script = filter_parts.join(";\\n");
+        let filter_script = filter_parts.join(";\n");
         std::fs::write(&filter_script_path, filter_script.as_bytes())
             .map_err(|error| format!("Não foi possível preparar os filtros de exportação: {error}"))?;
 
@@ -472,7 +473,6 @@ pub async fn export_timeline(
         }
         args.extend(["-t".into(), format!("{:.3}", total_ms as f64 / 1000.0), "-c:v".into(), "libx264".into(), "-preset".into(), "medium".into(), "-crf".into(), "20".into(), "-pix_fmt".into(), "yuv420p".into(), "-movflags".into(), "+faststart".into(), destination.to_string_lossy().into_owned()]);
 
-        let (ffmpeg_path, _) = resolve_ffmpeg_executable()?;
         let output_result = Command::new(&ffmpeg_path).args(&args).output();
         // Remova o arquivo temporário mesmo quando o processo não conseguir iniciar.
         let _ = std::fs::remove_file(&filter_script_path);
