@@ -365,7 +365,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
       </>}
       {activeTool === "effects" && <>
         <div className="editor-panel-head"><div><b>Efeitos</b><small>Recursos visuais e sonoros</small></div></div>
-        <div className="editor-future-list"><div><WandSparkles size={18}/><b>Efeitos visuais</b><small>Biblioteca de efeitos em preparação</small></div><div><AudioLines size={18}/><b>Efeitos sonoros</b><small>Os sons dos Motion Graphics já estão disponíveis em Texto</small></div></div>
+        <div className="editor-media-grid"><article className="editor-media-card"><div className="editor-media-thumb"><WandSparkles size={22}/></div><b>Efeitos visuais</b><small>Em preparação</small></article><article className="editor-media-card"><div className="editor-media-thumb audio"><AudioLines size={22}/></div><b>Efeitos sonoros</b><small>Disponíveis em Texto</small></article></div>
       </>}
     </aside>
     <section className="editor-center">
