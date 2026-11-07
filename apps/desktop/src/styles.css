@@ -408,3 +408,5 @@
 .motion-overlay span.motion-composition .motion-translation:after,.motion-overlay span.motion-composition .motion-supporting-text:after{display:none}
 .motion-overlay span.motion-composition .motion-composition-icon{display:block;color:var(--motion-accent);font:700 .72em/1 'DM Sans',sans-serif;font-style:normal;text-shadow:0 2px 12px #0008}
 .motion-overlay span.motion-composition .motion-supporting-text{display:block;width:auto;margin:0;padding:0;color:#f1f4fa;font:500 .28em/1.25 'DM Sans',sans-serif;letter-spacing:.01em;text-transform:none;text-shadow:none}
+
+.motion-composition span.motion-composition{animation:motion-pop-in .62s cubic-bezier(.16,1.4,.35,1) both}
