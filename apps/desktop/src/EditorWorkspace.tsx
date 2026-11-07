@@ -33,10 +33,8 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
   const [playing, setPlaying] = useState(false);
   const [playheadMs, setPlayheadMs] = useState(0);
   const [previewTick, setPreviewTick] = useState(0);
-  const [trackWidth, setTrackWidth] = useState(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRefs = useRef<Record<string, HTMLAudioElement | null>>({});
-  const trackRef = useRef<HTMLDivElement | null>(null);
   const lastTickRef = useRef(0);
 
   useEffect(() => {
@@ -88,14 +86,6 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
     void loadUrls();
     return () => { cancelled = true; };
   }, [assets, projectId, mediaUrls]);
-
-  useEffect(() => {
-    const node = trackRef.current;
-    if (!node) return;
-    const observer = new ResizeObserver(entries => setTrackWidth(entries[0]?.contentRect.width ?? 0));
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
 
   const totalDuration = clips.reduce((max, clip) => Math.max(max, clipEnd(clip)), 0);
   const selectedClip = clips.find(clip => clip.id === selectedId) ?? clips[0] ?? null;
@@ -310,7 +300,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
       <div className="timeline-ruler"><span>00:00</span><span>{timeLabel(scale / 2)}</span><span>{timeLabel(scale)}</span></div>
       <div className="timeline-track timeline-positioned-track">
         <div className="track-label">VÍDEO / IMAGEM</div>
-        <div className="track-clips timeline-canvas" ref={trackRef} onDragOver={event => event.preventDefault()} onDrop={handleAssetDrop}>
+        <div className="track-clips timeline-canvas" onDragOver={event => event.preventDefault()} onDrop={handleAssetDrop}>
           {visualClips.map(clip => {
             const asset = assets.find(item => item.id === clip.assetId);
             if (!asset) return null;
