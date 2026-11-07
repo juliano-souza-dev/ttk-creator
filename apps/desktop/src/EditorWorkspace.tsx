@@ -28,6 +28,7 @@ const timeLabel = (ms: number) => {
 
 export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props) {
   const storageKey = `ttk-creator:timeline:${projectId}`;
+  const sessionKey = `ttk-creator:session:${projectId}`;
   const [clips, setClips] = useState<TimelineClip[]>([]);
   const motionKey = "ttk-creator:motion:" + projectId;
   const [motion, setMotion] = useState<MotionGraphic[]>([]);
@@ -74,7 +75,15 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
         if (!isNew) legacyCursor += clipDuration(clip);
       }
       setClips(restored);
-      setPlayheadMs(0);
+      const sessionRaw = window.localStorage.getItem(sessionKey);
+      if (sessionRaw) {
+        const session = JSON.parse(sessionRaw) as Record<string, unknown>;
+        if (Number.isFinite(session.playheadMs)) setPlayheadMs(Math.max(0, Number(session.playheadMs)));
+        if (Number.isFinite(session.timelineZoom)) setTimelineZoom(Math.max(50, Math.min(200, Number(session.timelineZoom))));
+        if (typeof session.activeTool === "string" && ["media", "audio", "text", "effects"].includes(session.activeTool)) setActiveTool(session.activeTool as "media" | "audio" | "text" | "effects");
+        if (typeof session.selectedId === "string") setSelectedId(session.selectedId);
+        if (typeof session.selectedMotionId === "string") setSelectedMotionId(session.selectedMotionId);
+      }
     } catch { setClips([]); }
     finally { setLoadedStorageKey(storageKey); }
   }, [storageKey]);
@@ -86,7 +95,12 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
     try { const raw = window.localStorage.getItem(motionKey); const value = raw ? JSON.parse(raw) : []; setMotion(Array.isArray(value) ? value.map((item: MotionGraphic) => { const startMs = Math.max(0, Number(item.startMs) || 0); const legacyDuration = Math.max(300, Number(item.durationMs) || 1800); const endMs = Number.isFinite(item.endMs) ? Math.max(startMs + 300, Number(item.endMs)) : startMs + legacyDuration; return { ...item, startMs, endMs, durationMs: endMs - startMs, x: Number.isFinite(item.x) ? item.x : 50, y: Number.isFinite(item.y) ? item.y : 50 }; }) : []); }
     catch { setMotion([]); }
   }, [motionKey]);
-  useEffect(() => { window.localStorage.setItem(motionKey, JSON.stringify(motion)); }, [motionKey, motion]);
+  useEffect(() => { if (loadedStorageKey === storageKey) window.localStorage.setItem(motionKey, JSON.stringify(motion)); }, [motionKey, motion, loadedStorageKey, storageKey]);
+  useEffect(() => {
+    if (loadedStorageKey !== storageKey) return;
+    const session = { playheadMs, timelineZoom, activeTool, selectedId, selectedMotionId, savedAt: Date.now() };
+    window.localStorage.setItem(sessionKey, JSON.stringify(session));
+  }, [sessionKey, storageKey, loadedStorageKey, playheadMs, timelineZoom, activeTool, selectedId, selectedMotionId]);
 
   useEffect(() => {
     let cancelled = false;
