@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { DragEvent } from "react";
+import type { CSSProperties, DragEvent } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { desktopApi } from "./services/desktop-api";
 import type { MediaAsset } from "./shared/types";
@@ -15,6 +15,8 @@ type TimelineClip = {
   muted?: boolean;
 };
 type Props = { projectId: string; assets: MediaAsset[]; onAddMedia: () => void };
+type MotionGraphic = { id: string; text: string; startMs: number; durationMs: number; preset: "pop" | "slide" | "zoom" | "typewriter" | "impact"; color: string; accent: string; fontSize: number; sound: "pop" | "whoosh" | "impact" | "click" | "none" };
+const motionPresets = [{id:"pop",label:"Pop Impact",sound:"pop"},{id:"slide",label:"Slide + Whoosh",sound:"whoosh"},{id:"zoom",label:"Zoom + Impact",sound:"impact"},{id:"typewriter",label:"Typewriter",sound:"click"},{id:"impact",label:"Big Impact",sound:"impact"}] as const;
 const defaultDuration = (asset: MediaAsset) => asset.durationMs && asset.durationMs > 0 ? asset.durationMs : asset.kind === "image" ? 5000 : 30000;
 const clipDuration = (clip: TimelineClip) => Math.max(0, clip.sourceEndMs - clip.sourceStartMs);
 const clipEnd = (clip: TimelineClip) => clip.timelineStartMs + clipDuration(clip);
@@ -26,6 +28,10 @@ const timeLabel = (ms: number) => {
 export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props) {
   const storageKey = `ttk-creator:timeline:${projectId}`;
   const [clips, setClips] = useState<TimelineClip[]>([]);
+  const motionKey = "ttk-creator:motion:" + projectId;
+  const [motion, setMotion] = useState<MotionGraphic[]>([]);
+  const [selectedMotionId, setSelectedMotionId] = useState<string | null>(null);
+  const lastMotionSounds = useRef<Record<string, number>>({});
   const [loadedStorageKey, setLoadedStorageKey] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({});
@@ -71,6 +77,11 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
   useEffect(() => {
     if (loadedStorageKey === storageKey) window.localStorage.setItem(storageKey, JSON.stringify(clips));
   }, [storageKey, clips, loadedStorageKey]);
+  useEffect(() => {
+    try { const raw = window.localStorage.getItem(motionKey); const value = raw ? JSON.parse(raw) : []; setMotion(Array.isArray(value) ? value : []); }
+    catch { setMotion([]); }
+  }, [motionKey]);
+  useEffect(() => { window.localStorage.setItem(motionKey, JSON.stringify(motion)); }, [motionKey, motion]);
 
   useEffect(() => {
     let cancelled = false;
@@ -87,7 +98,9 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
     return () => { cancelled = true; };
   }, [assets, projectId, mediaUrls]);
 
-  const totalDuration = clips.reduce((max, clip) => Math.max(max, clipEnd(clip)), 0);
+  const totalDuration = Math.max(clips.reduce((max, clip) => Math.max(max, clipEnd(clip)), 0), motion.reduce((max, item) => Math.max(max, item.startMs + item.durationMs), 0));
+  const selectedMotion = motion.find(item => item.id === selectedMotionId) ?? null;
+  const activeMotion = motion.filter(item => playheadMs >= item.startMs && playheadMs < item.startMs + item.durationMs);
   const selectedClip = clips.find(clip => clip.id === selectedId) ?? clips[0] ?? null;
   const selectedAsset = selectedClip ? assets.find(asset => asset.id === selectedClip.assetId) ?? null : null;
   const visualClips = useMemo(() => clips.filter(clip => assets.find(asset => asset.id === clip.assetId)?.kind !== "audio"), [clips, assets]);
@@ -177,6 +190,31 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
     }
   }, [playheadMs, previewTick, playing, visualClips, audioClips, assets]);
 
+  function addMotion(preset: MotionGraphic["preset"]) {
+    const definition = motionPresets.find(item => item.id === preset)!;
+    const item: MotionGraphic = { id: crypto.randomUUID(), text: preset === "typewriter" ? "YOUR WORD" : "WATCH", startMs: playheadMs, durationMs: 1800, preset, color: "#ffffff", accent: "#c4a5ff", fontSize: 64, sound: definition.sound };
+    setMotion(current => [...current, item]); setSelectedMotionId(item.id); stopPlayback();
+  }
+  function updateMotion(id: string, patch: Partial<MotionGraphic>) { setMotion(current => current.map(item => item.id === id ? { ...item, ...patch } : item)); }
+  function removeMotion(id: string) { setMotion(current => current.filter(item => item.id !== id)); if (selectedMotionId === id) setSelectedMotionId(null); }
+  useEffect(() => {
+    if (!playing) return;
+    for (const item of motion) {
+      if (playheadMs >= item.startMs && playheadMs < item.startMs + 80 && lastMotionSounds.current[item.id] !== item.startMs && item.sound !== "none") {
+        lastMotionSounds.current[item.id] = item.startMs;
+        try {
+          const Ctx = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+          if (!Ctx) continue;
+          const ctx = new Ctx(); const osc = ctx.createOscillator(); const gain = ctx.createGain(); const now = ctx.currentTime;
+          const tones: Record<string, number[]> = { pop: [620,150], click: [1200,700], whoosh: [260,70], impact: [105,35] };
+          const tone = tones[item.sound] || tones.pop; osc.type = item.sound === "impact" ? "triangle" : "sine";
+          osc.frequency.setValueAtTime(tone[0], now); osc.frequency.exponentialRampToValueAtTime(tone[1], now + 0.18);
+          gain.gain.setValueAtTime(0.0001, now); gain.gain.exponentialRampToValueAtTime(0.22, now + 0.01); gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.2);
+          osc.connect(gain); gain.connect(ctx.destination); osc.start(now); osc.stop(now + 0.22); window.setTimeout(() => void ctx.close(), 500);
+        } catch { /* Sound effects are optional if audio is unavailable. */ }
+      }
+    }
+  }, [playheadMs, playing, motion]);
   function updateClip(id: string, patch: Partial<TimelineClip>) {
     setClips(current => current.map(clip => clip.id === id ? { ...clip, ...patch } : clip));
   }
@@ -282,6 +320,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
             previewAsset.kind === "video" ? <video key={previewAsset.id} ref={videoRef} src={previewUrl} muted={!!previewClip?.muted} controls={!playing} onError={() => setLoadError("Formato não suportado pelo preview do sistema.")} /> :
             previewAsset.kind === "audio" ? <div className="audio-preview"><AudioLines size={48}/><b>{previewAsset.name}</b><span>Áudio na timeline</span></div> :
             <img src={previewUrl} alt={previewAsset.name} />}
+            {activeMotion.map(item => <div key={item.id} className={"motion-overlay motion-" + item.preset} style={{ "--motion-color": item.color, "--motion-accent": item.accent, "--motion-size": item.fontSize + "px", "--motion-delay": "-" + Math.min(650, playheadMs - item.startMs) + "ms" } as CSSProperties}><span>{item.text}</span></div>)}
         </div>
         <div className="editor-transport">
           <button className="transport-button" title="Voltar ao início" onClick={() => { stopPlayback(); seekTo(0); }}><SkipBack size={15}/></button>
@@ -299,6 +338,29 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
         </div>}
       </section>
     </div>
+
+    <section className="editor-panel motion-panel">
+      <div className="editor-panel-head"><div><b>✦ Motion Graphics</b><small>Textos animados com efeitos sonoros sincronizados.</small></div><span className="preview-live">{motion.length} ELEMENTO(S)</span></div>
+      <div className="motion-presets">{motionPresets.map(preset => <button key={preset.id} className="motion-preset" onClick={() => addMotion(preset.id)}><b>{preset.label}</b><small>Som: {preset.sound}</small><span>+ Adicionar</span></button>)}</div>
+      {selectedMotion && <div className="motion-inspector">
+        <label>Texto<input value={selectedMotion.text} onChange={event => updateMotion(selectedMotion.id, { text: event.target.value })} maxLength={32}/></label>
+        <div className="motion-fields">
+          <label>Início (s)<input type="number" min="0" step="0.1" value={(selectedMotion.startMs / 1000).toFixed(1)} onChange={event => updateMotion(selectedMotion.id, { startMs: Math.max(0, Number(event.target.value) * 1000) })}/></label>
+          <label>Duração (s)<input type="number" min="0.3" step="0.1" value={(selectedMotion.durationMs / 1000).toFixed(1)} onChange={event => updateMotion(selectedMotion.id, { durationMs: Math.max(300, Number(event.target.value) * 1000) })}/></label>
+          <label>Tamanho<input type="number" min="18" max="140" value={selectedMotion.fontSize} onChange={event => updateMotion(selectedMotion.id, { fontSize: Math.max(18, Math.min(140, Number(event.target.value))) })}/></label>
+        </div>
+        <div className="motion-fields">
+          <label>Animação<select value={selectedMotion.preset} onChange={event => updateMotion(selectedMotion.id, { preset: event.target.value as MotionGraphic["preset"] })}>{motionPresets.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}</select></label>
+          <label>Efeito sonoro<select value={selectedMotion.sound} onChange={event => updateMotion(selectedMotion.id, { sound: event.target.value as MotionGraphic["sound"] })}><option value="pop">Pop</option><option value="whoosh">Whoosh</option><option value="impact">Impacto</option><option value="click">Click</option><option value="none">Sem som</option></select></label>
+        </div>
+        <div className="motion-colors"><label>Texto<input type="color" value={selectedMotion.color} onChange={event => updateMotion(selectedMotion.id, { color: event.target.value })}/></label><label>Destaque<input type="color" value={selectedMotion.accent} onChange={event => updateMotion(selectedMotion.id, { accent: event.target.value })}/></label><button className="danger-action" onClick={() => removeMotion(selectedMotion.id)}>Excluir elemento</button></div>
+      </div>}
+      <div className="motion-track-row"><div className="track-label">ANIMAÇÕES</div><div className="track-clips timeline-canvas motion-timeline" onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); const id = event.dataTransfer.getData("text/motion-graphic-id"); if (!id) return; const rect = event.currentTarget.getBoundingClientRect(); updateMotion(id, { startMs: Math.max(0, ((event.clientX - rect.left) / rect.width) * scale) }); }}>
+        {motion.map(item => <button key={item.id} draggable onDragStart={event => { event.dataTransfer.setData("text/motion-graphic-id", item.id); event.dataTransfer.effectAllowed = "move"; }} className={"motion-timeline-clip " + (selectedMotionId === item.id ? "selected" : "")} style={{ left: (item.startMs / scale * 100) + "%", width: Math.max(3, item.durationMs / scale * 100) + "%" }} onClick={() => { setSelectedMotionId(item.id); seekTo(item.startMs); }}><b>{item.text}</b><small>{item.preset}</small></button>)}
+        {!motion.length && <span className="track-hint">Adicione um preset para criar textos animados.</span>}
+        <div className="timeline-cursor" style={{ left: (playheadMs / scale * 100) + "%" }}/>
+      </div></div>
+    </section>
 
     <section className="editor-panel timeline-panel">
       <div className="editor-panel-head"><div><b>Timeline</b><small>Arraste os clipes horizontalmente para sincronizar áudio e vídeo.</small></div><span className="timeline-duration">{timeLabel(totalDuration)}</span></div>

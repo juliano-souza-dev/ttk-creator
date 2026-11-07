@@ -163,3 +163,40 @@
 .timeline-position-control strong{font:9px 'DM Mono';color:#c5b4df}
 .timeline-position-control input{grid-column:1/-1;width:100%;accent-color:#a78be2}
 .timeline-canvas>audio{display:none}
+
+/* Motion Graphics studio and animated typography */
+.preview-stage{position:relative}
+.motion-overlay{position:absolute;inset:15px;display:flex;align-items:center;justify-content:center;pointer-events:none;overflow:hidden}
+.motion-overlay span{animation-delay:var(--motion-delay,0ms)!important;display:inline-block;max-width:90%;padding:.08em .18em;color:var(--motion-color);font:900 var(--motion-size)/.95 'Space Grotesk',sans-serif;letter-spacing:-.055em;text-align:center;text-transform:uppercase;text-shadow:0 5px 24px #000b,0 1px 3px #000;overflow-wrap:anywhere}
+.motion-overlay span:after{content:"";display:block;height:5px;width:65%;margin:9px auto 0;background:var(--motion-accent);border-radius:8px;box-shadow:0 0 22px var(--motion-accent)}
+.motion-pop span{animation:motion-pop-in .55s cubic-bezier(.16,1.4,.35,1) both}
+.motion-slide span{animation:motion-slide-in .65s cubic-bezier(.16,1,.3,1) both}
+.motion-zoom span{animation:motion-zoom-in .7s cubic-bezier(.12,.9,.2,1) both}
+.motion-typewriter span{clip-path:inset(0 100% 0 0);animation:motion-type-in 1s steps(12,end) .05s forwards}
+.motion-impact span{animation:motion-impact-in .72s cubic-bezier(.12,1.6,.35,1) both}
+@keyframes motion-pop-in{0%{opacity:0;transform:scale(.25) rotate(-8deg)}70%{opacity:1;transform:scale(1.12) rotate(2deg)}100%{transform:scale(1)}}
+@keyframes motion-slide-in{from{opacity:0;transform:translateX(100%) skewX(-12deg)}to{opacity:1;transform:translateX(0) skewX(0)}}
+@keyframes motion-zoom-in{from{opacity:0;transform:scale(2.4);filter:blur(12px)}to{opacity:1;transform:scale(1);filter:blur(0)}}
+@keyframes motion-type-in{to{clip-path:inset(0 0 0 0)}}
+@keyframes motion-impact-in{0%{opacity:0;transform:scale(3) rotate(7deg);filter:blur(9px)}65%{opacity:1;transform:scale(.88) rotate(-2deg);filter:blur(0)}100%{transform:scale(1)}}
+.motion-panel{padding-bottom:13px}
+.motion-presets{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;padding:13px}
+.motion-preset{min-width:0;min-height:76px;padding:10px;border:1px solid #40354d;border-radius:8px;background:linear-gradient(145deg,#292233,#1b1921);text-align:left;color:#e8def5;cursor:pointer;display:flex;flex-direction:column;gap:5px;transition:transform .16s,border-color .16s}
+.motion-preset:hover{transform:translateY(-2px);border-color:#a98be5}
+.motion-preset b{font-size:10px}.motion-preset small{font-size:8px;color:#958ba2}.motion-preset span{margin-top:auto;color:#c5a8f5;font-size:8px;font-weight:700}
+.motion-inspector{margin:0 13px 13px;padding:13px;border:1px solid #393241;border-radius:8px;background:#1c1922;display:grid;gap:11px}
+.motion-inspector label{display:grid;gap:5px;color:#958da0;font-size:9px}
+.motion-inspector input:not([type=color]),.motion-inspector select{width:100%;height:31px;padding:0 8px;border:1px solid #45404e;border-radius:5px;background:#111115;color:#e9e1f0;font-size:10px}
+.motion-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.motion-colors{display:flex;align-items:center;gap:20px}
+.motion-colors label{display:flex;align-items:center;gap:8px}
+.motion-colors input{width:30px;height:25px;border:0;background:transparent}
+.motion-colors .danger-action{border:1px solid #604044;border-radius:5px;background:#302023;color:#e6a3a3;padding:7px 10px;font-size:9px}
+.motion-track-row{display:grid;grid-template-columns:128px minmax(0,1fr);min-height:88px;border-top:1px solid #2a2730}
+.motion-timeline{position:relative;min-height:88px;background-color:#1b1721!important}
+.motion-timeline-clip{position:absolute;top:15px;bottom:15px;min-width:0;padding:6px 8px;border:1px solid #8061a8;border-radius:6px;background:linear-gradient(120deg,#594078,#332541);color:#fff;text-align:left;overflow:hidden;cursor:pointer;display:flex;flex-direction:column;justify-content:center;gap:4px}
+.motion-timeline-clip.selected{outline:2px solid #d0b1ff;outline-offset:1px}
+.motion-timeline-clip b{font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.motion-timeline-clip small{font-size:7px;color:#ddc8f7;white-space:nowrap}
+@media(max-width:900px){.motion-presets{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:600px){.motion-presets{grid-template-columns:repeat(2,minmax(0,1fr))}.motion-fields{grid-template-columns:1fr}.motion-track-row{grid-template-columns:95px minmax(0,1fr)}}
