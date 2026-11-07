@@ -91,6 +91,13 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
     return () => element.pause();
   }, [playing, activeClip?.id, activeAsset?.id, activeUrl, activeIndex, totalDuration, clipOffsets, stopPlayback]);
 
+  useEffect(() => {
+    const element = mediaRef.current;
+    if (!element) return;
+    element.currentTime = localPlayhead / 1000;
+    if (playing) void element.play().catch(() => setPlaying(false));
+  }, [previewTick]);
+
   function addToTimeline(asset: MediaAsset, targetIndex = clips.length) {
     const duration = defaultDuration(asset);
     const clip: TimelineClip = { id: crypto.randomUUID(), assetId: asset.id, startMs: 0, endMs: duration, volume: 100 };
