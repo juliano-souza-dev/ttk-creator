@@ -356,7 +356,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
       </>}
       {activeTool === "audio" && <>
         <div className="editor-panel-head"><div><b>Áudio</b><small>Arquivos de áudio da biblioteca</small></div><button className="secondary-action" onClick={onAddMedia}><Plus size={14}/> Importar</button></div>
-        <div className="editor-media-grid">{assets.filter(asset => asset.kind === "audio").map(asset => <article key={asset.id} className="editor-media-card"><div className="editor-media-thumb audio"><AudioLines size={22}/><small>{timeLabel(defaultDuration(asset))}</small></div><b title={asset.name}>{asset.name}</b><button className="icon-action" title="Adicionar à timeline" onClick={() => addToTimeline(asset)}><Plus size={15}/></button></article>)}</div>
+        <div className="editor-media-grid">{assets.filter(asset => asset.kind === "audio").map(asset => <article key={asset.id} className="editor-media-card" draggable onDragStart={event => event.dataTransfer.setData("text/asset-id", asset.id)}><div className="editor-media-thumb audio"><AudioLines size={22}/><small>{timeLabel(defaultDuration(asset))}</small></div><b title={asset.name}>{asset.name}</b><button className="icon-action" title="Adicionar à timeline" onClick={() => addToTimeline(asset)}><Plus size={15}/></button></article>)}</div>
         {!assets.some(asset => asset.kind === "audio") && <div className="editor-empty"><AudioLines size={24}/><b>Nenhum áudio importado</b><p>Importe uma faixa para adicioná-la à timeline.</p><button className="primary" onClick={onAddMedia}><Plus size={14}/> Importar áudio</button></div>}
       </>}
       {activeTool === "text" && <>
