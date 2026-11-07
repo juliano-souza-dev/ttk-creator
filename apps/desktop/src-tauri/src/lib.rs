@@ -23,6 +23,8 @@ pub fn run() {
             let log_guard = logging::initialize(&app_data_directory.join("logs"))
                 .map_err(std::io::Error::other)?;
             let projects_directory = app_data_directory.join("projects");
+            let sound_library_directory = app_data_directory.join("sound-library");
+            std::fs::create_dir_all(&sound_library_directory)?;
             let database_path: PathBuf = app_data_directory.join("tiktok-media-creator.sqlite3");
             let repository = Arc::new(
                 SqliteProjectRepository::initialize(database_path, &projects_directory)
@@ -37,6 +39,7 @@ pub fn run() {
                 projects,
                 media,
                 media_storage,
+                sound_library_directory,
                 _log_guard: Mutex::new(Some(log_guard)),
             });
             Ok(())
@@ -51,6 +54,10 @@ pub fn run() {
             commands::inspect_youtube,
             commands::download_youtube,
             commands::check_ffmpeg,
+            commands::list_global_sounds,
+            commands::import_global_sound,
+            commands::get_global_sound_path,
+            commands::delete_global_sound,
             commands::export_timeline
         ])
         .run(tauri::generate_context!())
