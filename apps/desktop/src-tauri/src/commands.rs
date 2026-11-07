@@ -336,8 +336,15 @@ fn ffmpeg_escape_text(value: &str) -> String {
         .replace('\r', "")
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ExportProgress {
+    percent: f64,
+}
+
 #[tauri::command]
 pub async fn export_timeline(
+    app: AppHandle,
     request: ExportRequest,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
@@ -346,7 +353,7 @@ pub async fn export_timeline(
     let sound_directory = state.sound_library_directory.clone();
 
     tauri::async_runtime::spawn_blocking(move || {
-        use std::{path::PathBuf, process::Command};
+        use std::{io::{BufRead, BufReader, Read}, path::PathBuf, process::{Command, Stdio}, thread};
 
         if request.clips.is_empty() {
             return Err("Adicione pelo menos uma mídia à timeline antes de exportar.".to_string());
@@ -567,16 +574,44 @@ pub async fn export_timeline(
         } else {
             args.push("-an".into());
         }
-        args.extend(["-t".into(), format!("{:.3}", total_ms as f64 / 1000.0), "-c:v".into(), "libx264".into(), "-preset".into(), "medium".into(), "-crf".into(), "20".into(), "-pix_fmt".into(), "yuv420p".into(), "-movflags".into(), "+faststart".into(), destination.to_string_lossy().into_owned()]);
+        args.extend(["-t".into(), format!("{:.3}", total_ms as f64 / 1000.0), "-c:v".into(), "libx264".into(), "-preset".into(), "medium".into(), "-crf".into(), "20".into(), "-pix_fmt".into(), "yuv420p".into(), "-movflags".into(), "+faststart".into(), "-progress".into(), "pipe:1".into(), "-nostats".into(), destination.to_string_lossy().into_owned()]);
 
-        let output_result = Command::new(&ffmpeg_path).args(&args).output();
+        let output_result = Command::new(&ffmpeg_path)
+            .args(&args)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn();
         // Remova o arquivo temporário mesmo quando o processo não conseguir iniciar.
         let _ = std::fs::remove_file(&filter_script_path);
-        let output = output_result.map_err(|error| {
+        let mut child = output_result.map_err(|error| {
             format!("Não foi possível iniciar o FFmpeg em {}: {error}", ffmpeg_path.display())
         })?;
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
+        // stderr é drenado em paralelo para evitar bloqueio do processo caso o FFmpeg
+        // produza muitas mensagens de diagnóstico durante a renderização.
+        let stderr_pipe = child.stderr.take();
+        let stderr_reader = thread::spawn(move || {
+            let mut details = String::new();
+            if let Some(mut pipe) = stderr_pipe {
+                let _ = pipe.read_to_string(&mut details);
+            }
+            details
+        });
+        if let Some(stdout) = child.stdout.take() {
+            let reader = BufReader::new(stdout);
+            for line in reader.lines().flatten() {
+                if let Some(value) = line.strip_prefix("out_time_us=") {
+                    if let Ok(elapsed_us) = value.parse::<u64>() {
+                        let total_us = total_ms.saturating_mul(1000).max(1);
+                        let percent = ((elapsed_us as f64 / total_us as f64) * 100.0).clamp(0.0, 99.0);
+                        let _ = app.emit("export-progress", ExportProgress { percent });
+                    }
+                }
+            }
+        }
+        let status = child.wait().map_err(|error| format!("Não foi possível aguardar o FFmpeg: {error}"))?;
+        let stderr = stderr_reader.join().unwrap_or_else(|_| "Não foi possível ler o diagnóstico do FFmpeg.".into());
+        if !status.success() {
+            let stderr = stderr.as_str();
             // Preserve o contexto do erro. A última linha isolada ("Filter not
             // found", por exemplo) esconde a causa útil ("No such filter: drawtext").
             let detail = stderr.lines().rev().take(12).collect::<Vec<_>>()
@@ -588,6 +623,7 @@ pub async fn export_timeline(
             };
             return Err(format!("Falha ao exportar o vídeo:\n{detail}"));
         }
+        let _ = app.emit("export-progress", ExportProgress { percent: 100.0 });
         Ok(destination.to_string_lossy().into_owned())
     }).await.map_err(|error| format!("A exportação foi interrompida: {error}"))?
 }
