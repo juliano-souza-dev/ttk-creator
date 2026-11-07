@@ -212,3 +212,37 @@
 .motion-position-controls label strong{font:10px 'DM Mono';color:#d8c6ee}
 .motion-position-controls input{grid-column:1/-1;width:100%;accent-color:#b99ae8;cursor:pointer}
 .motion-position-controls button{white-space:nowrap;min-height:30px}
+
+
+/* Compact editing layout: keep preview and motion controls visible together. */
+.editor-workspace{grid-template-columns:minmax(220px,.72fr) minmax(0,1.28fr);align-items:start}
+.editor-topline,.timeline-panel{grid-column:1/-1}
+.editor-grid{display:contents}
+.editor-bin{grid-column:1;grid-row:2}
+.editor-preview{grid-column:2;grid-row:2 / span 2;min-height:0}
+.motion-panel{grid-column:1;grid-row:3;max-height:min(620px,calc(100vh - 180px));overflow-y:auto;overscroll-behavior:contain}
+.editor-assets{max-height:190px}
+.preview-stage{min-height:300px}
+.preview-media-frame{width:min(100%,420px);height:min(560px,calc(100vh - 250px));min-height:300px}
+.motion-presets{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;padding:10px}
+.motion-preset{min-height:62px;padding:8px}
+.motion-inspector{margin:0 10px 10px;padding:10px}
+.motion-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
+.motion-position-controls{grid-template-columns:1fr 1fr}
+.motion-position-controls button{grid-column:1/-1}
+.motion-overlay{width:100%;max-width:100%;box-sizing:border-box}
+.motion-overlay span{display:block;width:100%;max-width:100%;box-sizing:border-box;padding:.08em .12em;white-space:normal;overflow-wrap:anywhere}
+.motion-overlay.motion-selected span{outline:none;outline-offset:0;border-radius:0}
+.motion-overlay span:after{display:none}
+@media(max-width:900px){
+  .editor-workspace{grid-template-columns:1fr}
+  .editor-topline,.timeline-panel,.editor-bin,.editor-preview,.motion-panel{grid-column:1;grid-row:auto}
+  .editor-grid{display:grid;grid-template-columns:1fr}
+  .editor-preview{min-height:360px}
+  .motion-panel{max-height:none}
+  .preview-media-frame{height:min(420px,100%);width:min(236px,100%)}
+}
+@media(max-width:600px){
+  .motion-fields{grid-template-columns:1fr}
+  .motion-presets{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
