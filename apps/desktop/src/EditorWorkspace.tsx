@@ -733,6 +733,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
     <section className="editor-timeline">
       <div className="timeline-toolbar">
         <div className="timeline-toolbar-actions">
+          <small className="timeline-group-hint">Ctrl + clique para selecionar vários itens</small>
           <button className="secondary-action" onClick={createGroup} disabled={selectedMembers.length < 2}><Copy size={13}/> Agrupar ({selectedMembers.length})</button>
           <button className="secondary-action" onClick={ungroupSelection} disabled={!groups.some(group => group.members.some(member => selectedMembers.includes(member)))}>Desagrupar</button>
           <button className="secondary-action" onClick={splitAtPlayhead} disabled={!activeVisualClip || playheadMs <= activeVisualClip.timelineStartMs + 250 || playheadMs >= clipEnd(activeVisualClip) - 250}><Scissors size={13}/> Dividir no cursor</button>
