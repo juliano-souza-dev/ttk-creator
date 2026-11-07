@@ -385,3 +385,9 @@
 .timeline-lanes .timeline-ruler-canvas{height:28px;position:relative;min-width:100%;border-bottom:1px solid #302b37}
 .timeline-lanes .timeline-ruler-canvas span{position:absolute;top:6px;transform:translateX(-50%);font:8px 'DM Mono';color:#827b8d}
 .timeline-lanes .timeline-ruler-canvas span.major{color:#b7a8cc}
+
+
+/* Smooth clip entrance and expandable image durations in the timeline */
+.editor-center .preview-media-frame>video,
+.editor-center .preview-media-frame>img{transition:opacity 360ms ease,transform 360ms ease;will-change:opacity,transform}
+.timeline-lanes .timeline-canvas{min-width:max(100%,100%)}
