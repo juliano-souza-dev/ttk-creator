@@ -455,7 +455,7 @@
 
 .motion-overlay span.motion-main-text{font-family:var(--motion-font,Arial,sans-serif);font-weight:var(--motion-weight,900);text-transform:none;letter-spacing:normal;display:flex;align-items:center;justify-content:center;gap:.22em;width:100%;max-width:100%;text-align:inherit}
 /* Motion animation state is calculated from the timeline playhead and mirrored by FFmpeg. */
-.motion-overlay span.motion-main-text{display:block;width:max-content;max-width:90%;min-width:0;padding:0;line-height:1.12;letter-spacing:normal;text-transform:none;text-shadow:none;white-space:pre-wrap;overflow-wrap:anywhere;word-break:normal;animation:none!important;transform-origin:center center;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+.motion-overlay span.motion-main-text{display:block;width:max-content;max-width:100%;min-width:0;padding:0;line-height:1.12;letter-spacing:normal;text-transform:none;text-shadow:none;white-space:pre-wrap;overflow-wrap:anywhere;word-break:normal;animation:none!important;transform-origin:center center;box-decoration-break:clone;-webkit-box-decoration-break:clone}
 .motion-overlay span.motion-main-text:after{display:none!important}
 
 .motion-overlay .motion-inline-icon{display:inline-block;flex:none;font-style:normal;font-family:"Segoe UI Emoji","Apple Color Emoji",sans-serif;font-size:.82em;line-height:1}
