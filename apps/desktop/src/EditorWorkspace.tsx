@@ -15,7 +15,7 @@ type TimelineClip = {
   muted?: boolean;
 };
 type Props = { projectId: string; assets: MediaAsset[]; onAddMedia: () => void };
-type MotionGraphic = { id: string; text: string; startMs: number; durationMs: number; preset: "pop" | "slide" | "zoom" | "typewriter" | "impact"; color: string; accent: string; fontSize: number; sound: "pop" | "whoosh" | "impact" | "click" | "none" };
+type MotionGraphic = { id: string; text: string; startMs: number; durationMs: number; preset: "pop" | "slide" | "zoom" | "typewriter" | "impact"; color: string; accent: string; fontSize: number; x: number; y: number; sound: "pop" | "whoosh" | "impact" | "click" | "none" };
 const motionPresets = [{id:"pop",label:"Pop Impact",sound:"pop"},{id:"slide",label:"Slide + Whoosh",sound:"whoosh"},{id:"zoom",label:"Zoom + Impact",sound:"impact"},{id:"typewriter",label:"Typewriter",sound:"click"},{id:"impact",label:"Big Impact",sound:"impact"}] as const;
 const defaultDuration = (asset: MediaAsset) => asset.durationMs && asset.durationMs > 0 ? asset.durationMs : asset.kind === "image" ? 5000 : 30000;
 const clipDuration = (clip: TimelineClip) => Math.max(0, clip.sourceEndMs - clip.sourceStartMs);
@@ -192,7 +192,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
 
   function addMotion(preset: MotionGraphic["preset"]) {
     const definition = motionPresets.find(item => item.id === preset)!;
-    const item: MotionGraphic = { id: crypto.randomUUID(), text: preset === "typewriter" ? "YOUR WORD" : "WATCH", startMs: playheadMs, durationMs: 1800, preset, color: "#ffffff", accent: "#c4a5ff", fontSize: 64, sound: definition.sound };
+    const item: MotionGraphic = { id: crypto.randomUUID(), text: preset === "typewriter" ? "YOUR WORD" : "WATCH", startMs: playheadMs, durationMs: 1800, preset, color: "#ffffff", accent: "#c4a5ff", fontSize: 64, x: 50, y: 50, sound: definition.sound };
     setMotion(current => [...current, item]); setSelectedMotionId(item.id); stopPlayback();
   }
   function updateMotion(id: string, patch: Partial<MotionGraphic>) { setMotion(current => current.map(item => item.id === id ? { ...item, ...patch } : item)); }
@@ -315,12 +315,16 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
       <section className="editor-panel editor-preview">
         <div className="editor-panel-head"><div><b>Pré-visualização</b><small>{previewAsset?.name ?? "Selecione um clipe na timeline"}</small></div><span className="preview-live">{playing ? "REPRODUZINDO" : "PRÉVIA"}</span></div>
         <div className="preview-stage">
+          <div className="preview-media-frame">
           {!previewAsset ? <div className="preview-placeholder"><Play size={27}/><span>Seu vídeo aparecerá aqui</span><small>Adicione uma mídia à timeline para visualizar</small></div> :
             !previewUrl ? <div className="preview-placeholder"><span>Não foi possível carregar esta mídia.</span><small>{loadError || "Verifique se o arquivo continua na pasta do projeto."}</small></div> :
             previewAsset.kind === "video" ? <video key={previewAsset.id} ref={videoRef} src={previewUrl} muted={!!previewClip?.muted} controls={!playing} onError={() => setLoadError("Formato não suportado pelo preview do sistema.")} /> :
             previewAsset.kind === "audio" ? <div className="audio-preview"><AudioLines size={48}/><b>{previewAsset.name}</b><span>Áudio na timeline</span></div> :
             <img src={previewUrl} alt={previewAsset.name} />}
-            {activeMotion.map(item => <div key={item.id} className={"motion-overlay motion-" + item.preset} style={{ "--motion-color": item.color, "--motion-accent": item.accent, "--motion-size": item.fontSize + "px", "--motion-delay": "-" + Math.min(650, playheadMs - item.startMs) + "ms" } as CSSProperties}><span>{item.text}</span></div>)}
+          {activeMotion.map(item => <div key={item.id} className={"motion-overlay motion-" + item.preset + (selectedMotionId === item.id ? " motion-selected" : "")} style={{ "--motion-color": item.color, "--motion-accent": item.accent, "--motion-size": item.fontSize + "px", "--motion-delay": "-" + Math.min(650, playheadMs - item.startMs) + "ms", "--motion-x": item.x + "%", "--motion-y": item.y + "%" } as CSSProperties}>
+            <span onPointerDown={event => { if (selectedMotionId !== item.id) setSelectedMotionId(item.id); event.preventDefault(); event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={event => { if (!event.currentTarget.hasPointerCapture(event.pointerId)) return; const rect = event.currentTarget.parentElement?.getBoundingClientRect(); if (!rect) return; updateMotion(item.id, { x: Math.max(0, Math.min(100, ((event.clientX - rect.left) / rect.width) * 100)), y: Math.max(0, Math.min(100, ((event.clientY - rect.top) / rect.height) * 100)) }); }} onPointerUp={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); }}>{item.text}</span>
+          </div>)}
+          </div>
         </div>
         <div className="editor-transport">
           <button className="transport-button" title="Voltar ao início" onClick={() => { stopPlayback(); seekTo(0); }}><SkipBack size={15}/></button>
@@ -352,6 +356,11 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
         <div className="motion-fields">
           <label>Animação<select value={selectedMotion.preset} onChange={event => updateMotion(selectedMotion.id, { preset: event.target.value as MotionGraphic["preset"] })}>{motionPresets.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}</select></label>
           <label>Efeito sonoro<select value={selectedMotion.sound} onChange={event => updateMotion(selectedMotion.id, { sound: event.target.value as MotionGraphic["sound"] })}><option value="pop">Pop</option><option value="whoosh">Whoosh</option><option value="impact">Impacto</option><option value="click">Click</option><option value="none">Sem som</option></select></label>
+        </div>
+        <div className="motion-position-controls">
+          <label>Horizontal <strong>{Math.round(selectedMotion.x)}%</strong><input type="range" min="0" max="100" value={selectedMotion.x} onChange={event => updateMotion(selectedMotion.id, { x: Number(event.target.value) })}/></label>
+          <label>Vertical <strong>{Math.round(selectedMotion.y)}%</strong><input type="range" min="0" max="100" value={selectedMotion.y} onChange={event => updateMotion(selectedMotion.id, { y: Number(event.target.value) })}/></label>
+          <button className="secondary-action" onClick={() => updateMotion(selectedMotion.id, { x: 50, y: 50 })}>Centralizar</button>
         </div>
         <div className="motion-colors"><label>Texto<input type="color" value={selectedMotion.color} onChange={event => updateMotion(selectedMotion.id, { color: event.target.value })}/></label><label>Destaque<input type="color" value={selectedMotion.accent} onChange={event => updateMotion(selectedMotion.id, { accent: event.target.value })}/></label><button className="danger-action" onClick={() => removeMotion(selectedMotion.id)}>Excluir elemento</button></div>
       </div>}
