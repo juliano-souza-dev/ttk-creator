@@ -59,6 +59,7 @@ export const desktopApi = {
           ...item,
           startMs: Math.max(0, Math.round(item.startMs)),
           endMs: Math.max(0, Math.round(item.endMs)),
+          durationMs: Math.max(1, Math.round(item.durationMs ?? (item.endMs - item.startMs))),
           fontSize: Math.max(1, Math.round(item.fontSize)),
         })),
       },
