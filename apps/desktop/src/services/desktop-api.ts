@@ -42,7 +42,7 @@ export const desktopApi = {
 
   checkFfmpeg: () => invoke<string>("check_ffmpeg"),
 
-  exportTimeline: (request: { projectId: string; destination: string; clips: Array<{ id: string; assetId: string; kind: "video" | "audio" | "image"; sourceStartMs: number; sourceEndMs: number; timelineStartMs: number; volume: number; muted?: boolean }>; motion: Array<{ text: string; startMs: number; endMs: number; color: string; fontSize: number; x: number; y: number; fontFamily?: string; fontWeight?: number; textAlign?: "left" | "center" | "right"; soundId?: string; soundVolume?: number }>; soundEffects?: Array<{ soundId: string; timelineStartMs: number; volume: number }> }) =>
+  exportTimeline: (request: { projectId: string; destination: string; clips: Array<{ id: string; assetId: string; kind: "video" | "audio" | "image"; sourceStartMs: number; sourceEndMs: number; timelineStartMs: number; volume: number; muted?: boolean }>; motion: Array<{ text: string; startMs: number; endMs: number; durationMs?: number; preset?: "pop" | "slide" | "zoom" | "typewriter" | "impact" | "composition"; color: string; fontSize: number; x: number; y: number; fontFamily?: string; fontWeight?: number; textAlign?: "left" | "center" | "right"; soundId?: string; soundVolume?: number }>; soundEffects?: Array<{ soundId: string; timelineStartMs: number; volume: number }> }) =>
     invoke<string>("export_timeline", {
       request: {
         ...request,
