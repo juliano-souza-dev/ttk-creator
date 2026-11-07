@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, DragEvent, PointerEvent as ReactPointerEvent } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { desktopApi } from "./services/desktop-api";
+import { save } from "@tauri-apps/plugin-dialog";
+import { desktopApi, isDesktopRuntime } from "./services/desktop-api";
 import type { MediaAsset } from "./shared/types";
-import { AudioLines, Film, Plus, Play, Pause, Trash2, Scissors, Copy, SkipBack, SkipForward, Volume2, VolumeX, Music2, Type, WandSparkles, MousePointer2, ChevronLeft, ChevronRight } from "lucide-react";
+import { AudioLines, Film, Plus, Play, Pause, Trash2, Scissors, Copy, SkipBack, SkipForward, Volume2, VolumeX, Music2, Type, WandSparkles, MousePointer2, ChevronLeft, ChevronRight, Download, LoaderCircle } from "lucide-react";
 
 type TimelineClip = {
   id: string;
@@ -44,6 +45,8 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({});
   const [loadError, setLoadError] = useState("");
+  const [exporting, setExporting] = useState(false);
+  const [exportMessage, setExportMessage] = useState("");
   const [playing, setPlaying] = useState(false);
   const [playheadMs, setPlayheadMs] = useState(0);
   const [previewTick, setPreviewTick] = useState(0);
@@ -229,6 +232,58 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
       }
     }
   }, [playheadMs, previewTick, playing, visualClips, audioClips, assets]);
+
+  async function exportVideo() {
+    if (!isDesktopRuntime || exporting) return;
+    stopPlayback();
+    setExporting(true);
+    setExportMessage("Verificando FFmpeg...");
+    try {
+      const version = await desktopApi.checkFfmpeg();
+      const destination = await save({
+        title: "Exportar vídeo",
+        defaultPath: "video.mp4",
+        filters: [{ name: "Vídeo MP4", extensions: ["mp4"] }],
+      });
+      if (!destination) {
+        setExportMessage("");
+        return;
+      }
+      setExportMessage("Renderizando com " + version + "...");
+      const exportClips = clips.flatMap(clip => {
+        const asset = assets.find(item => item.id === clip.assetId);
+        return asset ? [{
+          id: clip.id,
+          assetId: clip.assetId,
+          kind: asset.kind,
+          sourceStartMs: clip.sourceStartMs,
+          sourceEndMs: clip.sourceEndMs,
+          timelineStartMs: clip.timelineStartMs,
+          volume: clip.volume,
+          muted: clip.muted,
+        }] : [];
+      });
+      const result = await desktopApi.exportTimeline({
+        projectId,
+        destination,
+        clips: exportClips,
+        motion: motion.map(item => ({
+          text: item.text,
+          startMs: item.startMs,
+          endMs: item.endMs,
+          color: item.color,
+          fontSize: item.fontSize,
+          x: item.x,
+          y: item.y,
+        })),
+      });
+      setExportMessage("Vídeo exportado: " + result);
+    } catch (error) {
+      setExportMessage("Não foi possível exportar: " + String(error));
+    } finally {
+      setExporting(false);
+    }
+  }
 
   function addMotion(preset: MotionGraphic["preset"]) {
     const definition = motionPresets.find(item => item.id === preset)!;
@@ -486,8 +541,9 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
         <button className="transport-button" title="Voltar ao início" onClick={() => { stopPlayback(); seekTo(0); }}><SkipBack size={15}/></button>
         <button className="transport-play" onClick={togglePlayback} disabled={!clips.length}>{playing ? <Pause size={17}/> : <Play size={17} fill="currentColor"/>}{playing ? "Pausar" : "Reproduzir"}</button>
         <button className="transport-button" title="Avançar 5 segundos" onClick={() => seekTo(playheadMs + 5000)}><SkipForward size={15}/></button>
-        <span className="transport-time">{timeLabel(playheadMs)} / {timeLabel(totalDuration)}</span>
+        <span className="transport-time">{timeLabel(playheadMs)} / {timeLabel(totalDuration)}</span><button className="primary export-inline" onClick={() => void exportVideo()} disabled={exporting || !visualClips.length}>{exporting ? <LoaderCircle className="spin" size={15}/> : <Download size={15}/>} {exporting ? "Exportando..." : "Exportar MP4"}</button>
       </div>
+      {exportMessage && <div className="export-status" role="status">{exportMessage}</div>}
     </section>
     <aside className="editor-properties">
       {selectedMotion ? <>
