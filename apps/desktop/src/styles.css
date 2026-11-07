@@ -451,3 +451,7 @@
 .topbar-location{display:flex;align-items:center;gap:10px;min-width:0}
 .back-to-projects{flex:none;padding:7px 10px;border-color:#45404d;background:#211e27;color:#e9e5ef}
 .back-to-projects:hover{border-color:#8b7da5;background:#2a2632}
+
+.motion-overlay span.motion-main-text{font-family:var(--motion-font,Arial,sans-serif);font-weight:var(--motion-weight,900);text-transform:none;letter-spacing:normal;display:flex;align-items:center;justify-content:center;gap:.22em;width:100%;max-width:100%;text-align:inherit}
+.motion-overlay .motion-inline-icon{display:inline-block;flex:none;font-style:normal;font-family:"Segoe UI Emoji","Apple Color Emoji",sans-serif;font-size:.82em;line-height:1}
+.property-hint{display:block;color:#918b9c;font-size:11px;line-height:1.4;margin-top:-5px}
