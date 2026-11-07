@@ -490,8 +490,10 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
     const deltaMs = (event.clientX - drag.lastX) / rect.width * scale;
     drag.lastX = event.clientX;
     const keys = new Set(drag.memberKeys);
-    setClips(current => current.map(item => keys.has(memberKeyForClip(item.id)) ? { ...item, timelineStartMs: Math.max(0, item.timelineStartMs + deltaMs) } : item));
-    setMotion(current => current.map(item => keys.has(memberKeyForMotion(item.id)) ? (() => { const startMs = Math.max(0, item.startMs + deltaMs); return { ...item, startMs, endMs: startMs + (item.endMs - item.startMs), durationMs: item.endMs - item.startMs }; })() : item));
+    const memberStarts = [...clips.filter(item => keys.has(memberKeyForClip(item.id))).map(item => item.timelineStartMs), ...motion.filter(item => keys.has(memberKeyForMotion(item.id))).map(item => item.startMs)];
+    const safeDeltaMs = Math.max(-(memberStarts.length ? Math.min(...memberStarts) : 0), deltaMs);
+    setClips(current => current.map(item => keys.has(memberKeyForClip(item.id)) ? { ...item, timelineStartMs: item.timelineStartMs + safeDeltaMs } : item));
+    setMotion(current => current.map(item => keys.has(memberKeyForMotion(item.id)) ? (() => { const startMs = item.startMs + safeDeltaMs; return { ...item, startMs, endMs: startMs + (item.endMs - item.startMs), durationMs: item.endMs - item.startMs }; })() : item));
   }
   function endClipMove(event: ReactPointerEvent<HTMLDivElement>) {
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
@@ -522,8 +524,10 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
     if (drag.edge === "move") {
       drag.lastX = event.clientX;
       const keys = new Set(drag.memberKeys);
-      setClips(current => current.map(item => keys.has(memberKeyForClip(item.id)) ? { ...item, timelineStartMs: Math.max(0, item.timelineStartMs + deltaMs) } : item));
-      setMotion(current => current.map(item => keys.has(memberKeyForMotion(item.id)) ? (() => { const startMs = Math.max(0, item.startMs + deltaMs); return { ...item, startMs, endMs: startMs + (item.endMs - item.startMs), durationMs: item.endMs - item.startMs }; })() : item));
+      const memberStarts = [...clips.filter(item => keys.has(memberKeyForClip(item.id))).map(item => item.timelineStartMs), ...motion.filter(item => keys.has(memberKeyForMotion(item.id))).map(item => item.startMs)];
+      const safeDeltaMs = Math.max(-(memberStarts.length ? Math.min(...memberStarts) : 0), deltaMs);
+      setClips(current => current.map(item => keys.has(memberKeyForClip(item.id)) ? { ...item, timelineStartMs: item.timelineStartMs + safeDeltaMs } : item));
+      setMotion(current => current.map(item => keys.has(memberKeyForMotion(item.id)) ? (() => { const startMs = item.startMs + safeDeltaMs; return { ...item, startMs, endMs: startMs + (item.endMs - item.startMs), durationMs: item.endMs - item.startMs }; })() : item));
     } else if (drag.edge === "start") {
       updateMotion(drag.id, { startMs: Math.max(0, Math.min(drag.endMs - 300, drag.startMs + deltaMs)) });
     } else {
