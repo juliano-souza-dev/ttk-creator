@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, DragEvent, PointerEvent as ReactPointerEvent } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { desktopApi, isDesktopRuntime } from "./services/desktop-api";
 import type { GlobalSound } from "./services/desktop-api";
@@ -97,6 +98,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
   const [mediaDurations, setMediaDurations] = useState<Record<string, number>>({});
   const [loadError, setLoadError] = useState("");
   const [exporting, setExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState(0);
   const [exportMessage, setExportMessage] = useState("");
   const [playing, setPlaying] = useState(false);
   const [playheadMs, setPlayheadMs] = useState(0);
@@ -365,9 +367,14 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
     if (!isDesktopRuntime || exporting) return;
     stopPlayback();
     setExporting(true);
-    setExportMessage("Verificando FFmpeg...");
+    setExportProgress(0);
+    setExportMessage("");
+    let unlistenProgress: (() => void) | undefined;
     try {
-      const version = await desktopApi.checkFfmpeg();
+      unlistenProgress = await listen<{ percent: number }>("export-progress", event => {
+        setExportProgress(Math.max(0, Math.min(100, event.payload.percent)));
+      });
+      await desktopApi.checkFfmpeg();
       const destination = await save({
         title: "Exportar vídeo",
         defaultPath: "video.mp4",
@@ -377,7 +384,6 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
         setExportMessage("");
         return;
       }
-      setExportMessage("Renderizando com " + version + "...");
       const exportClips = clips.flatMap(clip => {
         const asset = assets.find(item => item.id === clip.assetId);
         return asset ? [{
@@ -398,10 +404,11 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
         motion: motion.map(item => ({startMs:item.startMs,endMs:item.endMs,durationMs:item.durationMs,preset:item.preset,x:item.x,y:item.y,text:(item.icon ? item.icon + " " : "") + item.text,color:item.color,fontSize:item.fontSize,fontFamily:item.fontFamily || "Arial",fontWeight:item.fontWeight || 900,textAlign:item.textAlign || "center",isCaption:!!item.isCaption})),
         soundEffects: motion.filter(item => !!item.soundId).map(item => ({ soundId: item.soundId!, timelineStartMs: item.startMs, volume: item.soundVolume ?? 80 })),
       });
-      setExportMessage("Vídeo exportado: " + result);
+      setExportProgress(100);
     } catch (error) {
       setExportMessage("Não foi possível exportar: " + String(error));
     } finally {
+      unlistenProgress?.();
       setExporting(false);
     }
   }
@@ -695,7 +702,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
         <button className="transport-button" title="Avançar 5 segundos" onClick={() => seekTo(playheadMs + 5000)}><SkipForward size={15}/></button>
         <span className="transport-time">{timeLabel(playheadMs)} / {timeLabel(totalDuration)}</span><button className="primary export-inline" onClick={() => void exportVideo()} disabled={exporting || !visualClips.length}>{exporting ? <LoaderCircle className="spin" size={15}/> : <Download size={15}/>} {exporting ? "Exportando..." : "Exportar MP4"}</button>
       </div>
-      {exportMessage && <div className="export-status" role="status">{exportMessage}</div>}
+      {exporting && <div className="export-progress" role="status" aria-label={`Exportando vídeo: ${Math.floor(exportProgress)}%`}><div className="export-progress-track"><div className="export-progress-fill" style={{ width: `${exportProgress}%` }}/></div><span>{Math.floor(exportProgress)}%</span></div>}{exportMessage && <div className="export-status export-error" role="alert">{exportMessage}</div>}
     </section>
     <aside className="editor-properties">
       {selectedMotion ? <>
