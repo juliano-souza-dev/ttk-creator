@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { DragEvent } from "react";
+import type { CSSProperties, DragEvent } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { desktopApi } from "./services/desktop-api";
 import type { MediaAsset } from "./shared/types";
@@ -320,7 +320,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
             previewAsset.kind === "video" ? <video key={previewAsset.id} ref={videoRef} src={previewUrl} muted={!!previewClip?.muted} controls={!playing} onError={() => setLoadError("Formato não suportado pelo preview do sistema.")} /> :
             previewAsset.kind === "audio" ? <div className="audio-preview"><AudioLines size={48}/><b>{previewAsset.name}</b><span>Áudio na timeline</span></div> :
             <img src={previewUrl} alt={previewAsset.name} />}
-            {activeMotion.map(item => <div key={item.id} className={"motion-overlay motion-" + item.preset} style={{ "--motion-color": item.color, "--motion-accent": item.accent, "--motion-size": item.fontSize + "px", "--motion-delay": "-" + Math.min(650, playheadMs - item.startMs) + "ms" } as React.CSSProperties}><span>{item.text}</span></div>)}
+            {activeMotion.map(item => <div key={item.id} className={"motion-overlay motion-" + item.preset} style={{ "--motion-color": item.color, "--motion-accent": item.accent, "--motion-size": item.fontSize + "px", "--motion-delay": "-" + Math.min(650, playheadMs - item.startMs) + "ms" } as CSSProperties}><span>{item.text}</span></div>)}
         </div>
         <div className="editor-transport">
           <button className="transport-button" title="Voltar ao início" onClick={() => { stopPlayback(); seekTo(0); }}><SkipBack size={15}/></button>
