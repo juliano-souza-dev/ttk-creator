@@ -438,3 +438,4 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
       {audioClips.map(clip=>{const asset=assets.find(item=>item.id===clip.assetId);const url=mediaUrls[clip.assetId];return asset&&url?<audio key={clip.id} ref={node=>{audioRefs.current[clip.id]=node;}} src={url} preload="auto"/>:null;})}
     </section>
   </section>;
+}
