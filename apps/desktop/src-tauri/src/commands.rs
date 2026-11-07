@@ -453,15 +453,29 @@ pub async fn export_timeline(
         // que cria uma etapa drawtext por caractere). No Windows, passar todo
         // esse conteúdo como argumento pode ultrapassar o limite do CreateProcess
         // e gerar ERROR_FILENAME_EXCED_RANGE (os error 206). Grave-o em arquivo.
-        let (ffmpeg_path, _) = resolve_ffmpeg_executable()?;
+        let (ffmpeg_path, ffmpeg_version) = resolve_ffmpeg_executable()?;
         let filter_script_path = std::env::temp_dir()
             .join(format!("framelab-filter-{}.txt", uuid::Uuid::new_v4()));
         let filter_script = filter_parts.join(";\n");
         std::fs::write(&filter_script_path, filter_script.as_bytes())
             .map_err(|error| format!("Não foi possível preparar os filtros de exportação: {error}"))?;
 
+        // FFmpeg 8.0 removed the deprecated -filter_complex_script option.
+        // Newer versions load option values from files with the /option syntax.
+        let ffmpeg_major = ffmpeg_version
+            .split("version ")
+            .nth(1)
+            .and_then(|value| value.split('.').next())
+            .and_then(|value| value.parse::<u32>().ok())
+            .unwrap_or(0);
+        let filter_file_option = if ffmpeg_major >= 8 {
+            "-/filter_complex"
+        } else {
+            "-filter_complex_script"
+        };
+
         args.extend([
-            "-filter_complex_script".into(),
+            filter_file_option.into(),
             filter_script_path.to_string_lossy().into_owned(),
             "-map".into(),
             "[vout]".into(),
