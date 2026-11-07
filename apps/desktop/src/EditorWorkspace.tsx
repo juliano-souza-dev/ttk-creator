@@ -18,7 +18,7 @@ type TimelineClip = {
   transitionMs?: number;
 };
 type Props = { projectId: string; assets: MediaAsset[]; onAddMedia: () => void };
-type TrimDrag = { clipId: string; edge: "start" | "end"; startX: number; sourceStartMs: number; sourceEndMs: number; timelineStartMs: number };
+type TrimDrag = { clipId: string; edge: "start" | "end"; startX: number; sourceStartMs: number; sourceEndMs: number; timelineStartMs: number; scaleMs: number };
 type ClipMoveDrag = { clipId: string; startX: number; timelineStartMs: number };
 type MotionTrimDrag = { id: string; edge: "start" | "end" | "move"; startX: number; startMs: number; endMs: number };
 type MotionGraphic = { id: string; text: string; startMs: number; endMs: number; durationMs: number; preset: "pop" | "slide" | "zoom" | "typewriter" | "impact"; color: string; accent: string; fontSize: number; x: number; y: number; sound: "pop" | "whoosh" | "impact" | "click" | "none" };
@@ -318,7 +318,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
     event.preventDefault();
     event.stopPropagation();
     event.currentTarget.setPointerCapture(event.pointerId);
-    trimDragRef.current = { clipId: clip.id, edge, startX: event.clientX, sourceStartMs: clip.sourceStartMs, sourceEndMs: clip.sourceEndMs, timelineStartMs: clip.timelineStartMs };
+    trimDragRef.current = { clipId: clip.id, edge, startX: event.clientX, sourceStartMs: clip.sourceStartMs, sourceEndMs: clip.sourceEndMs, timelineStartMs: clip.timelineStartMs, scaleMs: scale };
   }
   function moveClipTrim(event: ReactPointerEvent<HTMLSpanElement>) {
     const drag = trimDragRef.current;
@@ -326,7 +326,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
     const canvas = event.currentTarget.closest(".timeline-canvas");
     const rect = canvas?.getBoundingClientRect();
     if (!rect || !rect.width) return;
-    const deltaMs = (event.clientX - drag.startX) / rect.width * scale;
+    const deltaMs = (event.clientX - drag.startX) / rect.width * drag.scaleMs;
     const clip = clips.find(item => item.id === drag.clipId);
     const asset = clip ? assets.find(item => item.id === clip.assetId) : null;
     if (!clip || !asset) return;
