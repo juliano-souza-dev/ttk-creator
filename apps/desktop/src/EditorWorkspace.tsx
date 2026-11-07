@@ -154,6 +154,11 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
   }, [playing, totalDuration, visualClips, audioClips, assets, stopPlayback]);
 
   useEffect(() => {
+    if (!videoRef.current || !previewClip || previewAsset?.kind !== "video") return;
+    videoRef.current.volume = Math.max(0, Math.min(1, previewClip.volume / 100));
+  }, [previewClip?.id, previewClip?.volume, previewAsset?.id]);
+
+  useEffect(() => {
     if (playing) return;
     const visual = visualClips.find(clip => playheadMs >= clip.timelineStartMs && playheadMs < clipEnd(clip));
     const asset = visual ? assets.find(item => item.id === visual.assetId) : null;
