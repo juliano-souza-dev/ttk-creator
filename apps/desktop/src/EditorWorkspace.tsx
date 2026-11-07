@@ -485,7 +485,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
           <div className="timeline-cursor" style={{left:playheadMs/scale*100+"%"}}/>
         </div></div>
       </div>
-      {audioClips.map(clip=>{const asset=assets.find(item=>item.id===clip.assetId);const url=mediaUrls[clip.assetId];return asset&&url?<audio key={clip.id} ref={node=>{audioRefs.current[clip.id]=node;}} src={url} preload="auto"/>:null;})}
+      {audioClips.map(clip=>{const asset=assets.find(item=>item.id===clip.assetId);const url=mediaUrls[clip.assetId];return asset&&url?<audio key={clip.id} ref={node=>{audioRefs.current[clip.id]=node;}} src={url} preload="metadata" onLoadedMetadata={event=>{const durationMs=event.currentTarget.duration*1000;if(!Number.isFinite(durationMs)||durationMs<=0)return;setClips(current=>current.map(item=>item.id===clip.id&&(item.sourceEndMs===30000||item.sourceEndMs>durationMs)?{...item,sourceEndMs:Math.round(durationMs)}:item));}}/>:null;})}
     </section>
   </section>;
 }
