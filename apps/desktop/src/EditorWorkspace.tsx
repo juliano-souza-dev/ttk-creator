@@ -156,7 +156,15 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
   const previewUrl = previewAsset ? mediaUrls[previewAsset.id] : "";
   const selectedDuration = selectedClip ? clipDuration(selectedClip) : 0;
   const selectedSourceDuration = selectedAsset ? (selectedAsset.kind === "image" ? Math.max(10 * 60 * 1000, selectedClip?.sourceEndMs ?? 0) : Math.max(defaultDuration(selectedAsset), selectedClip?.sourceEndMs ?? 0)) : 0;
-  const scale = Math.max(totalDuration, 10000);
+  // Keep the timeline's time-to-pixel scale anchored to the full source duration.
+  // If scale followed the trimmed clip end, a 60s clip would visually expand to fill
+  // the canvas as soon as it was shortened, making the trim handle impossible to
+  // drag back out past the new end.
+  const sourceTimelineDuration = clips.reduce((max, clip) => {
+    const asset = assets.find(item => item.id === clip.assetId);
+    return Math.max(max, asset ? defaultDuration(asset) : clip.sourceEndMs);
+  }, 0);
+  const scale = Math.max(totalDuration, sourceTimelineDuration, 10000);
 
   const stopPlayback = useCallback(() => {
     setPlaying(false);
