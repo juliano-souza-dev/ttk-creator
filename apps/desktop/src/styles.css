@@ -398,3 +398,13 @@
 .timeline-lanes .positioned-clip.audio{min-width:28px;max-width:none;overflow:hidden}
 .timeline-lanes .positioned-clip.audio .clip-trim-edge{width:10px;background:#e7b27f;opacity:.75}
 .timeline-lanes .positioned-clip.audio .clip-trim-edge:hover{opacity:1}
+
+
+/* Motion Graphics composition prototype: one timeline item, independently editable content. */
+.motion-overlay span.motion-composition{display:flex;flex-direction:column;align-items:center;gap:7px;width:max-content;max-width:90vw;padding:18px 26px 20px;border:1px solid #ffffff35;border-radius:16px;background:linear-gradient(145deg,#101d32eF,#182b3be8);box-shadow:0 18px 55px #0009;backdrop-filter:blur(8px);text-transform:none;letter-spacing:normal;line-height:1.1;white-space:normal}
+.motion-overlay span.motion-composition:after{display:none}
+.motion-overlay span.motion-composition strong{display:block;color:var(--motion-color);font:900 var(--motion-size)/.95 'Space Grotesk',sans-serif;letter-spacing:-.055em;text-transform:uppercase;text-shadow:0 4px 18px #0008}
+.motion-overlay span.motion-composition .motion-translation{display:block;width:auto;margin:0;padding:0;color:var(--motion-accent);font:600 .52em/1.15 'DM Sans',sans-serif;letter-spacing:0;text-transform:none;text-shadow:none}
+.motion-overlay span.motion-composition .motion-translation:after,.motion-overlay span.motion-composition .motion-supporting-text:after{display:none}
+.motion-overlay span.motion-composition .motion-composition-icon{display:block;color:var(--motion-accent);font:700 .72em/1 'DM Sans',sans-serif;font-style:normal;text-shadow:0 2px 12px #0008}
+.motion-overlay span.motion-composition .motion-supporting-text{display:block;width:auto;margin:0;padding:0;color:#f1f4fa;font:500 .28em/1.25 'DM Sans',sans-serif;letter-spacing:.01em;text-transform:none;text-shadow:none}
