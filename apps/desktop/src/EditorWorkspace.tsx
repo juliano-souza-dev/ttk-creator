@@ -320,7 +320,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
             previewAsset.kind === "video" ? <video key={previewAsset.id} ref={videoRef} src={previewUrl} muted={!!previewClip?.muted} controls={!playing} onError={() => setLoadError("Formato não suportado pelo preview do sistema.")} /> :
             previewAsset.kind === "audio" ? <div className="audio-preview"><AudioLines size={48}/><b>{previewAsset.name}</b><span>Áudio na timeline</span></div> :
             <img src={previewUrl} alt={previewAsset.name} />}
-            {activeMotion.map(item => <div key={item.id} className={"motion-overlay motion-" + item.preset} style={{ "--motion-color": item.color, "--motion-accent": item.accent, "--motion-size": item.fontSize + "px" } as React.CSSProperties}><span>{item.text}</span></div>)}
+            {activeMotion.map(item => <div key={item.id} className={"motion-overlay motion-" + item.preset} style={{ "--motion-color": item.color, "--motion-accent": item.accent, "--motion-size": item.fontSize + "px", "--motion-delay": "-" + Math.min(650, playheadMs - item.startMs) + "ms" } as React.CSSProperties}><span>{item.text}</span></div>)}
         </div>
         <div className="editor-transport">
           <button className="transport-button" title="Voltar ao início" onClick={() => { stopPlayback(); seekTo(0); }}><SkipBack size={15}/></button>
@@ -355,8 +355,8 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
         </div>
         <div className="motion-colors"><label>Texto<input type="color" value={selectedMotion.color} onChange={event => updateMotion(selectedMotion.id, { color: event.target.value })}/></label><label>Destaque<input type="color" value={selectedMotion.accent} onChange={event => updateMotion(selectedMotion.id, { accent: event.target.value })}/></label><button className="danger-action" onClick={() => removeMotion(selectedMotion.id)}>Excluir elemento</button></div>
       </div>}
-      <div className="motion-track-row"><div className="track-label">ANIMAÇÕES</div><div className="track-clips timeline-canvas motion-timeline">
-        {motion.map(item => <button key={item.id} className={"motion-timeline-clip " + (selectedMotionId === item.id ? "selected" : "")} style={{ left: (item.startMs / scale * 100) + "%", width: Math.max(3, item.durationMs / scale * 100) + "%" }} onClick={() => { setSelectedMotionId(item.id); seekTo(item.startMs); }}><b>{item.text}</b><small>{item.preset}</small></button>)}
+      <div className="motion-track-row"><div className="track-label">ANIMAÇÕES</div><div className="track-clips timeline-canvas motion-timeline" onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); const id = event.dataTransfer.getData("text/motion-graphic-id"); if (!id) return; const rect = event.currentTarget.getBoundingClientRect(); updateMotion(id, { startMs: Math.max(0, ((event.clientX - rect.left) / rect.width) * scale) }); }}>
+        {motion.map(item => <button key={item.id} draggable onDragStart={event => { event.dataTransfer.setData("text/motion-graphic-id", item.id); event.dataTransfer.effectAllowed = "move"; }} className={"motion-timeline-clip " + (selectedMotionId === item.id ? "selected" : "")} style={{ left: (item.startMs / scale * 100) + "%", width: Math.max(3, item.durationMs / scale * 100) + "%" }} onClick={() => { setSelectedMotionId(item.id); seekTo(item.startMs); }}><b>{item.text}</b><small>{item.preset}</small></button>)}
         {!motion.length && <span className="track-hint">Adicione um preset para criar textos animados.</span>}
         <div className="timeline-cursor" style={{ left: (playheadMs / scale * 100) + "%" }}/>
       </div></div>
