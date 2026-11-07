@@ -115,6 +115,10 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
 
   // A single timeline clock drives the preview and every audio lane, keeping them aligned.
   useEffect(() => {
+    if (playing && totalDuration > 0 && playheadMs >= totalDuration) stopPlayback();
+  }, [playing, playheadMs, totalDuration, stopPlayback]);
+
+  useEffect(() => {
     if (!playing) return;
     lastTickRef.current = performance.now();
     const timer = window.setInterval(() => {
@@ -143,9 +147,6 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
             node.volume = Math.max(0, Math.min(1, clip.volume / 100));
             if (node.paused) void node.play().catch(() => setLoadError("Não foi possível reproduzir o áudio externo."));
           } else if (!node.paused) node.pause();
-        }
-        if (next >= totalDuration) {
-          window.setTimeout(() => stopPlayback(), 0);
         }
         return next;
       });
