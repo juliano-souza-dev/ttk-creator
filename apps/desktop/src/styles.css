@@ -344,7 +344,7 @@
 .timeline-lanes .track-label{padding:8px;font-size:8px}
 .timeline-lanes .timeline-canvas{position:relative;display:block;min-height:58px;height:58px;overflow:hidden;padding:0;flex:0 0 auto;background-image:repeating-linear-gradient(90deg,transparent 0,transparent calc(1% - 1px),#ffffff0a calc(1% - 1px),#ffffff0a 1%)}
 .timeline-lanes .audio-track .timeline-canvas{background-color:#1d1916}
-.timeline-lanes .positioned-clip{top:7px;bottom:7px};min-width:28px;max-width:none
+.timeline-lanes .positioned-clip{top:7px;bottom:7px;min-width:28px;max-width:none}
 .timeline-lanes .motion-timeline{min-height:58px;height:58px}
 .timeline-lanes .timeline-cursor{top:0;bottom:0}
 .timeline-lanes .timeline-clip{border-radius:5px;padding:5px 7px;gap:3px}
