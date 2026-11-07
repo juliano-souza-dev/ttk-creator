@@ -447,3 +447,7 @@
 .composition-element-row>b{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}
 .composition-element-row>small{color:#93899f}
 .composition-element-row>i{font-style:normal;color:#e69b9b;font-size:18px;padding:0 4px}
+
+.topbar-location{display:flex;align-items:center;gap:10px;min-width:0}
+.back-to-projects{flex:none;padding:7px 10px;border-color:#45404d;background:#211e27;color:#e9e5ef}
+.back-to-projects:hover{border-color:#8b7da5;background:#2a2632}
