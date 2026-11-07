@@ -110,7 +110,6 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
   const previewClip = activeVisualClip ?? selectedClip;
   const previewAsset = activeVisualClip ? activeVisualAsset : selectedAsset;
   const previewUrl = previewAsset ? mediaUrls[previewAsset.id] : "";
-  const previewSourceMs = previewClip ? previewClip.sourceStartMs + Math.max(0, playheadMs - previewClip.timelineStartMs) : 0;
   const selectedDuration = selectedClip ? clipDuration(selectedClip) : 0;
   const selectedSourceDuration = selectedAsset ? defaultDuration(selectedAsset) : 0;
   const scale = Math.max(totalDuration, 10000);
