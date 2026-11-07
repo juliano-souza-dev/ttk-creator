@@ -128,6 +128,10 @@ pub struct ExportMotion {
     font_size: u32,
     x: f64,
     y: f64,
+    #[serde(default)]
+    font_family: String,
+    #[serde(default)]
+    font_weight: u32,
 }
 
 #[derive(serde::Deserialize)]
@@ -248,10 +252,17 @@ pub async fn export_timeline(
         for (index, item) in request.motion.iter().enumerate() {
             let text = ffmpeg_escape_text(&item.text);
             let color = if item.color.starts_with('#') && item.color.len() == 7 { format!("0x{}", &item.color[1..]) } else { "white".into() };
+            let (font_name, bold_suffix) = match item.font_family.as_str() {
+                "Georgia" => ("georgia", "bd"), "Impact" => ("impact", ""),
+                "Trebuchet MS" => ("trebuc", "bd"), "Verdana" => ("verdana", "bd"),
+                "Courier New" => ("cour", "bd"), _ => ("arial", "bd"),
+            };
+            let font_suffix = if item.font_weight >= 700 { bold_suffix } else { "" };
+            let font_file = format!("C\\:/Windows/Fonts/{font_name}{font_suffix}.ttf");
             let x = (item.x.clamp(0.0, 100.0) / 100.0) * 1080.0;
             let y = (item.y.clamp(0.0, 100.0) / 100.0) * 1920.0;
             let next = format!("text{index}");
-            filter_parts.push(format!("[{previous}]drawtext=fontfile='C\\:/Windows/Fonts/arial.ttf':text='{text}':fontcolor={color}:fontsize={}:x='{}-text_w/2':y='{}-text_h/2':enable='between(t,{:.3},{:.3})'[{next}]", item.font_size.clamp(18, 140), x, y, item.start_ms as f64 / 1000.0, item.end_ms as f64 / 1000.0));
+            filter_parts.push(format!("[{previous}]drawtext=fontfile='{font_file}':text='{text}':fontcolor={color}:fontsize={}:x='{}-text_w/2':y='{}-text_h/2':enable='between(t,{:.3},{:.3})'[{next}]", item.font_size.clamp(18, 180), x, y, item.start_ms as f64 / 1000.0, item.end_ms as f64 / 1000.0));
             previous = next;
         }
         filter_parts.push(format!("[{previous}]format=yuv420p[vout]"));
