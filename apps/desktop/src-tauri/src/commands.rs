@@ -220,6 +220,67 @@ fn resolve_ffmpeg_executable() -> Result<(std::path::PathBuf, String), String> {
     ))
 }
 
+fn ensure_ffmpeg_capabilities(
+    ffmpeg_path: &std::path::Path,
+    required_filters: &[&str],
+) -> Result<(), String> {
+    use std::process::Command;
+
+    let output = Command::new(ffmpeg_path)
+        .args(["-hide_banner", "-filters"])
+        .output()
+        .map_err(|error| format!("Não foi possível consultar os filtros do FFmpeg: {error}"))?;
+    if !output.status.success() {
+        let details = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Não foi possível listar os filtros do FFmpeg: {}", details.trim()));
+    }
+
+    let listing = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let missing: Vec<&str> = required_filters.iter().copied().filter(|required| {
+        !listing.lines().any(|line| {
+            let fields: Vec<&str> = line.split_whitespace().collect();
+            fields.get(1).copied() == Some(*required)
+        })
+    }).collect();
+
+    if !missing.is_empty() {
+        let missing_list = missing.join(", ");
+        let hint = if missing.contains(&"drawtext") {
+            " O filtro drawtext exige uma compilação do FFmpeg com suporte a FreeType."
+        } else {
+            ""
+        };
+        return Err(format!(
+            "A instalação do FFmpeg encontrada não oferece os filtros necessários: {missing_list}.{hint}"
+        ));
+    }
+
+    let encoders = Command::new(ffmpeg_path)
+        .args(["-hide_banner", "-encoders"])
+        .output()
+        .map_err(|error| format!("Não foi possível consultar os encoders do FFmpeg: {error}"))?;
+    let encoder_listing = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&encoders.stdout),
+        String::from_utf8_lossy(&encoders.stderr)
+    );
+    let has_h264 = encoder_listing.lines().any(|line| {
+        let fields: Vec<&str> = line.split_whitespace().collect();
+        fields.get(1).copied() == Some("libx264")
+    });
+    if !has_h264 {
+        return Err(
+            "A instalação do FFmpeg não inclui o encoder libx264, necessário para exportar MP4.".into()
+        );
+    }
+
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn check_ffmpeg() -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(|| {
@@ -449,11 +510,24 @@ pub async fn export_timeline(
             filter_parts.push(format!("{}amix=inputs={}:duration=longest:dropout_transition=0,atrim=duration={:.3}[aout]", audio_labels.join(""), audio_labels.len(), total_ms as f64 / 1000.0));
         }
 
+        // Valide os recursos reais do binário antes de iniciar a exportação.
+        // Builds do FFmpeg podem existir sem filtros opcionais, como drawtext.
+        let (ffmpeg_path, ffmpeg_version) = resolve_ffmpeg_executable()?;
+        let mut required_filters = vec![
+            "color", "scale", "crop", "fps", "setsar", "setpts", "overlay", "format",
+        ];
+        if !request.motion.is_empty() {
+            required_filters.push("drawtext");
+        }
+        if !audio_labels.is_empty() {
+            required_filters.extend(["asetpts", "volume", "adelay", "amix", "atrim"]);
+        }
+        ensure_ffmpeg_capabilities(&ffmpeg_path, &required_filters)?;
+
         // O grafo pode ficar muito grande (principalmente com typewriter,
         // que cria uma etapa drawtext por caractere). No Windows, passar todo
-        // esse conteúdo como argumento pode ultrapassar o limite do CreateProcess
-        // e gerar ERROR_FILENAME_EXCED_RANGE (os error 206). Grave-o em arquivo.
-        let (ffmpeg_path, ffmpeg_version) = resolve_ffmpeg_executable()?;
+        // esse conteúdo como argumento pode ultrapassar o limite do CreateProcess.
+        // Grave-o em arquivo e use a sintaxe compatível com a versão do FFmpeg.
         let filter_script_path = std::env::temp_dir()
             .join(format!("framelab-filter-{}.txt", uuid::Uuid::new_v4()));
         let filter_script = filter_parts.join(";\n");
@@ -503,8 +577,16 @@ pub async fn export_timeline(
         })?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            let detail = stderr.lines().last().unwrap_or("Erro desconhecido do FFmpeg");
-            return Err(format!("Falha ao exportar o vídeo: {detail}"));
+            // Preserve o contexto do erro. A última linha isolada ("Filter not
+            // found", por exemplo) esconde a causa útil ("No such filter: drawtext").
+            let detail = stderr.lines().rev().take(12).collect::<Vec<_>>()
+                .into_iter().rev().collect::<Vec<_>>().join("\\n");
+            let detail = if detail.trim().is_empty() {
+                "O FFmpeg encerrou com erro, mas não forneceu detalhes.".to_string()
+            } else {
+                detail
+            };
+            return Err(format!("Falha ao exportar o vídeo:\\n{detail}"));
         }
         Ok(destination.to_string_lossy().into_owned())
     }).await.map_err(|error| format!("A exportação foi interrompida: {error}"))?
