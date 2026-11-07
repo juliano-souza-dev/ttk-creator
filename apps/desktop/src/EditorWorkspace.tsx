@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, DragEvent } from "react";
+import type { CSSProperties, DragEvent, PointerEvent as ReactPointerEvent } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { desktopApi } from "./services/desktop-api";
 import type { MediaAsset } from "./shared/types";
@@ -15,6 +15,7 @@ type TimelineClip = {
   muted?: boolean;
 };
 type Props = { projectId: string; assets: MediaAsset[]; onAddMedia: () => void };
+type TrimDrag = { clipId: string; edge: "start" | "end"; startX: number; sourceStartMs: number; sourceEndMs: number; timelineStartMs: number };
 type MotionGraphic = { id: string; text: string; startMs: number; durationMs: number; preset: "pop" | "slide" | "zoom" | "typewriter" | "impact"; color: string; accent: string; fontSize: number; x: number; y: number; sound: "pop" | "whoosh" | "impact" | "click" | "none" };
 const motionPresets = [{id:"pop",label:"Pop Impact",sound:"pop"},{id:"slide",label:"Slide + Whoosh",sound:"whoosh"},{id:"zoom",label:"Zoom + Impact",sound:"impact"},{id:"typewriter",label:"Typewriter",sound:"click"},{id:"impact",label:"Big Impact",sound:"impact"}] as const;
 const defaultDuration = (asset: MediaAsset) => asset.durationMs && asset.durationMs > 0 ? asset.durationMs : asset.kind === "image" ? 5000 : 30000;
@@ -45,6 +46,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
   const audioRefs = useRef<Record<string, HTMLAudioElement | null>>({});
   const motionAudioContext = useRef<AudioContext | null>(null);
   const lastTickRef = useRef(0);
+  const trimDragRef = useRef<TrimDrag | null>(null);
 
   useEffect(() => {
     try {
@@ -221,6 +223,35 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
   function updateClip(id: string, patch: Partial<TimelineClip>) {
     setClips(current => current.map(clip => clip.id === id ? { ...clip, ...patch } : clip));
   }
+  function beginClipTrim(event: ReactPointerEvent<HTMLSpanElement>, clip: TimelineClip, edge: "start" | "end") {
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    trimDragRef.current = { clipId: clip.id, edge, startX: event.clientX, sourceStartMs: clip.sourceStartMs, sourceEndMs: clip.sourceEndMs, timelineStartMs: clip.timelineStartMs };
+  }
+  function moveClipTrim(event: ReactPointerEvent<HTMLSpanElement>) {
+    const drag = trimDragRef.current;
+    if (!drag || !event.currentTarget.hasPointerCapture(event.pointerId)) return;
+    const canvas = event.currentTarget.closest(".timeline-canvas");
+    const rect = canvas?.getBoundingClientRect();
+    if (!rect || !rect.width) return;
+    const deltaMs = (event.clientX - drag.startX) / rect.width * scale;
+    const clip = clips.find(item => item.id === drag.clipId);
+    const asset = clip ? assets.find(item => item.id === clip.assetId) : null;
+    if (!clip || !asset) return;
+    if (drag.edge === "start") {
+      const sourceStartMs = Math.max(0, Math.min(drag.sourceEndMs - 250, drag.sourceStartMs + deltaMs));
+      const shift = sourceStartMs - drag.sourceStartMs;
+      updateClip(drag.clipId, { sourceStartMs, timelineStartMs: Math.max(0, drag.timelineStartMs + shift) });
+    } else {
+      const sourceEndMs = Math.max(drag.sourceStartMs + 250, Math.min(defaultDuration(asset), drag.sourceEndMs + deltaMs));
+      updateClip(drag.clipId, { sourceEndMs });
+    }
+  }
+  function endClipTrim(event: ReactPointerEvent<HTMLSpanElement>) {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    trimDragRef.current = null;
+  }
 
   function addToTimeline(asset: MediaAsset, atMs?: number) {
     const duration = defaultDuration(asset);
@@ -319,7 +350,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
       {activeTool === "media" && <>
         <div className="editor-panel-head"><div><b>Biblioteca</b><small>{assets.length} arquivo(s) disponíveis</small></div><button className="secondary-action" onClick={onAddMedia}><Plus size={14}/> Importar</button></div>
         {assets.length ? <div className="editor-media-grid">{assets.map(asset => <article key={asset.id} className="editor-media-card">
-          <div className={"editor-media-thumb " + asset.kind}>{asset.kind === "image" && mediaUrls[asset.id] ? <img src={mediaUrls[asset.id]} alt={asset.name}/> : asset.kind === "video" ? <Film size={22}/> : <AudioLines size={22}/>}<small>{timeLabel(defaultDuration(asset))}</small></div>
+          <div className={"editor-media-thumb " + asset.kind}>{asset.kind === "image" && mediaUrls[asset.id] ? <img src={mediaUrls[asset.id]} alt={asset.name}/> : asset.kind === "video" && mediaUrls[asset.id] ? <video src={mediaUrls[asset.id]} muted preload="auto" playsInline/> : asset.kind === "video" ? <Film size={22}/> : <AudioLines size={22}/>}<small>{timeLabel(defaultDuration(asset))}</small></div>
           <b title={asset.name}>{asset.name}</b><button className="icon-action" title="Adicionar à timeline" onClick={() => addToTimeline(asset)}><Plus size={15}/></button>
         </article>)}</div> : <div className="editor-empty"><Film size={24}/><b>Nenhuma mídia importada</b><p>Adicione vídeos, áudios ou imagens para começar.</p><button className="primary" onClick={onAddMedia}><Plus size={14}/> Importar mídia</button></div>}
       </>}
@@ -392,11 +423,11 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
       <div className="timeline-ruler timeline-grid-ruler"><div className="timeline-track-label-spacer"/><div className="timeline-ruler-canvas" style={{width:timelineZoom+"%"}}>{Array.from({length:Math.ceil(scale/1000)+1},(_,second)=>second).map(second=><span key={second} className={second%5===0?"major":""} style={{left:(second*1000/scale*100)+"%"}}>{second%5===0?timeLabel(second*1000):""}</span>)}</div></div>
       <div className="timeline-lanes">
         <div className="timeline-track timeline-positioned-track"><div className="track-label">VÍDEO / IMAGEM</div><div className="track-clips timeline-canvas" style={{width:timelineZoom+"%"}} onDragOver={event=>event.preventDefault()} onDrop={handleAssetDrop}>
-          {visualClips.map(clip=>{const asset=assets.find(item=>item.id===clip.assetId);if(!asset)return null;return <button key={clip.id} draggable className={"timeline-clip positioned-clip "+asset.kind+(selectedId===clip.id?" selected":"")} style={{left:percentLeft(clip)+"%",width:percentWidth(clip)+"%"}} onDragStart={event=>handleClipDragStart(event,clip)} onClick={()=>{stopPlayback();setSelectedId(clip.id);setSelectedMotionId(null);seekTo(clip.timelineStartMs);}}><b>{asset.name}</b><small>{timeLabel(clipDuration(clip))}</small><span className="clip-controls"><i title="Duplicar" onClick={event=>{event.stopPropagation();duplicateClip(clip);}}><Copy size={12}/></i><i title="Excluir" onClick={event=>{event.stopPropagation();removeClip(clip.id);}}><Trash2 size={12}/></i></span></button>;})}
+          {visualClips.map(clip=>{const asset=assets.find(item=>item.id===clip.assetId);if(!asset)return null;return <button key={clip.id} draggable className={"timeline-clip positioned-clip "+asset.kind+(selectedId===clip.id?" selected":"")} style={{left:percentLeft(clip)+"%",width:percentWidth(clip)+"%"}} onDragStart={event=>handleClipDragStart(event,clip)} onClick={()=>{stopPlayback();setSelectedId(clip.id);setSelectedMotionId(null);seekTo(clip.timelineStartMs);}}><span className="clip-trim-edge left" onPointerDown={event => beginClipTrim(event, clip, "start")} onPointerMove={moveClipTrim} onPointerUp={endClipTrim} onPointerCancel={endClipTrim}/><span className="clip-trim-edge right" onPointerDown={event => beginClipTrim(event, clip, "end")} onPointerMove={moveClipTrim} onPointerUp={endClipTrim} onPointerCancel={endClipTrim}/><video className="timeline-thumb-video" src={mediaUrls[asset.id]} muted preload="auto" playsInline/><b>{asset.name}</b><small>{timeLabel(clipDuration(clip))}</small><span className="clip-controls"><i title="Duplicar" onClick={event=>{event.stopPropagation();duplicateClip(clip);}}><Copy size={12}/></i><i title="Excluir" onClick={event=>{event.stopPropagation();removeClip(clip.id);}}><Trash2 size={12}/></i></span></button>;})}
           {!visualClips.length&&<span className="track-hint">Arraste vídeos ou imagens da biblioteca para cá</span>}<div className="timeline-cursor" style={{left:playheadMs/scale*100+"%"}}/>
         </div></div>
         <div className="timeline-track timeline-positioned-track audio-track"><div className="track-label">ÁUDIO</div><div className="track-clips timeline-canvas" style={{width:timelineZoom+"%"}} onDragOver={event=>event.preventDefault()} onDrop={handleAssetDrop}>
-          {audioClips.map(clip=>{const asset=assets.find(item=>item.id===clip.assetId);if(!asset)return null;return <button key={clip.id} draggable className={"timeline-clip audio positioned-clip"+(selectedId===clip.id?" selected":"")} style={{left:percentLeft(clip)+"%",width:percentWidth(clip)+"%"}} onDragStart={event=>handleClipDragStart(event,clip)} onClick={()=>{stopPlayback();setSelectedId(clip.id);setSelectedMotionId(null);seekTo(clip.timelineStartMs);}}><b>{asset.name}</b><small>{timeLabel(clipDuration(clip))} · {timeLabel(clip.timelineStartMs)}</small><span className="audio-waveform" aria-hidden="true">{Array.from({length:36},(_,index)=><i key={index} style={{height:(18+((index*17+clip.id.length*13)%66))+"%"}/>)}</span><span className="clip-controls"><i title="Duplicar" onClick={event=>{event.stopPropagation();duplicateClip(clip);}}><Copy size={12}/></i><i title="Excluir" onClick={event=>{event.stopPropagation();removeClip(clip.id);}}><Trash2 size={12}/></i></span></button>;})}
+          {audioClips.map(clip=>{const asset=assets.find(item=>item.id===clip.assetId);if(!asset)return null;return <button key={clip.id} draggable className={"timeline-clip audio positioned-clip"+(selectedId===clip.id?" selected":"")} style={{left:percentLeft(clip)+"%",width:percentWidth(clip)+"%"}} onDragStart={event=>handleClipDragStart(event,clip)} onClick={()=>{stopPlayback();setSelectedId(clip.id);setSelectedMotionId(null);seekTo(clip.timelineStartMs);}}><span className="clip-trim-edge left" onPointerDown={event => beginClipTrim(event, clip, "start")} onPointerMove={moveClipTrim} onPointerUp={endClipTrim} onPointerCancel={endClipTrim}/><span className="clip-trim-edge right" onPointerDown={event => beginClipTrim(event, clip, "end")} onPointerMove={moveClipTrim} onPointerUp={endClipTrim} onPointerCancel={endClipTrim}/><b>{asset.name}</b><small>{timeLabel(clipDuration(clip))} · {timeLabel(clip.timelineStartMs)}</small><span className="audio-waveform" aria-hidden="true">{Array.from({length:36},(_,index)=><i key={index} style={{height:(18+((index*17+clip.id.length*13)%66))+"%"}/>)}</span><span className="clip-controls"><i title="Duplicar" onClick={event=>{event.stopPropagation();duplicateClip(clip);}}><Copy size={12}/></i><i title="Excluir" onClick={event=>{event.stopPropagation();removeClip(clip.id);}}><Trash2 size={12}/></i></span></button>;})}
           {!audioClips.length&&<span className="track-hint">Arraste um áudio para cá. Ele tocará junto com o vídeo</span>}<div className="timeline-cursor" style={{left:playheadMs/scale*100+"%"}}/>
         </div></div>
         <div className="motion-track-row timeline-motion-row"><div className="track-label">TEXTO</div><div className="track-clips timeline-canvas motion-timeline" style={{width:timelineZoom+"%"}} onDragOver={event=>event.preventDefault()} onDrop={event=>{event.preventDefault();const id=event.dataTransfer.getData("text/motion-graphic-id");if(!id)return;const rect=event.currentTarget.getBoundingClientRect();updateMotion(id,{startMs:Math.max(0,(event.clientX-rect.left)/rect.width*scale)});}}>
