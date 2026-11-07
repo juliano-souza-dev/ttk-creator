@@ -397,7 +397,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
           muted: clip.muted,
         }] : [];
       });
-      const result = await desktopApi.exportTimeline({
+      await desktopApi.exportTimeline({
         projectId,
         destination,
         clips: exportClips,
