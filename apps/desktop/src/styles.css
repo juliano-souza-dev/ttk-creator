@@ -454,11 +454,11 @@
 
 .motion-overlay span.motion-main-text{font-family:var(--motion-font,Arial,sans-serif);font-weight:var(--motion-weight,900);text-transform:none;letter-spacing:normal;display:flex;align-items:center;justify-content:center;gap:.22em;width:100%;max-width:100%;text-align:inherit}
 /* Motion animation state is calculated from the timeline playhead and mirrored by FFmpeg. */
-.motion-overlay span.motion-main-text{display:block;width:90%;max-width:90%;min-width:0;padding:0;line-height:1.12;letter-spacing:normal;text-transform:none;text-shadow:none;white-space:pre-wrap;overflow-wrap:anywhere;word-break:normal;animation:none!important;transform-origin:center center}
+.motion-overlay span.motion-main-text{display:block;width:max-content;max-width:90%;min-width:0;padding:0;line-height:1.12;letter-spacing:normal;text-transform:none;text-shadow:none;white-space:pre-wrap;overflow-wrap:anywhere;word-break:normal;animation:none!important;transform-origin:center center;box-decoration-break:clone;-webkit-box-decoration-break:clone}
 .motion-overlay span.motion-main-text:after{display:none!important}
 
 .motion-overlay .motion-inline-icon{display:inline-block;flex:none;font-style:normal;font-family:"Segoe UI Emoji","Apple Color Emoji",sans-serif;font-size:.82em;line-height:1}
-.property-hint{display:block;color:#918b9c;font-size:11px;line-height:1.4;margin-top:-5px}
+.property-hint{display:block;color:#918b9c;font-size:11px;line-height:1.4;margin-top:-5px}.property-section .motion-caption-toggle{display:flex;grid-column:1/-1;flex-direction:row;align-items:center;gap:9px;padding:9px 10px;border:1px solid #484052;border-radius:6px;background:#211d28;color:#eee8f5;font-size:11px;cursor:pointer}.property-section .motion-caption-toggle input{width:15px;height:15px;margin:0;accent-color:#a98af0;flex:none}.property-section .motion-caption-toggle:has(input:checked){border-color:#9878ca;background:#2b2436}
 
 /* Global sound effects library */
 .sound-library-import{display:grid;gap:10px;padding:14px;border:1px solid #332d3d;border-radius:9px;background:#19171f;margin-bottom:14px}
