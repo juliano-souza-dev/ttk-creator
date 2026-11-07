@@ -487,9 +487,15 @@ pub async fn export_timeline(
             };
             let font_suffix = if item.font_weight >= 700 { bold_suffix } else { "" };
             let font_file = format!("C\\:/Windows/Fonts/{font_name}{font_suffix}.ttf");
-            let anchor_x = 54.0 + (item.x.clamp(0.0, 100.0) / 100.0) * 972.0;
+            // Use the same normalized 0-100% anchor as the editor preview.
+            // The preview frame clips overflow, so do not silently shift text inward.
+            let anchor_x = (item.x.clamp(0.0, 100.0) / 100.0) * 1080.0;
             let anchor_y = (item.y.clamp(0.0, 100.0) / 100.0) * 1920.0;
-            let base_x = match item.text_align.as_str() { "left" => format!("max(54,min(1026-text_w,{anchor_x}))"), "right" => format!("max(54,min(1026-text_w,{anchor_x}-text_w))"), _ => format!("max(54,min(1026-text_w,{anchor_x}-text_w/2))") };
+            let base_x = match item.text_align.as_str() {
+                "left" => format!("{anchor_x}"),
+                "right" => format!("{anchor_x}-text_w"),
+                _ => format!("{anchor_x}-text_w/2"),
+            };
             let start = item.start_ms as f64 / 1000.0;
             let end = item.end_ms as f64 / 1000.0;
             let duration_ms = if item.duration_ms > 0 { item.duration_ms.min(item.end_ms.saturating_sub(item.start_ms)) } else { item.end_ms.saturating_sub(item.start_ms) };
@@ -502,16 +508,24 @@ pub async fn export_timeline(
                 let wrapped_text = wrap_text_for_export(&item.text, item.font_size);
                 let characters: Vec<char> = wrapped_text.chars().collect();
                 if characters.is_empty() { continue; }
-                let mut prefix = String::new();
+                // A video is rendered at 30 fps. Creating one time slice per
+                // character can make late slices shorter than a frame, so FFmpeg
+                // may never evaluate the final prefixes. Reveal at most one prefix
+                // per output frame, grouping characters when the text is longer.
+                let frame_count = ((duration * 30.0).floor() as usize).max(1);
+                let steps = characters.len().min(frame_count).max(1);
                 let mut current = previous.clone();
-                for (step, character) in characters.iter().enumerate() {
-                    prefix.push(*character);
+                for step in 0..steps {
+                    let visible_count = ((step + 1) * characters.len() + steps - 1) / steps;
+                    let prefix: String = characters[..visible_count].iter().collect();
                     let text = ffmpeg_escape_text(&prefix);
-                    let step_start = start + duration * (step as f64 / characters.len() as f64);
-                    let step_end = if step + 1 == characters.len() { end } else { start + duration * ((step + 1) as f64 / characters.len() as f64) };
+                    let step_start = start + duration * (step as f64 / steps as f64);
+                    let step_end = start + duration * ((step + 1) as f64 / steps as f64);
                     let next = format!("typewriter{index}_{step}");
-                    let enable = if step + 1 == characters.len() {
-                        format!("gte(t,{step_start:.6})*lte(t,{step_end:.6})")
+                    let enable = if step + 1 == steps {
+                        // Keep the complete text visible through the final frame,
+                        // even when the clip duration is not an exact frame multiple.
+                        format!("gte(t,{step_start:.6})")
                     } else {
                         format!("gte(t,{step_start:.6})*lt(t,{step_end:.6})")
                     };
