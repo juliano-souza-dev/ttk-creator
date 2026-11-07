@@ -24,8 +24,12 @@
 
 - [x] Video/image/audio preview in the desktop editor
 - [x] Initial video/image and audio timeline lanes
-- [x] Add, reorder, remove, and trim clip ranges without changing source files
+- [x] Add, reorder, duplicate, remove, and split clips
+- [x] Trim clip in/out points without changing source files
+- [x] Timeline playhead, seek, and sequential preview playback
+- [x] Per-clip audio volume control
 - [x] Save and restore timeline state locally per project
+- [ ] Place audio independently under video (true overlapping tracks)
 - [ ] Persist timeline state in the versioned project document
 - [ ] Caption editor and synchronization
-- [ ] MP4 vertical export
+- [ ] MP4 vertical export and rendering pipeline
