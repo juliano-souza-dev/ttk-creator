@@ -63,7 +63,6 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
   const activeClip = clips[Math.max(0, activeIndex)] ?? null;
   const activeAsset = activeClip ? assets.find(asset => asset.id === activeClip.assetId) ?? null : null;
   const activeUrl = activeAsset ? mediaUrls[activeAsset.id] : "";
-  const selectedOffset = clipOffsets.find(item => item.id === selectedClip?.id);
   const selectedClipDuration = selectedClip ? selectedClip.endMs - selectedClip.startMs : 0;
   const selectedSourceDuration = selectedAsset ? defaultDuration(selectedAsset) : 0;
   const localPlayhead = activeClip ? activeClip.startMs + Math.max(0, playheadMs - (clipOffsets[activeIndex]?.start ?? 0)) : 0;
@@ -171,8 +170,6 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
   const previewClip = activeClip ?? selectedClip;
   const previewAsset = activeAsset ?? selectedAsset;
   const previewUrl = previewAsset ? mediaUrls[previewAsset.id] : "";
-  const previewStart = previewClip?.startMs ?? 0;
-  const previewEnd = previewClip?.endMs ?? 0;
 
   return <section className="editor-workspace">
     <div className="editor-topline"><div><label className="eyebrow muted">EDIÇÃO</label><h2>Estúdio de edição</h2><p>Edite os trechos e monte a sequência do seu vídeo.</p></div><div className="editor-summary"><span><Film size={14}/> {clips.length} clipe(s)</span><span><Clock3 size={14}/> {timeLabel(totalDuration)}</span></div></div>
@@ -188,7 +185,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
         <div className="preview-stage">
           {!previewAsset ? <div className="preview-placeholder"><Play size={27}/><span>Seu vídeo aparecerá aqui</span><small>Adicione uma mídia à timeline para visualizar</small></div> :
             !previewUrl ? <div className="preview-placeholder"><span>Não foi possível carregar esta mídia.</span><small>{loadError || "Verifique se o arquivo continua na pasta do projeto."}</small></div> :
-            previewAsset.kind === "video" ? <video key={previewAsset.id + previewTick} ref={node => { mediaRef.current = node; }} src={previewUrl} controls={!playing} onTimeUpdate={onMediaTimeUpdate} onEnded={onMediaTimeUpdate} onError={() => setLoadError("Formato não suportado pelo preview do sistema.")} /> :
+            previewAsset.kind === "video" ? <video key={previewAsset.id + previewTick} ref={node => { mediaRef.current = node; }} src={previewUrl} controls={!playing} onTimeUpdate={onMediaTimeUpdate} onEnded={onMediaEnded} onError={() => setLoadError("Formato não suportado pelo preview do sistema.")} /> :
             previewAsset.kind === "audio" ? <div className="audio-preview"><AudioLines size={48}/><b>{previewAsset.name}</b><audio key={previewAsset.id + previewTick} ref={node => { mediaRef.current = node; }} src={previewUrl} controls={!playing} onTimeUpdate={onMediaTimeUpdate} onEnded={onMediaTimeUpdate}/></div> :
             <img src={previewUrl} alt={previewAsset.name} />
           }
@@ -205,7 +202,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
         {clips.filter(clip=>assets.find(asset=>asset.id===clip.assetId)?.kind!=="audio").length===0&&<span className="track-hint">Solte vídeos ou imagens aqui</span>}
       </div></div>
       <div className="timeline-track audio-track"><div className="track-label">ÁUDIO</div><div className="track-clips" onDragOver={event=>event.preventDefault()} onDrop={event=>handleDrop(event)}>{clips.filter(clip=>assets.find(asset=>asset.id===clip.assetId)?.kind==="audio").map(clip=>{const asset=assets.find(item=>item.id===clip.assetId)!;const index=clips.indexOf(clip);return <button key={clip.id} className={`timeline-clip audio ${selectedId===clip.id?"selected":""}`} onClick={()=>{stopPlayback();setSelectedId(clip.id);seekTo(clipOffsets[index]?.start??0);}}><b>{asset.name}</b><small>{timeLabel(clip.endMs-clip.startMs)}</small><span className="clip-controls"><i onClick={event=>{event.stopPropagation();moveClip(index,-1);}}><ChevronUp size={12}/></i><i onClick={event=>{event.stopPropagation();moveClip(index,1);}}><ChevronDown size={12}/></i><i onClick={event=>{event.stopPropagation();duplicateClip(clip);}}><Copy size={12}/></i><i onClick={event=>{event.stopPropagation();removeClip(clip.id);}}><Trash2 size={12}/></i></span></button>;})}{clips.filter(clip=>assets.find(asset=>asset.id===clip.assetId)?.kind==="audio").length===0&&<span className="track-hint">Solte áudios aqui</span>}</div></div>
-      <div className="timeline-actions"><button className="secondary-action" onClick={splitAtPlayhead} disabled={!activeClip||!playing&&(!activeClip||playheadMs<=(clipOffsets[activeIndex]?.start??0)+250||playheadMs>=(clipOffsets[activeIndex]?.end??0)-250)}><Scissors size={13}/> Dividir no cursor</button><button className="secondary-action" onClick={()=>selectedClip&&duplicateClip(selectedClip)} disabled={!selectedClip}><Copy size={13}/> Duplicar clipe</button><button className="secondary-action danger-action" onClick={()=>selectedClip&&removeClip(selectedClip.id)} disabled={!selectedClip}><Trash2 size={13}/> Excluir selecionado</button><button className="secondary-action" onClick={()=>{stopPlayback();setClips([]);setSelectedId(null);setPlayheadMs(0);}} disabled={!clips.length}><Trash2 size={13}/> Limpar timeline</button></div>
+      <div className="timeline-actions"><button className="secondary-action" onClick={splitAtPlayhead} disabled={!activeClip||playheadMs<=(clipOffsets[activeIndex]?.start??0)+250||playheadMs>=(clipOffsets[activeIndex]?.end??0)-250}><Scissors size={13}/> Dividir no cursor</button><button className="secondary-action" onClick={()=>selectedClip&&duplicateClip(selectedClip)} disabled={!selectedClip}><Copy size={13}/> Duplicar clipe</button><button className="secondary-action danger-action" onClick={()=>selectedClip&&removeClip(selectedClip.id)} disabled={!selectedClip}><Trash2 size={13}/> Excluir selecionado</button><button className="secondary-action" onClick={()=>{stopPlayback();setClips([]);setSelectedId(null);setPlayheadMs(0);}} disabled={!clips.length}><Trash2 size={13}/> Limpar timeline</button></div>
       <div className="timeline-footer"><span>O projeto original nunca é alterado. A edição fica salva automaticamente neste dispositivo.</span></div>
     </section>
   </section>;
