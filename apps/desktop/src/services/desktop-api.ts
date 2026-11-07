@@ -37,7 +37,25 @@ export const desktopApi = {
   checkFfmpeg: () => invoke<string>("check_ffmpeg"),
 
   exportTimeline: (request: { projectId: string; destination: string; clips: Array<{ id: string; assetId: string; kind: "video" | "audio" | "image"; sourceStartMs: number; sourceEndMs: number; timelineStartMs: number; volume: number; muted?: boolean }>; motion: Array<{ text: string; startMs: number; endMs: number; color: string; fontSize: number; x: number; y: number }> }) =>
-    invoke<string>("export_timeline", { request }),
+    invoke<string>("export_timeline", {
+      request: {
+        ...request,
+        // Rust receives timeline timestamps as u64. Timeline interactions can
+        // produce fractional milliseconds, so normalize them at the IPC boundary.
+        clips: request.clips.map((clip) => ({
+          ...clip,
+          sourceStartMs: Math.max(0, Math.round(clip.sourceStartMs)),
+          sourceEndMs: Math.max(0, Math.round(clip.sourceEndMs)),
+          timelineStartMs: Math.max(0, Math.round(clip.timelineStartMs)),
+        })),
+        motion: request.motion.map((item) => ({
+          ...item,
+          startMs: Math.max(0, Math.round(item.startMs)),
+          endMs: Math.max(0, Math.round(item.endMs)),
+          fontSize: Math.max(1, Math.round(item.fontSize)),
+        })),
+      },
+    }),
 
   subscribeToYoutubeProgress: (
     onProgress: (progress: DownloadProgress) => void,
