@@ -482,3 +482,7 @@
 /* Synchronized timeline groups */
 .timeline-clip.grouped,.motion-timeline-clip.grouped{border-style:dashed;border-width:2px}
 .timeline-clip.multi-selected,.motion-timeline-clip.multi-selected{outline:2px solid #f0c674;outline-offset:2px}
+
+
+/* Drag-and-drop transition library */
+.transition-library{display:grid;gap:8px;padding:10px}.transition-library-item{display:grid;grid-template-columns:34px 1fr;grid-template-rows:auto auto auto;align-items:center;gap:3px 9px;padding:10px;border:1px solid #393342;border-radius:8px;background:#1c1922;color:#eee;text-align:left;cursor:grab}.transition-library-item:active{cursor:grabbing;border-color:#a98af0}.transition-library-item>span{grid-row:1/4;width:34px;height:34px;display:grid;place-items:center;border-radius:8px;background:#30263e;color:#c6a8f2;font-size:21px}.transition-library-item>b{font-size:11px}.transition-library-item>small{color:#93899f;font-size:9px}.transition-library-item>em{color:#b99be7;font-size:8px;font-style:normal}.sound-library-heading{border-top:1px solid #302b37;margin-top:6px}.transition-preview-white{position:absolute;inset:0;z-index:4;background:#fff;pointer-events:none;transition:opacity 40ms linear}
