@@ -599,7 +599,6 @@ pub async fn export_timeline(
             let icon_size = item.lucide_icon_size.clamp(24, 512).max(24) as f64;
             let anchor_x = (item.x.clamp(0.0, 100.0) / 100.0) * 1080.0;
             let anchor_y = (item.y.clamp(0.0, 100.0) / 100.0) * 1920.0;
-            let gap = (icon_size * 0.18).max(8.0);
             let x = format!("{}+{}", anchor_x, item.lucide_icon_offset_x);
             let y = format!("{}+{}", anchor_y, item.lucide_icon_offset_y);
             let next = format!("icon{icon_position}_{motion_index}");
