@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, CSSProperties, DragEvent, PointerEvent as ReactPointerEvent } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
@@ -38,6 +39,22 @@ const lucideIconLibrary = {
 };
 type LucideIconName = keyof typeof lucideIconLibrary;
 const lucideIconNames = Object.keys(lucideIconLibrary) as LucideIconName[];
+
+async function renderLucideIconPng(name: LucideIconName, color: string, size: number): Promise<string> {
+  const IconView = lucideIconLibrary[name];
+  const svg = renderToStaticMarkup(<IconView xmlns="http://www.w3.org/2000/svg" width={size} height={size} color={color || "#ffffff"} strokeWidth={2.2} />);
+  const image = new window.Image();
+  const source = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }));
+  try {
+    await new Promise<void>((resolve, reject) => { image.onload = () => resolve(); image.onerror = () => reject(new Error("Não foi possível rasterizar o ícone " + name + ".")); image.src = source; });
+    const canvas = document.createElement("canvas");
+    canvas.width = size; canvas.height = size;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Não foi possível preparar a imagem do ícone.");
+    context.drawImage(image, 0, 0, size, size);
+    return canvas.toDataURL("image/png");
+  } finally { URL.revokeObjectURL(source); }
+}
 
 const defaultDuration = (asset: MediaAsset) => asset.durationMs && asset.durationMs > 0 ? asset.durationMs : asset.kind === "image" ? 5000 : 30000;
 const clipDuration = (clip: TimelineClip) => Math.max(0, clip.sourceEndMs - clip.sourceStartMs);
@@ -419,7 +436,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
         projectId,
         destination,
         clips: exportClips,
-        motion: motion.map(item => ({startMs:item.startMs,endMs:item.endMs,durationMs:item.durationMs,preset:item.preset,x:item.x,y:item.y,text:(item.icon ? item.icon + " " : "") + item.text,color:item.color,fontSize:item.fontSize,fontFamily:item.fontFamily || "Arial",fontWeight:item.fontWeight || 900,textAlign:item.textAlign || "center",isCaption:!!item.isCaption})),
+        motion: await Promise.all(motion.map(async item => ({startMs:item.startMs,endMs:item.endMs,durationMs:item.durationMs,preset:item.preset,x:item.x,y:item.y,text:(item.icon ? item.icon + " " : "") + item.text,color:item.color,fontSize:item.fontSize,fontFamily:item.fontFamily || "Arial",fontWeight:item.fontWeight || 900,textAlign:item.textAlign || "center",isCaption:!!item.isCaption,lucideIconPng:item.lucideIconName && lucideIconLibrary[item.lucideIconName as LucideIconName] ? await renderLucideIconPng(item.lucideIconName as LucideIconName,item.lucideIconColor || item.accent,Math.max(24,Math.min(512,Math.round(item.lucideIconSize ?? item.fontSize)))) : undefined,lucideIconAnchor:item.lucideIconAnchor || "left"}))),
         soundEffects: motion.filter(item => !!item.soundId).map(item => ({ soundId: item.soundId!, timelineStartMs: item.startMs, volume: item.soundVolume ?? 80 })),
       });
       setExportProgress(100);
