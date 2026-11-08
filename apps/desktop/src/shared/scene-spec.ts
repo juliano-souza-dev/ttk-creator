@@ -189,9 +189,9 @@ export function validateSceneSpec(value: unknown): value is SceneSpec {
       return typeof item.id === "string"
         && typeof item.text === "string"
         && typeof item.role === "string"
-        && typeof item.x === "number" && Number.isFinite(item.x)
-        && typeof item.y === "number" && Number.isFinite(item.y)
-        && typeof item.fontSize === "number" && Number.isFinite(item.fontSize)
+        && typeof item.x === "number" && Number.isFinite(item.x) && item.x >= 0 && item.x <= 100
+        && typeof item.y === "number" && Number.isFinite(item.y) && item.y >= 0 && item.y <= 100
+        && typeof item.fontSize === "number" && Number.isFinite(item.fontSize) && item.fontSize >= 8 && item.fontSize <= 240
         && typeof item.color === "string";
     });
   });
