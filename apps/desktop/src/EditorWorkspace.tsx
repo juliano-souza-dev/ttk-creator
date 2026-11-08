@@ -6,7 +6,8 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import { desktopApi, isDesktopRuntime } from "./services/desktop-api";
 import type { GlobalSound } from "./services/desktop-api";
 import type { MediaAsset } from "./shared/types";
-import { AudioLines, Film, Plus, Play, Pause, Trash2, Scissors, Copy, SkipBack, SkipForward, Volume2, VolumeX, Music2, Type, WandSparkles, MousePointer2, ChevronLeft, ChevronRight, Download, LoaderCircle } from "lucide-react";
+import { AudioLines, Film, Plus, Play, Pause, Trash2, Scissors, Copy, SkipBack, SkipForward, Volume2, VolumeX, Music2, Type, WandSparkles, MousePointer2, ChevronLeft, ChevronRight, Download, LoaderCircle, PanelsTopLeft, FileJson, Upload } from "lucide-react";
+import { SCENE_TEMPLATES, buildTemplateScene, createSceneSpecFromMotion, validateSceneSpec } from "./shared/scene-spec";
 
 type TimelineClip = {
   id: string;
@@ -88,7 +89,8 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
   const [soundBusy, setSoundBusy] = useState(false);
   const [soundMessage, setSoundMessage] = useState("");
   const [selectedMotionId, setSelectedMotionId] = useState<string | null>(null);
-  const [activeTool, setActiveTool] = useState<"media" | "audio" | "text" | "effects">("media");
+  const [activeTool, setActiveTool] = useState<"media" | "audio" | "text" | "effects" | "templates">("media");
+  const [sceneSpecMessage, setSceneSpecMessage] = useState("");
   const [selectedTransition, setSelectedTransition] = useState<TimelineClip["transitionType"] | null>(null);
   const [timelineZoom, setTimelineZoom] = useState(100);
   const lastMotionSounds = useRef<Record<string, number>>({});
@@ -168,7 +170,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
         const session = JSON.parse(sessionRaw) as Record<string, unknown>;
         if (Number.isFinite(session.playheadMs)) setPlayheadMs(Math.max(0, Number(session.playheadMs)));
         if (Number.isFinite(session.timelineZoom)) setTimelineZoom(Math.max(50, Math.min(200, Number(session.timelineZoom))));
-        if (typeof session.activeTool === "string" && ["media", "audio", "text", "effects"].includes(session.activeTool)) setActiveTool(session.activeTool as "media" | "audio" | "text" | "effects");
+        if (typeof session.activeTool === "string" && ["media", "audio", "text", "effects", "templates"].includes(session.activeTool)) setActiveTool(session.activeTool as "media" | "audio" | "text" | "effects" | "templates");
         if (typeof session.selectedId === "string") setSelectedId(session.selectedId);
         if (typeof session.selectedMotionId === "string") setSelectedMotionId(session.selectedMotionId);
       }
@@ -424,6 +426,104 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
   }
   function updateMotion(id: string, patch: Partial<MotionGraphic>) { setMotion(current => current.map(item => { if (item.id !== id) return item; const nextStart = patch.startMs !== undefined ? Math.max(0, patch.startMs) : item.startMs; let nextEnd = patch.endMs !== undefined ? patch.endMs : item.endMs; if (patch.durationMs !== undefined && patch.endMs === undefined) nextEnd = nextStart + Math.max(300, patch.durationMs); nextEnd = Math.max(nextStart + 300, nextEnd); return { ...item, ...patch, startMs: nextStart, endMs: nextEnd, durationMs: nextEnd - nextStart }; })); }
   function removeMotion(id: string) { setMotion(current => current.filter(item => item.id !== id)); if (selectedMotionId === id) setSelectedMotionId(null); }
+
+  function applySceneTemplate(templateId: string) {
+    try {
+      const scene = buildTemplateScene(templateId, playheadMs);
+      const created: MotionGraphic[] = scene.blocks.map(block => {
+        const startMs = playheadMs + (block.startOffsetMs ?? 0);
+        const endMs = startMs + (block.durationMs ?? scene.durationMs);
+        return {
+          id: crypto.randomUUID(),
+          text: block.text,
+          icon: block.icon ?? "",
+          fontFamily: "Arial",
+          fontWeight: 900,
+          textAlign: block.align ?? "center",
+          startMs,
+          endMs,
+          durationMs: endMs - startMs,
+          preset: "pop",
+          color: block.color,
+          accent: block.accent ?? "#65d6c0",
+          fontSize: block.fontSize,
+          x: block.x,
+          y: block.y,
+          sound: "none",
+          soundId: "",
+          soundVolume: 80,
+        };
+      });
+      setMotion(current => [...current, ...created]);
+      setSelectedMotionId(created[0]?.id ?? null);
+      setActiveTool("text");
+      setSceneSpecMessage(`Template "${scene.name}" aplicado: ${created.length} elementos adicionados.`);
+      stopPlayback();
+    } catch (error) {
+      setSceneSpecMessage("Não foi possível aplicar o template: " + String(error));
+    }
+  }
+
+  function exportSceneSpec() {
+    if (!motion.length) {
+      setSceneSpecMessage("Adicione pelo menos um elemento de texto antes de exportar o Scene Spec.");
+      return;
+    }
+    const spec = createSceneSpecFromMotion(motion);
+    const blob = new Blob([JSON.stringify(spec, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "framelab-scene-spec.json";
+    anchor.click();
+    URL.revokeObjectURL(url);
+    setSceneSpecMessage("Scene Spec exportado com os elementos atuais da timeline.");
+  }
+
+  async function importSceneSpec(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    try {
+      const parsed: unknown = JSON.parse(await file.text());
+      if (!validateSceneSpec(parsed)) {
+        throw new Error("JSON incompatível. Confira a versão 1.0 e os campos obrigatórios do Scene Spec.");
+      }
+      const created: MotionGraphic[] = parsed.scenes.flatMap(scene =>
+        scene.blocks.map(block => {
+          const startMs = playheadMs + (block.startOffsetMs ?? 0);
+          const endMs = startMs + (block.durationMs ?? scene.durationMs);
+          return {
+            id: crypto.randomUUID(),
+            text: block.text,
+            icon: block.icon ?? "",
+            fontFamily: "Arial",
+            fontWeight: 900,
+            textAlign: block.align ?? "center",
+            startMs,
+            endMs,
+            durationMs: endMs - startMs,
+            preset: "pop" as const,
+            color: block.color,
+            accent: block.accent ?? "#65d6c0",
+            fontSize: block.fontSize,
+            x: block.x,
+            y: block.y,
+            sound: "none" as const,
+            soundId: "",
+            soundVolume: 80,
+          };
+        }),
+      );
+      setMotion(current => [...current, ...created]);
+      setSelectedMotionId(created[0]?.id ?? null);
+      setActiveTool("text");
+      setSceneSpecMessage(`Importação concluída: ${created.length} elementos adicionados.`);
+      stopPlayback();
+    } catch (error) {
+      setSceneSpecMessage("Falha ao importar Scene Spec: " + String(error));
+    }
+  }
   useEffect(() => {
     if (!playing) return;
     for (const item of motion) {
@@ -692,6 +792,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
       <button className={activeTool === "audio" ? "active" : ""} onClick={() => setActiveTool("audio")}><Music2 size={19}/><small>Áudio</small></button>
       <button className={activeTool === "text" ? "active" : ""} onClick={() => setActiveTool("text")}><Type size={19}/><small>Texto</small></button>
       <button className={activeTool === "effects" ? "active" : ""} onClick={() => setActiveTool("effects")}><WandSparkles size={19}/><small>Efeitos</small></button>
+      <button className={activeTool === "templates" ? "active" : ""} onClick={() => setActiveTool("templates")}><PanelsTopLeft size={19}/><small>Modelos</small></button>
     </aside>
     <aside className="editor-content-panel">
       {activeTool === "media" && <>
@@ -709,6 +810,20 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
       {activeTool === "text" && <>
         <div className="editor-panel-head"><div><b>Motion Graphics</b><small>Composições e textos animados com efeitos sonoros.</small></div><span className="preview-live">{motion.length} ELEMENTO(S)</span></div>
         <div className="motion-presets editor-preset-grid">{motionPresets.map(preset => <button key={preset.id} className="motion-preset" onClick={() => addMotion(preset.id)}><b>{preset.label}</b><small>Som: {preset.sound}</small><span>+ Adicionar</span></button>)}</div>
+      </>}
+      {activeTool === "templates" && <>
+        <div className="editor-panel-head"><div><b>Presets de cena</b><small>Layouts prontos com tipografia e posicionamento definidos.</small></div><span className="preview-live">{SCENE_TEMPLATES.length} MODELOS</span></div>
+        <div className="scene-template-list">{SCENE_TEMPLATES.map(template => <article className="scene-template-card" key={template.id}>
+          <div className="scene-template-preview" aria-hidden="true">{template.preview}</div>
+          <b>{template.name}</b><small>{template.description}</small>
+          <button className="primary" type="button" onClick={() => applySceneTemplate(template.id)}><Plus size={14}/> Aplicar na posição {timeLabel(playheadMs)}</button>
+        </article>)}</div>
+        <div className="scene-spec-tools">
+          <div><b><FileJson size={15}/> Scene Spec JSON</b><small>Importe uma especificação ou exporte os elementos atuais.</small></div>
+          <label className="secondary-action scene-spec-import"><Upload size={14}/> Importar JSON<input type="file" accept=".json,application/json" onChange={event => void importSceneSpec(event)}/></label>
+          <button className="secondary-action" type="button" onClick={exportSceneSpec}><Download size={14}/> Exportar JSON</button>
+        </div>
+        {sceneSpecMessage && <div className="sound-library-message" role="status">{sceneSpecMessage}</div>}
       </>}
       {activeTool === "effects" && <>
         <div className="editor-panel-head"><div><b>Transições e sons</b><small>Posicione o marcador na timeline, escolha uma transição e insira.</small></div></div>
