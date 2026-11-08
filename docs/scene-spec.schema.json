@@ -113,6 +113,25 @@
             "center",
             "right"
           ]
+        },
+        "iconName": {
+          "type": "string"
+        },
+        "iconAnchor": {
+          "enum": [
+            "left",
+            "right",
+            "top",
+            "bottom"
+          ]
+        },
+        "iconSize": {
+          "type": "number",
+          "minimum": 12,
+          "maximum": 180
+        },
+        "iconColor": {
+          "type": "string"
         }
       },
       "additionalProperties": false
