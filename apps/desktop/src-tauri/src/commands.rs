@@ -654,6 +654,9 @@ pub async fn export_timeline(
         if !request.motion.is_empty() {
             required_filters.push("drawtext");
         }
+        if !icon_inputs.is_empty() {
+            required_filters.push("colorchannelmixer");
+        }
         if !audio_labels.is_empty() {
             required_filters.extend(["asetpts", "volume", "adelay", "amix", "alimiter", "atrim"]);
         }
