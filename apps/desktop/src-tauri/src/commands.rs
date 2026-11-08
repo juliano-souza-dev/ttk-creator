@@ -596,11 +596,10 @@ pub async fn export_timeline(
             previous = next;
         }
         for (icon_position, (input_index, motion_index, item)) in icon_inputs.iter().enumerate() {
-            let icon_size = item.lucide_icon_size.clamp(24, 512).max(24) as f64;
             let anchor_x = (item.x.clamp(0.0, 100.0) / 100.0) * 1080.0;
             let anchor_y = (item.y.clamp(0.0, 100.0) / 100.0) * 1920.0;
-            let x = format!("{}+{}", anchor_x, item.lucide_icon_offset_x);
-            let y = format!("{}+{}", anchor_y, item.lucide_icon_offset_y);
+            let x = format!("{anchor_x}+({})", item.lucide_icon_offset_x);
+            let y = format!("{anchor_y}+({})", item.lucide_icon_offset_y);
             let next = format!("icon{icon_position}_{motion_index}");
             filter_parts.push(format!("[{previous}][{input_index}:v]overlay=x='{x}':y='{y}':format=auto:eof_action=pass:shortest=0:enable='gte(t,{:.6})*lt(t,{:.6})'[{next}]", item.start_ms as f64 / 1000.0, item.end_ms as f64 / 1000.0));
             previous = next;
@@ -645,7 +644,10 @@ pub async fn export_timeline(
         if !audio_labels.is_empty() {
             required_filters.extend(["asetpts", "volume", "adelay", "amix", "alimiter", "atrim"]);
         }
-        ensure_ffmpeg_capabilities(&ffmpeg_path, &required_filters)?;
+        if let Err(error) = ensure_ffmpeg_capabilities(&ffmpeg_path, &required_filters) {
+            for path in &icon_temp_files { let _ = std::fs::remove_file(path); }
+            return Err(error);
+        }
 
         // O grafo pode ficar muito grande (principalmente com typewriter,
         // que cria uma etapa drawtext por caractere). No Windows, passar todo
@@ -701,6 +703,7 @@ pub async fn export_timeline(
             Ok(child) => child,
             Err(error) => {
                 let _ = std::fs::remove_file(&filter_script_path);
+                for path in &icon_temp_files { let _ = std::fs::remove_file(path); }
                 return Err(format!(
                     "Não foi possível iniciar o FFmpeg em {}: {error}",
                     ffmpeg_path.display()
