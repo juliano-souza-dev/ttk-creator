@@ -631,7 +631,9 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
     // drag operation is explicitly accepted during dragover.
     event.preventDefault();
     event.dataTransfer.dropEffect = "copy";
-  }\n\n  function handleAssetDrop(event: DragEvent<HTMLDivElement>) {
+  }
+
+  function handleAssetDrop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
     const rect = event.currentTarget.getBoundingClientRect();
     const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
