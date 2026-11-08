@@ -28,7 +28,8 @@ type Props = { projectId: string; assets: MediaAsset[]; onAddMedia: () => void }
 type TrimDrag = { clipId: string; edge: "start" | "end"; startX: number; sourceStartMs: number; sourceEndMs: number; timelineStartMs: number; scaleMs: number };
 type ClipMoveDrag = { clipId: string; startX: number; lastX: number; timelineStartMs: number; memberKeys: string[] };
 type MotionTrimDrag = { id: string; edge: "start" | "end" | "move"; startX: number; lastX: number; startMs: number; endMs: number; memberKeys: string[] };
-type MotionGraphic = { id: string; isCaption?: boolean; text: string; icon?: string; lucideIconName?: string; lucideIconAnchor?: "left" | "right" | "top" | "bottom"; lucideIconSize?: number; lucideIconColor?: string; elements?: Array<{ type: string; content: string }>; fontFamily?: string; fontWeight?: number; textAlign?: "left" | "center" | "right"; startMs: number; endMs: number; durationMs: number; preset: "pop" | "slide" | "zoom" | "typewriter" | "impact" | "composition"; color: string; accent: string; fontSize: number; x: number; y: number; sound: "pop" | "whoosh" | "impact" | "click" | "none"; soundId?: string; soundVolume?: number };
+type CaptionWord = { text: string; startMs: number; endMs: number; translation?: string };
+type MotionGraphic = { id: string; isCaption?: boolean; captionMode?: "source" | "bilingual" | "karaoke"; captionEnglish?: string; captionTranslation?: string; captionWords?: CaptionWord[]; text: string; icon?: string; lucideIconName?: string; lucideIconAnchor?: "left" | "right" | "top" | "bottom"; lucideIconSize?: number; lucideIconColor?: string; elements?: Array<{ type: string; content: string }>; fontFamily?: string; fontWeight?: number; textAlign?: "left" | "center" | "right"; startMs: number; endMs: number; durationMs: number; preset: "pop" | "slide" | "zoom" | "typewriter" | "impact" | "composition"; color: string; accent: string; fontSize: number; x: number; y: number; sound: "pop" | "whoosh" | "impact" | "click" | "none"; soundId?: string; soundVolume?: number };
 const motionPresets = [{id:"pop",label:"Pop Impact",sound:"pop"},{id:"slide",label:"Slide + Whoosh",sound:"whoosh"},{id:"zoom",label:"Zoom + Impact",sound:"impact"},{id:"typewriter",label:"Typewriter",sound:"click"},{id:"impact",label:"Big Impact",sound:"impact"}] as const;
 const lucideIconLibrary = {
   Eye, Camera, BookOpen, Headphones, Lightbulb, Clock3, MessageCircle, CheckCircle2,
@@ -540,8 +541,83 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
     if (!file) return;
     try {
       const parsed: unknown = JSON.parse(await file.text());
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        const payload = parsed as Record<string, unknown>;
+        const rawCues = Array.isArray(payload.cues) ? payload.cues : Array.isArray(payload.lyrics) ? payload.lyrics : null;
+        const isSuperJson = !!rawCues && (
+          payload.schema === "immersionhub-super-json"
+          || payload.schema_version !== undefined
+          || payload.project !== undefined
+          || payload.kit !== undefined
+        );
+        if (isSuperJson && rawCues) {
+          const created: MotionGraphic[] = rawCues.flatMap((rawCue, index) => {
+            if (!rawCue || typeof rawCue !== "object") return [];
+            const cue = rawCue as Record<string, unknown>;
+            const asNumber = (value: unknown, fallback: number) => typeof value === "number" && Number.isFinite(value) ? value : fallback;
+            const cueStart = cue.start_ms !== undefined ? asNumber(cue.start_ms, 0) : asNumber(cue.start, 0) * 1000;
+            const cueEnd = cue.end_ms !== undefined ? asNumber(cue.end_ms, cueStart + 1500) : asNumber(cue.end, cueStart / 1000 + 1.5) * 1000;
+            if (cueEnd <= cueStart) return [];
+            const english = String(cue.approved_en ?? cue.en ?? cue.text_en ?? cue.text ?? "").trim();
+            const portuguese = String(cue.pt ?? cue.translation_pt ?? cue.text_pt ?? "").trim();
+            if (!english && !portuguese) return [];
+            const rawWords = Array.isArray(cue.words) ? cue.words : [];
+            const words: CaptionWord[] = rawWords.flatMap(rawWord => {
+              if (!rawWord || typeof rawWord !== "object") return [];
+              const word = rawWord as Record<string, unknown>;
+              const wordText = String(word.text ?? word.word_text ?? "").trim();
+              if (!wordText) return [];
+              let start = asNumber(word.start_ms ?? word.startMs, cueStart);
+              let end = asNumber(word.end_ms ?? word.endMs, start + 180);
+              if (start < cueStart - 500 && end <= cueEnd - cueStart + 500) {
+                start += cueStart;
+                end += cueStart;
+              }
+              start = Math.max(cueStart, start);
+              end = Math.min(cueEnd, Math.max(start + 50, end));
+              return [{ text: wordText, startMs: start, endMs: end, translation: String(word.pt ?? word.translation ?? "").trim() }];
+            }).sort((a,b) => a.startMs - b.startMs);
+            const startMs = playheadMs + cueStart;
+            const endMs = playheadMs + cueEnd;
+            return [{
+              id: crypto.randomUUID(),
+              isCaption: true,
+              captionMode: words.length ? "karaoke" as const : portuguese ? "bilingual" as const : "source" as const,
+              captionEnglish: english,
+              captionTranslation: portuguese,
+              captionWords: words.map(word => ({ ...word, startMs: playheadMs + word.startMs, endMs: playheadMs + word.endMs })),
+              text: portuguese ? english + "\\n" + portuguese : english || portuguese,
+              icon: "",
+              fontFamily: "Arial",
+              fontWeight: 900,
+              textAlign: "center",
+              startMs,
+              endMs,
+              durationMs: endMs - startMs,
+              preset: "pop" as const,
+              color: "#ffffff",
+              accent: "#65d6c0",
+              fontSize: 48,
+              x: 50,
+              y: 82,
+              sound: "none" as const,
+              soundId: "",
+              soundVolume: 80,
+            }];
+          });
+          if (!created.length) throw new Error("O Super JSON foi reconhecido, mas não contém falas válidas para importar.");
+          setMotion(current => [...current, ...created]);
+          setSelectedMotionId(created[0]?.id ?? null);
+          setActiveTool("text");
+          const withWords = created.filter(item => item.captionWords?.length).length;
+          const withTranslation = created.filter(item => item.captionTranslation).length;
+          setSceneSpecMessage(`Super JSON importado: ${created.length} legendas, ${withWords} com sincronização por palavra e ${withTranslation} bilíngues.`);
+          stopPlayback();
+          return;
+        }
+      }
       if (!validateSceneSpec(parsed)) {
-        throw new Error("JSON incompatível. Confira a versão 1.0 e os campos obrigatórios do Scene Spec.");
+        throw new Error("JSON incompatível. Confira a versão 1.0 do Scene Spec ou importe um Super JSON do iHubEnglish.");
       }
       const unsupportedIcons = parsed.scenes.flatMap(scene => scene.blocks.map(block => block.iconName).filter((name): name is string => !!name && !lucideIconNames.includes(name as LucideIconName)));
       if (unsupportedIcons.length) {
@@ -923,7 +999,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
           return <div key={item.id} className={"motion-overlay motion-" + item.preset + (selectedMotionId === item.id ? " motion-selected" : "")} style={{ "--motion-color": item.color, "--motion-accent": item.accent, "--motion-size": (item.fontSize * previewScale) + "px", "--motion-x": item.x + "%", "--motion-y": item.y + "%" , transform: item.textAlign === "left" ? "translate(0,-50%)" : item.textAlign === "right" ? "translate(-100%,-50%)" : "translate(-50%,-50%)" } as CSSProperties}>
             <span className={"motion-content-group anchor-" + (item.lucideIconAnchor || "left")} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: Math.max(4, (item.lucideIconSize ?? item.fontSize) * previewScale * 0.22), flexDirection: item.lucideIconAnchor === "top" ? "column" : item.lucideIconAnchor === "bottom" ? "column-reverse" : item.lucideIconAnchor === "right" ? "row-reverse" : "row", transform: animation.transform, opacity: animation.opacity, willChange: "transform,opacity" }} onPointerDown={event => { setSelectedId(null); setSelectedMotionId(item.id); event.preventDefault(); event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={event => { if (!event.currentTarget.hasPointerCapture(event.pointerId)) return; const rect = event.currentTarget.closest(".preview-media-frame")?.getBoundingClientRect(); if (!rect) return; updateMotion(item.id, { x: Math.max(0, Math.min(100, ((event.clientX - rect.left) / rect.width) * 100)), y: Math.max(0, Math.min(100, ((event.clientY - rect.top) / rect.height) * 100)) }); }} onPointerUp={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); }}>
               {item.lucideIconName && lucideIconLibrary[item.lucideIconName as LucideIconName] && (() => { const IconView = lucideIconLibrary[item.lucideIconName as LucideIconName]; return <IconView size={(item.lucideIconSize ?? item.fontSize) * previewScale} color={item.lucideIconColor || item.accent} strokeWidth={2.2} aria-hidden="true"/>; })()}
-              <span className="motion-main-text" style={{fontFamily:item.fontFamily || "Arial",fontWeight:(item.fontWeight || 900) >= 700 ? 700 : 400,fontSize:item.fontSize * previewScale,textAlign:item.textAlign || "center",background:item.isCaption ? "rgba(0,0,0,.76)" : "transparent",padding:item.isCaption ? ".32em .55em" : "0",borderRadius:item.isCaption ? ".22em" : "0",boxDecorationBreak:"clone",WebkitBoxDecorationBreak:"clone"}}>{animation.text}</span>
+              <span className="motion-main-text" style={{fontFamily:item.fontFamily || "Arial",fontWeight:(item.fontWeight || 900) >= 700 ? 700 : 400,fontSize:item.fontSize * previewScale,textAlign:item.textAlign || "center",background:item.isCaption ? "rgba(0,0,0,.76)" : "transparent",padding:item.isCaption ? ".32em .55em" : "0",borderRadius:item.isCaption ? ".22em" : "0",boxDecorationBreak:"clone",WebkitBoxDecorationBreak:"clone"}}>{item.captionMode === "karaoke" && item.captionWords?.length ? <><span>{item.captionWords.map((word, index) => <span key={index} style={{ color: playheadMs >= word.startMs && playheadMs <= word.endMs ? item.accent : item.color, textShadow: playheadMs >= word.startMs && playheadMs <= word.endMs ? "0 0 12px " + item.accent : "none" }}>{word.text}{index < item.captionWords!.length - 1 ? " " : ""}</span>)}</span>{item.captionTranslation && <><br/><span style={{color:"#d8d4df",fontSize:"0.72em"}}>{item.captionTranslation}</span></>}</> : item.captionTranslation ? <>{item.captionEnglish || item.text}<br/><span style={{color:"#d8d4df",fontSize:"0.72em"}}>{item.captionTranslation}</span></> : animation.text}</span>
             </span>
           </div>;
         })}
