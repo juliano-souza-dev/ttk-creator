@@ -80,3 +80,16 @@ The first Scene Spec integration imports and exports graphic blocks as Motion Gr
 The schema already reserves optional fields for captions, audio and character references so that future versions can add these capabilities without changing the overall scene envelope. These metadata fields are not yet applied by the editor importer; FrameLab displays a notice when such metadata is present.
 
 See [scene-spec.schema.json](./scene-spec.schema.json) for the machine-readable JSON Schema.
+
+## Lucide SVG icons
+
+Scene blocks may optionally define:
+
+- `iconName`: a supported Lucide icon component name, such as `Eye` or `Lightbulb`.
+- `iconAnchor`: `left`, `right`, `top` or `bottom`; the icon is positioned relative to the text inside the same motion block.
+- `iconSize`: icon size in design pixels (12–180).
+- `iconColor`: SVG stroke color.
+
+The editor's Lucide library currently provides a curated searchable set of icons. Selecting an icon binds it to the text block, so dragging the text moves the icon with it. These properties are preserved by Scene Spec import/export.
+
+**Rendering limitation in this iteration:** Lucide SVGs are displayed in the editor preview, but the current native MP4 export contract only accepts text overlays. MP4 rasterization of SVG icons is a separate renderer integration and is not silently represented as complete.
