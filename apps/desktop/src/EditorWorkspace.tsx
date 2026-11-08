@@ -551,7 +551,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
           || payload.kit !== undefined
         );
         if (isSuperJson && rawCues) {
-          const created: MotionGraphic[] = rawCues.flatMap((rawCue, index) => {
+          const created: MotionGraphic[] = rawCues.flatMap(rawCue => {
             if (!rawCue || typeof rawCue !== "object") return [];
             const cue = rawCue as Record<string, unknown>;
             const asNumber = (value: unknown, fallback: number) => typeof value === "number" && Number.isFinite(value) ? value : fallback;
@@ -575,6 +575,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
               }
               start = Math.max(cueStart, start);
               end = Math.min(cueEnd, Math.max(start + 50, end));
+              if (end <= start) return [];
               return [{ text: wordText, startMs: start, endMs: end, translation: String(word.pt ?? word.translation ?? "").trim() }];
             }).sort((a,b) => a.startMs - b.startMs);
             const startMs = playheadMs + cueStart;
@@ -1017,7 +1018,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
         <div className="editor-panel-head"><div><b>Propriedades</b><small>Texto, tipografia e animação</small></div></div>
         <div className="properties-scroll">
           <details open className="property-section"><summary>Texto</summary>
-            <label className="motion-caption-toggle"><input type="checkbox" checked={!!selectedMotion.isCaption} onChange={event => updateMotion(selectedMotion.id, { isCaption: event.target.checked })}/> Exibir como legenda (com fundo)</label><small className="property-hint">Adiciona um fundo escuro semitransparente para destacar o texto sobre qualquer vídeo.</small>{selectedMotion.isCaption && <label className="property-control">Modo da legenda<select value={selectedMotion.captionMode || (selectedMotion.captionTranslation ? "bilingual" : "source")} onChange={event => updateMotion(selectedMotion.id, { captionMode: event.target.value as MotionGraphic["captionMode"] })}><option value="source">Original</option><option value="bilingual" disabled={!selectedMotion.captionTranslation}>Original + tradução</option><option value="karaoke" disabled={!selectedMotion.captionWords?.length}>Karaoke por palavra</option></select></label>}<label>Conteúdo<textarea className="motion-textarea" rows={6} value={selectedMotion.text} onChange={event => updateMotion(selectedMotion.id, { text: event.target.value })} maxLength={1200} placeholder={"Digite sua frase. Use Enter para criar uma nova linha."}/></label><small className="property-hint">Use Enter para quebrar a linha. O texto será distribuído dentro da área segura do vídeo.</small>
+            <label className="motion-caption-toggle"><input type="checkbox" checked={!!selectedMotion.isCaption} onChange={event => updateMotion(selectedMotion.id, { isCaption: event.target.checked })}/> Exibir como legenda (com fundo)</label><small className="property-hint">Adiciona um fundo escuro semitransparente para destacar o texto sobre qualquer vídeo.</small>{selectedMotion.isCaption && <label className="property-control">Modo da legenda<select value={selectedMotion.captionMode || (selectedMotion.captionTranslation ? "bilingual" : "source")} onChange={event => updateMotion(selectedMotion.id, { captionMode: event.target.value as MotionGraphic["captionMode"] })}><option value="source">Original</option><option value="bilingual" disabled={!selectedMotion.captionTranslation}>Original + tradução</option><option value="karaoke" disabled={!selectedMotion.captionWords?.length}>Karaoke por palavra</option></select></label>}<label>{selectedMotion.isCaption ? "Texto original" : "Conteúdo"}<textarea className="motion-textarea" rows={6} value={selectedMotion.isCaption ? (selectedMotion.captionEnglish || selectedMotion.text) : selectedMotion.text} onChange={event => updateMotion(selectedMotion.id, selectedMotion.isCaption ? { text: event.target.value, captionEnglish: event.target.value } : { text: event.target.value })} maxLength={1200} placeholder={"Digite sua frase. Use Enter para criar uma nova linha."}/></label>{selectedMotion.isCaption && <label>Tradução<textarea className="motion-textarea" rows={3} value={selectedMotion.captionTranslation || ""} onChange={event => updateMotion(selectedMotion.id, { captionTranslation: event.target.value })} maxLength={1200} placeholder="Tradução em português"/></label>}<small className="property-hint">Use Enter para quebrar a linha. O texto será distribuído dentro da área segura do vídeo.</small>
             <div className="lucide-library">
               <div className="lucide-library-heading"><b>Biblioteca Lucide SVG</b><small>Ícone vetorial ancorado ao texto</small></div>
               <label className="lucide-search"><Search size={14}/><input value={iconSearch} onChange={event => setIconSearch(event.target.value)} placeholder="Buscar ícone..."/></label>
