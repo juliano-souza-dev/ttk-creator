@@ -318,8 +318,10 @@ pub async fn check_ffmpeg() -> Result<String, String> {
 fn wrap_text_for_export(value: &str, font_size: u32) -> String {
     // drawtext does not automatically wrap at a maximum width. Estimate a
     // conservative character count so exported lines stay inside 90% of 1080px.
+    // Normalize Windows/macOS line endings without collapsing intentional blank lines.
+    let normalized = value.replace("\r\n", "\n").replace('\r', "\n");
     let max_chars = ((972.0 / (font_size.max(1) as f64 * 0.65)).floor() as usize).max(8);
-    value.split('\n').map(|line| {
+    normalized.split('\n').map(|line| {
         let mut lines = Vec::new();
         let mut current = String::new();
         for word in line.split_whitespace() {
@@ -345,7 +347,7 @@ fn wrap_text_for_export(value: &str, font_size: u32) -> String {
             }
         }
         if !current.is_empty() { lines.push(current); }
-        lines.join("\n")
+        if lines.is_empty() { String::new() } else { lines.join("\n") }
     }).collect::<Vec<_>>().join("\n")
 }
 
@@ -358,7 +360,8 @@ fn ffmpeg_escape_text(value: &str) -> String {
         .replace(',', "\\,")
         .replace('[', "\\[")
         .replace(']', "\\]")
-        .replace('\n', "\\n")
+        // Keep real line-feed characters. drawtext renders them as separate
+        // lines; converting them to the two-character sequence \\n loses layout.
         .replace('\r', "")
 }
 
