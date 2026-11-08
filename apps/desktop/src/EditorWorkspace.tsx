@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, DragEvent, PointerEvent as ReactPointerEvent } from "react";
+import type { ChangeEvent, CSSProperties, DragEvent, PointerEvent as ReactPointerEvent } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
@@ -480,7 +480,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
     setSceneSpecMessage("Scene Spec exportado com os elementos atuais da timeline.");
   }
 
-  async function importSceneSpec(event: React.ChangeEvent<HTMLInputElement>) {
+  async function importSceneSpec(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
