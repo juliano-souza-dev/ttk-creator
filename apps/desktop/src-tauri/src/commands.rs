@@ -144,6 +144,10 @@ pub struct ExportMotion {
     duration_ms: u64,
     #[serde(default)]
     is_caption: bool,
+    #[serde(default)]
+    lucide_icon_png: Option<String>,
+    #[serde(default)]
+    lucide_icon_anchor: String,
 }
 
 #[derive(serde::Deserialize)]
@@ -396,6 +400,8 @@ pub async fn export_timeline(
         let mut visual_inputs: Vec<(usize, &ExportClip)> = Vec::new();
         let mut audio_inputs: Vec<(usize, &ExportClip)> = Vec::new();
         let mut sound_inputs: Vec<(usize, &ExportSoundEffect)> = Vec::new();
+        let mut icon_temp_files: Vec<PathBuf> = Vec::new();
+        let mut icon_inputs: Vec<(usize, usize, &ExportMotion)> = Vec::new();
         let mut total_ms = 0u64;
 
         for clip in &request.clips {
@@ -464,6 +470,25 @@ pub async fn export_timeline(
             let input_index = visual_inputs.len() + audio_inputs.len() + sound_inputs.len();
             args.extend(["-i".into(), path.to_string_lossy().into_owned()]);
             sound_inputs.push((input_index, sound));
+        }
+
+        for (motion_index, item) in request.motion.iter().enumerate() {
+            let Some(data_url) = item.lucide_icon_png.as_deref() else { continue; };
+            let encoded = data_url.strip_prefix("data:image/png;base64,")
+                .ok_or("Imagem Lucide inválida: esperado PNG em base64.")?;
+            use base64::Engine as _;
+            let bytes = base64::engine::general_purpose::STANDARD.decode(encoded)
+                .map_err(|_| "Não foi possível decodificar a imagem do ícone Lucide.")?;
+            if bytes.len() > 2 * 1024 * 1024 || !bytes.starts_with(b"\\x89PNG\\r\\n\\x1a\\n") {
+                return Err("Imagem Lucide inválida ou maior que 2 MB.".into());
+            }
+            let icon_path = std::env::temp_dir().join(format!("framelab-icon-{}.png", uuid::Uuid::new_v4()));
+            std::fs::write(&icon_path, &bytes).map_err(|error| format!("Não foi possível preparar o ícone: {error}"))?;
+            let input_index = visual_inputs.len() + audio_inputs.len() + sound_inputs.len() + icon_inputs.len();
+            let duration = item.end_ms.saturating_sub(item.start_ms).max(1) as f64 / 1000.0;
+            args.extend(["-loop".into(), "1".into(), "-framerate".into(), "30".into(), "-t".into(), format!("{duration:.3}"), "-i".into(), icon_path.to_string_lossy().into_owned()]);
+            icon_temp_files.push(icon_path);
+            icon_inputs.push((input_index, motion_index, item));
         }
 
         for item in &request.motion {
@@ -562,6 +587,21 @@ pub async fn export_timeline(
             };
             let next = format!("text{index}");
             filter_parts.push(format!("[{previous}]drawtext=fontfile='{font_file}':text='{}':fontcolor={color}{caption_box}:fontsize='max(1,{}*({scale}))':alpha='{alpha}':x='{x}':y='{anchor_y}-text_h/2':enable='between(t,{start:.3},{end:.3})'[{next}]", ffmpeg_escape_text(&wrap_text_for_export(&item.text, item.font_size)), item.font_size.clamp(18, 180)));
+            previous = next;
+        }
+        for (icon_position, (input_index, motion_index, item)) in icon_inputs.iter().enumerate() {
+            let icon_size = item.font_size.clamp(18, 180).max(24) as f64;
+            let anchor_x = (item.x.clamp(0.0, 100.0) / 100.0) * 1080.0;
+            let anchor_y = (item.y.clamp(0.0, 100.0) / 100.0) * 1920.0;
+            let gap = (icon_size * 0.18).max(8.0);
+            let (x, y) = match item.lucide_icon_anchor.as_str() {
+                "right" => (format!("{anchor_x}+{gap}"), format!("{anchor_y}-{} / 2", icon_size)),
+                "top" => (format!("{anchor_x}-{} / 2", icon_size), format!("{anchor_y}-{}-{gap}", icon_size)),
+                "bottom" => (format!("{anchor_x}-{} / 2", icon_size), format!("{anchor_y}+{gap}")),
+                _ => (format!("{anchor_x}-{icon_size}-{gap}"), format!("{anchor_y}-{} / 2", icon_size)),
+            };
+            let next = format!("icon{icon_position}_{motion_index}");
+            filter_parts.push(format!("[{previous}][{input_index}:v]overlay=x='{x}':y='{y}':format=auto:eof_action=pass:shortest=0:enable='gte(t,{:.6})*lt(t,{:.6})'[{next}]", item.start_ms as f64 / 1000.0, item.end_ms as f64 / 1000.0));
             previous = next;
         }
         filter_parts.push(format!("[{previous}]format=yuv420p[vout]"));
@@ -692,6 +732,7 @@ pub async fn export_timeline(
         // o arquivo temporário quando o processo terminar, nunca logo após spawn().
         let status_result = child.wait();
         let _ = std::fs::remove_file(&filter_script_path);
+        for path in &icon_temp_files { let _ = std::fs::remove_file(path); }
         let status = status_result
             .map_err(|error| format!("Não foi possível aguardar o FFmpeg: {error}"))?;
         let stderr = stderr_reader.join().unwrap_or_else(|_| "Não foi possível ler o diagnóstico do FFmpeg.".into());
