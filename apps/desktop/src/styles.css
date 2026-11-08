@@ -486,3 +486,19 @@
 
 /* Drag-and-drop transition library */
 .transition-library{display:grid;gap:8px;padding:10px}.transition-library-item{display:grid;grid-template-columns:34px 1fr;grid-template-rows:auto auto auto;align-items:center;gap:3px 9px;padding:10px;border:1px solid #393342;border-radius:8px;background:#1c1922;color:#eee;text-align:left;cursor:grab}.transition-library-item:active{border-color:#a98af0}.transition-library-item.selected{border-color:#b99be7;background:#30263e;box-shadow:0 0 0 1px #b99be755}.transition-insert-panel{display:grid;gap:8px;padding:0 10px 12px}.transition-insert-panel>small{color:#aaa1b2;font-size:9px}.transition-insert-panel>small b{color:#d8c3fa;font-family:"DM Mono",monospace}.transition-insert-panel .primary{display:flex;align-items:center;justify-content:center;gap:6px}.transition-library-item>span{grid-row:1/4;width:34px;height:34px;display:grid;place-items:center;border-radius:8px;background:#30263e;color:#c6a8f2;font-size:21px}.transition-library-item>b{font-size:11px}.transition-library-item>small{color:#93899f;font-size:9px}.transition-library-item>em{color:#b99be7;font-size:8px;font-style:normal}.sound-library-heading{border-top:1px solid #302b37;margin-top:6px}.transition-preview-white{position:absolute;inset:0;z-index:4;background:#fff;pointer-events:none;transition:opacity 40ms linear}
+
+
+/* Scene templates and portable Scene Spec tools */
+.scene-template-list{display:grid;gap:9px;padding:10px}
+.scene-template-card{display:grid;gap:7px;padding:11px;border:1px solid #393342;border-radius:9px;background:#1b1921}
+.scene-template-card>b{font-size:11px;color:#f2eef8}
+.scene-template-card>small{font-size:9px;line-height:1.45;color:#9992a2}
+.scene-template-preview{display:grid;min-height:74px;place-items:center;padding:10px;border:1px solid #37303f;border-radius:7px;background:linear-gradient(145deg,#24202d,#17151c);color:#bba1e8;font-family:"DM Mono",monospace;font-size:11px;font-weight:800;letter-spacing:.08em;text-align:center}
+.scene-template-card .primary{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;min-height:31px;font-size:10px}
+.scene-spec-tools{display:grid;gap:8px;margin:10px;padding:11px;border:1px solid #393342;border-radius:9px;background:#19171f}
+.scene-spec-tools>div{display:grid;gap:5px}
+.scene-spec-tools>div>b{display:flex;align-items:center;gap:6px;font-size:11px;color:#eee}
+.scene-spec-tools>div>small{font-size:9px;line-height:1.45;color:#9992a2}
+.scene-spec-tools .secondary-action{display:flex;align-items:center;justify-content:center;gap:6px;min-height:32px;font-size:10px}
+.scene-spec-import{position:relative;overflow:hidden}
+.scene-spec-import input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
