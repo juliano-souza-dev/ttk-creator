@@ -626,7 +626,12 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
     setPlaying(true);
   }
 
-  function handleTimelineDragOver(event: DragEvent<HTMLDivElement>) {\n    // Chromium/Tauri only treats the timeline as a valid drop target when the\n    // drag operation is explicitly accepted during dragover.\n    event.preventDefault();\n    event.dataTransfer.dropEffect = "copy";\n  }\n\n  function handleAssetDrop(event: DragEvent<HTMLDivElement>) {
+  function handleTimelineDragOver(event: DragEvent<HTMLDivElement>) {
+    // Chromium/Tauri only treats the timeline as a valid drop target when the
+    // drag operation is explicitly accepted during dragover.
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  }\n\n  function handleAssetDrop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
     const rect = event.currentTarget.getBoundingClientRect();
     const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
