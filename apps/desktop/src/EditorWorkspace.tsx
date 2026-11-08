@@ -19,6 +19,7 @@ type TimelineClip = {
   muted?: boolean;
   cameraMotion?: "none" | "zoom-in" | "zoom-out" | "pan-left" | "pan-right" | "pan-up" | "pan-down";
   transitionMs?: number;
+  transitionType?: "fade-black" | "fade-white" | "flash";
 };
 type TimelineGroup = { id: string; name: string; members: string[] };
 type Props = { projectId: string; assets: MediaAsset[]; onAddMedia: () => void };
@@ -149,7 +150,8 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
           volume: Number.isFinite(raw.volume) ? Math.max(0, Math.min(100, Number(raw.volume))) : 100,
           muted: raw.muted === true,
           cameraMotion: ["none", "zoom-in", "zoom-out", "pan-left", "pan-right", "pan-up", "pan-down"].includes(String(raw.cameraMotion)) ? raw.cameraMotion as TimelineClip["cameraMotion"] : "none",
-          transitionMs: Number.isFinite(raw.transitionMs) ? Math.max(0, Math.min(2000, Number(raw.transitionMs))) : 500
+          transitionMs: Number.isFinite(raw.transitionMs) ? Math.max(0, Math.min(2000, Number(raw.transitionMs))) : 500,
+          transitionType: ["fade-black", "fade-white", "flash"].includes(String(raw.transitionType)) ? raw.transitionType as TimelineClip["transitionType"] : "fade-black"
         };
         restored.push(clip);
         if (!isNew) legacyCursor += clipDuration(clip);
@@ -264,12 +266,12 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
   const activeVisualAsset = activeVisualClip ? assets.find(asset => asset.id === activeVisualClip.assetId) ?? null : null;
   const visualProgress = activeVisualClip ? Math.max(0, Math.min(1, (playheadMs - activeVisualClip.timelineStartMs) / Math.max(1, clipDuration(activeVisualClip)))) : 0;
   const transitionDuration = activeVisualClip?.transitionMs ?? 500;
-  // Fade only on entrance. Fading both ends of a single clip created a black flash
-  // at every cut because the next clip had not become active yet.
+  const transitionType = activeVisualClip?.transitionType ?? "fade-black";
   const transitionProgress = activeVisualClip && transitionDuration > 0
     ? Math.max(0, Math.min(1, (playheadMs - activeVisualClip.timelineStartMs) / transitionDuration))
     : 1;
-  const previewOpacity = activeVisualClip ? transitionProgress : 1;
+  const previewOpacity = activeVisualClip && transitionType === "fade-black" ? transitionProgress : 1;
+  const transitionWhiteOpacity = activeVisualClip && (transitionType === "fade-white" || transitionType === "flash") ? 1 - transitionProgress : 0;
   const cameraMotion = activeVisualClip?.cameraMotion ?? "none";
   const cameraTransform = cameraMotion === "zoom-in" ? `scale(${1 + visualProgress * 0.16})` : cameraMotion === "zoom-out" ? `scale(${1.16 - visualProgress * 0.16})` : cameraMotion === "pan-left" ? `scale(1.12) translateX(${-visualProgress * 7}%)` : cameraMotion === "pan-right" ? `scale(1.12) translateX(${visualProgress * 7}%)` : cameraMotion === "pan-up" ? `scale(1.12) translateY(${-visualProgress * 7}%)` : cameraMotion === "pan-down" ? `scale(1.12) translateY(${visualProgress * 7}%)` : "none";
   const previewClip = activeVisualClip ?? selectedClip;
@@ -395,6 +397,8 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
           timelineStartMs: clip.timelineStartMs,
           volume: clip.volume,
           muted: clip.muted,
+          transitionType: clip.transitionType ?? "fade-black",
+          transitionMs: clip.transitionMs ?? 500,
         }] : [];
       });
       await desktopApi.exportTimeline({
@@ -627,6 +631,15 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
     const rect = event.currentTarget.getBoundingClientRect();
     const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
     const atMs = ratio * scale;
+    const transitionType = event.dataTransfer.getData("text/transition-type");
+    if (transitionType && ["fade-black", "fade-white", "flash"].includes(transitionType)) {
+      if (event.currentTarget.closest(".audio-track")) return;
+      const nextClip = visualClips.filter(clip => clip.timelineStartMs >= atMs - 150).sort((a, b) => a.timelineStartMs - b.timelineStartMs)[0];
+      if (!nextClip) { setExportMessage("Solte a transição antes de um clipe para aplicá-la."); return; }
+      updateClip(nextClip.id, { transitionType: transitionType as TimelineClip["transitionType"], transitionMs: transitionType === "flash" ? 250 : 600 });
+      setSelectedId(nextClip.id); setSelectedMotionId(null); setExportMessage(""); stopPlayback();
+      return;
+    }
     setTimelineInsertAtMs(atMs);
     setPlayheadMs(atMs);
     const assetId = event.dataTransfer.getData("text/asset-id");
@@ -669,7 +682,11 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
         <div className="motion-presets editor-preset-grid">{motionPresets.map(preset => <button key={preset.id} className="motion-preset" onClick={() => addMotion(preset.id)}><b>{preset.label}</b><small>Som: {preset.sound}</small><span>+ Adicionar</span></button>)}</div>
       </>}
       {activeTool === "effects" && <>
-        <div className="editor-panel-head"><div><b>Biblioteca de sons</b><small>{globalSounds.length} efeito(s) global(is), disponíveis em todos os projetos</small></div></div>
+        <div className="editor-panel-head"><div><b>Transições e sons</b><small>Arraste uma transição para antes do clipe desejado</small></div></div>
+        <div className="transition-library">
+          {[{id:"fade-black",name:"Fade para preto",detail:"Entrada suave a partir do preto",symbol:"◐"},{id:"fade-white",name:"Fade para branco",detail:"Entrada suave a partir do branco",symbol:"◑"},{id:"flash",name:"Flash branco",detail:"Abertura rápida com clarão",symbol:"✦"}].map(item=><button key={item.id} className="transition-library-item" draggable onDragStart={event=>event.dataTransfer.setData("text/transition-type",item.id)}><span>{item.symbol}</span><b>{item.name}</b><small>{item.detail}</small><em>Arraste para a timeline</em></button>)}
+        </div>
+        <div className="editor-panel-head sound-library-heading"><div><b>Biblioteca de sons</b><small>{globalSounds.length} efeito(s) global(is), disponíveis em todos os projetos</small></div></div>
         <div className="sound-library-import">
           <label>Nome do efeito<input value={newSoundName} onChange={event => setNewSoundName(event.target.value)} placeholder="Ex.: Pop, Check, Whoosh"/></label>
           <button className="primary" onClick={() => void importGlobalSound()} disabled={soundBusy}><Plus size={14}/>{soundBusy ? "Importando..." : "Importar áudio"}</button>
@@ -689,7 +706,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
           !previewUrl ? <div className="preview-placeholder"><span>Não foi possível carregar esta mídia.</span><small>{loadError || "Verifique se o arquivo continua na pasta do projeto."}</small></div> :
           previewAsset.kind === "video" ? <video key={previewAsset.id} ref={videoRef} src={previewUrl} muted={!!previewClip?.muted} controls={!playing} style={{ opacity: previewOpacity, transition: "opacity 40ms linear" }} onError={() => setLoadError("Formato não suportado pelo preview do sistema.")}/> :
           previewAsset.kind === "audio" ? <div className="audio-preview"><AudioLines size={48}/><b>{previewAsset.name}</b><span>Áudio na timeline</span></div> :
-          <img src={previewUrl} alt={previewAsset.name} style={{ opacity: previewOpacity, transform: cameraTransform, transition: "opacity 40ms linear" }}/>}
+          <img src={previewUrl} alt={previewAsset.name} style={{ opacity: previewOpacity, transform: cameraTransform, transition: "opacity 40ms linear" }}/>} {transitionWhiteOpacity > 0 && <div className="transition-preview-white" style={{opacity:transitionWhiteOpacity}}/>}
         {activeMotion.map(item => {
           const animation = motionPreviewState(item, playheadMs);
           return <div key={item.id} className={"motion-overlay motion-" + item.preset + (selectedMotionId === item.id ? " motion-selected" : "")} style={{ "--motion-color": item.color, "--motion-accent": item.accent, "--motion-size": (item.fontSize * previewScale) + "px", "--motion-x": item.x + "%", "--motion-y": item.y + "%" , transform: item.textAlign === "left" ? "translate(0,-50%)" : item.textAlign === "right" ? "translate(-100%,-50%)" : "translate(-50%,-50%)" } as CSSProperties}>
@@ -740,7 +757,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
             {selectedAsset.kind === "video" && <div className="clip-toggle-row"><span><Volume2 size={14}/> Áudio original do vídeo</span><button className={selectedClip.muted ? "mute-toggle muted" : "mute-toggle"} onClick={() => updateClip(selectedClip.id, { muted: !selectedClip.muted })}>{selectedClip.muted ? <><VolumeX size={14}/> Silenciado</> : <><Volume2 size={14}/> Com som</>}</button></div>}
             {(selectedAsset.kind === "audio" || selectedAsset.kind === "video") && <label className="volume-control">Volume {selectedAsset.kind === "audio" ? "do áudio" : "do vídeo"} <strong>{selectedClip.volume}%</strong><input type="range" min={0} max={100} value={selectedClip.volume} onChange={event => updateClip(selectedClip.id, { volume: Number(event.target.value) })}/></label>}
             {selectedAsset.kind === "image" && <div className="property-section"><b>Movimento da imagem</b><label className="property-control">Movimento de câmera<select value={selectedClip.cameraMotion ?? "none"} onChange={event => updateClip(selectedClip.id, { cameraMotion: event.target.value as TimelineClip["cameraMotion"] })}><option value="none">Sem movimento</option><option value="zoom-in">Zoom lento de aproximação</option><option value="zoom-out">Zoom lento de afastamento</option><option value="pan-left">Câmera para a esquerda</option><option value="pan-right">Câmera para a direita</option><option value="pan-up">Câmera para cima</option><option value="pan-down">Câmera para baixo</option></select></label></div>}
-            {selectedAsset.kind !== "audio" && <label className="property-control">Transição suave <strong>{(selectedClip.transitionMs ?? 500)} ms</strong><input type="range" min={0} max={2000} step={100} value={selectedClip.transitionMs ?? 500} onChange={event => updateClip(selectedClip.id, { transitionMs: Number(event.target.value) })}/></label>}
+            {selectedAsset.kind !== "audio" && <div className="property-section"><b>Transição de entrada</b><label className="property-control">Tipo<select value={selectedClip.transitionType ?? "fade-black"} onChange={event=>updateClip(selectedClip.id,{transitionType:event.target.value as TimelineClip["transitionType"]})}><option value="fade-black">Fade para preto</option><option value="fade-white">Fade para branco</option><option value="flash">Flash branco</option></select></label><label className="property-control">Duração <strong>{selectedClip.transitionMs ?? 500} ms</strong><input type="range" min={0} max={2000} step={50} value={selectedClip.transitionMs ?? 500} onChange={event => updateClip(selectedClip.id, { transitionMs: Number(event.target.value) })}/></label><button className="secondary-action" onClick={()=>updateClip(selectedClip.id,{transitionMs:0})}>Remover transição</button></div>}
             <label className="property-control">Posição na timeline <strong>{timeLabel(selectedClip.timelineStartMs)}</strong><input type="range" min={0} max={Math.max(1000, totalDuration + 10000)} step={100} value={selectedClip.timelineStartMs} onChange={event => updateClip(selectedClip.id, { timelineStartMs: Number(event.target.value) })}/><input className="numeric-time-input" type="number" min="0" step="0.1" value={(selectedClip.timelineStartMs/1000).toFixed(1)} aria-label="Posição na timeline em segundos" onChange={event=>{const value=Number(event.target.value);if(event.target.value!==""&&Number.isFinite(value))updateClip(selectedClip.id,{timelineStartMs:Math.max(0,value*1000)});}}/></label>
           </> : <div className="editor-empty"><MousePointer2 size={24}/><b>Nenhum clipe selecionado</b><p>Adicione uma mídia à timeline para ajustar seus parâmetros.</p></div>}
         </div>
