@@ -148,6 +148,8 @@ pub struct ExportMotion {
     lucide_icon_png: Option<String>,
     #[serde(default)]
     lucide_icon_anchor: String,
+    #[serde(default)]
+    lucide_icon_size: u32,
 }
 
 #[derive(serde::Deserialize)]
@@ -479,7 +481,7 @@ pub async fn export_timeline(
             use base64::Engine as _;
             let bytes = base64::engine::general_purpose::STANDARD.decode(encoded)
                 .map_err(|_| "Não foi possível decodificar a imagem do ícone Lucide.")?;
-            if bytes.len() > 2 * 1024 * 1024 || !bytes.starts_with(b"\\x89PNG\\r\\n\\x1a\\n") {
+            if bytes.len() > 2 * 1024 * 1024 || !bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
                 return Err("Imagem Lucide inválida ou maior que 2 MB.".into());
             }
             let icon_path = std::env::temp_dir().join(format!("framelab-icon-{}.png", uuid::Uuid::new_v4()));
@@ -590,7 +592,7 @@ pub async fn export_timeline(
             previous = next;
         }
         for (icon_position, (input_index, motion_index, item)) in icon_inputs.iter().enumerate() {
-            let icon_size = item.font_size.clamp(18, 180).max(24) as f64;
+            let icon_size = item.lucide_icon_size.clamp(24, 512).max(24) as f64;
             let anchor_x = (item.x.clamp(0.0, 100.0) / 100.0) * 1080.0;
             let anchor_y = (item.y.clamp(0.0, 100.0) / 100.0) * 1920.0;
             let gap = (icon_size * 0.18).max(8.0);
