@@ -1,0 +1,169 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://framelab.local/schemas/scene-spec-1.0.json",
+  "title": "FrameLab Scene Spec",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "scenes"
+  ],
+  "properties": {
+    "version": {
+      "const": "1.0"
+    },
+    "project": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "language": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "aspectRatio": {
+          "enum": [
+            "9:16",
+            "16:9",
+            "1:1"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "scenes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/scene"
+      }
+    }
+  },
+  "$defs": {
+    "block": {
+      "type": "object",
+      "required": [
+        "id",
+        "role",
+        "text",
+        "x",
+        "y",
+        "fontSize",
+        "color"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "role": {
+          "enum": [
+            "title",
+            "item",
+            "question",
+            "answer",
+            "before",
+            "after",
+            "caption"
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "icon": {
+          "type": "string"
+        },
+        "anchor": {
+          "type": "string"
+        },
+        "startOffsetMs": {
+          "type": "number",
+          "minimum": 0
+        },
+        "durationMs": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "x": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "y": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "fontSize": {
+          "type": "number",
+          "minimum": 8,
+          "maximum": 240
+        },
+        "color": {
+          "type": "string"
+        },
+        "accent": {
+          "type": "string"
+        },
+        "align": {
+          "enum": [
+            "left",
+            "center",
+            "right"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "scene": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "layout",
+        "durationMs",
+        "blocks"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "layout": {
+          "enum": [
+            "category-list",
+            "question-answer",
+            "before-after",
+            "title-icon-caption",
+            "freeform"
+          ]
+        },
+        "durationMs": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "blocks": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/block"
+          }
+        },
+        "captions": {
+          "type": "object"
+        },
+        "audio": {
+          "type": "object"
+        },
+        "character": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
