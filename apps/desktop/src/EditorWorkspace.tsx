@@ -63,7 +63,7 @@ function getLucideIconExportOffset(item: MotionGraphic, iconSize: number) {
     ? groupTop
     : item.lucideIconAnchor === "bottom" ? groupTop + textHeight + gap
     : groupTop + (groupHeight - iconSize) / 2;
-  return { x, y };
+  return { lucideIconOffsetX: x, lucideIconOffsetY: y };
 }
 
 async function renderLucideIconPng(name: LucideIconName, color: string, size: number): Promise<string> {
