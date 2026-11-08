@@ -598,10 +598,23 @@ pub async fn export_timeline(
         for (icon_position, (input_index, motion_index, item)) in icon_inputs.iter().enumerate() {
             let anchor_x = (item.x.clamp(0.0, 100.0) / 100.0) * 1080.0;
             let anchor_y = (item.y.clamp(0.0, 100.0) / 100.0) * 1920.0;
-            let x = format!("{anchor_x}+({})", item.lucide_icon_offset_x);
-            let y = format!("{anchor_y}+({})", item.lucide_icon_offset_y);
+            let icon_size = item.lucide_icon_size.clamp(24, 512).max(24) as f64;
+            let duration_ms = item.end_ms.saturating_sub(item.start_ms).max(1);
+            let duration = duration_ms as f64 / 1000.0;
+            let progress = format!("clip(t/{duration:.6},0,1)");
+            let eased = format!("(1-pow(1-{progress},3))");
+            let (scale, alpha) = match item.preset.as_str() {
+                "pop" => (format!("0.35+0.65*{eased}"), "1".to_string()),
+                "zoom" => (format!("2.4-1.4*{eased}"), format!("min(1,{progress}*4)")),
+                "impact" => (format!("if(lt({progress},0.65),3-2.12*({progress}/0.65),0.88+0.12*(({progress}-0.65)/0.35))"), format!("min(1,{progress}*4)")),
+                _ => ("1".to_string(), "1".to_string()),
+            };
+            let icon_stream = format!("icon_source{icon_position}_{motion_index}");
+            filter_parts.push(format!("[{input_index}:v]scale=w='max(1,{icon_size}*({scale}))':h='max(1,{icon_size}*({scale}))':eval=frame,format=rgba,colorchannelmixer=aa='{alpha}':eval=frame[{icon_stream}]"));
+            let x = format!("{anchor_x}+({})+({icon_size}-overlay_w)/2", item.lucide_icon_offset_x);
+            let y = format!("{anchor_y}+({})+({icon_size}-overlay_h)/2", item.lucide_icon_offset_y);
             let next = format!("icon{icon_position}_{motion_index}");
-            filter_parts.push(format!("[{previous}][{input_index}:v]overlay=x='{x}':y='{y}':format=auto:eof_action=pass:shortest=0:enable='gte(t,{:.6})*lt(t,{:.6})'[{next}]", item.start_ms as f64 / 1000.0, item.end_ms as f64 / 1000.0));
+            filter_parts.push(format!("[{previous}][{icon_stream}]overlay=x='{x}':y='{y}':format=auto:eof_action=pass:shortest=0:enable='gte(t,{:.6})*lt(t,{:.6})'[{next}]", item.start_ms as f64 / 1000.0, item.end_ms as f64 / 1000.0));
             previous = next;
         }
         filter_parts.push(format!("[{previous}]format=yuv420p[vout]"));
