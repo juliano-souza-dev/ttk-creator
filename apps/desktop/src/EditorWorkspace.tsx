@@ -6,7 +6,7 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import { desktopApi, isDesktopRuntime } from "./services/desktop-api";
 import type { GlobalSound } from "./services/desktop-api";
 import type { MediaAsset } from "./shared/types";
-import { AudioLines, Film, Plus, Play, Pause, Trash2, Scissors, Copy, SkipBack, SkipForward, Volume2, VolumeX, Music2, Type, WandSparkles, MousePointer2, ChevronLeft, ChevronRight, Download, LoaderCircle, PanelsTopLeft, FileJson, Upload } from "lucide-react";
+import { AudioLines, Film, Plus, Play, Pause, Trash2, Scissors, Copy, SkipBack, SkipForward, Volume2, VolumeX, Music2, Type, WandSparkles, MousePointer2, ChevronLeft, ChevronRight, Download, LoaderCircle, PanelsTopLeft, FileJson, Upload, Eye, Camera, BookOpen, Headphones, Lightbulb, Clock3, MessageCircle, CheckCircle2, Globe2, Heart, Star, Zap, Target, Search, Image, Music, Mic, Video, PlayCircle, AlertCircle, ArrowRight, CircleHelp, Sparkles, Trophy, Rocket, Smile, ThumbsUp, Bookmark, MapPin, Coffee, Sun, Moon, Cloud, Flame, ShieldCheck, Languages, GraduationCap, Pencil, Bell, CalendarDays } from "lucide-react";
 import { SCENE_TEMPLATES, buildTemplateScene, createSceneSpecFromMotion, validateSceneSpec } from "./shared/scene-spec";
 
 type TimelineClip = {
@@ -27,8 +27,18 @@ type Props = { projectId: string; assets: MediaAsset[]; onAddMedia: () => void }
 type TrimDrag = { clipId: string; edge: "start" | "end"; startX: number; sourceStartMs: number; sourceEndMs: number; timelineStartMs: number; scaleMs: number };
 type ClipMoveDrag = { clipId: string; startX: number; lastX: number; timelineStartMs: number; memberKeys: string[] };
 type MotionTrimDrag = { id: string; edge: "start" | "end" | "move"; startX: number; lastX: number; startMs: number; endMs: number; memberKeys: string[] };
-type MotionGraphic = { id: string; isCaption?: boolean; text: string; icon?: string; elements?: Array<{ type: string; content: string }>; fontFamily?: string; fontWeight?: number; textAlign?: "left" | "center" | "right"; startMs: number; endMs: number; durationMs: number; preset: "pop" | "slide" | "zoom" | "typewriter" | "impact" | "composition"; color: string; accent: string; fontSize: number; x: number; y: number; sound: "pop" | "whoosh" | "impact" | "click" | "none"; soundId?: string; soundVolume?: number };
+type MotionGraphic = { id: string; isCaption?: boolean; text: string; icon?: string; lucideIconName?: string; lucideIconAnchor?: "left" | "right" | "top" | "bottom"; lucideIconSize?: number; lucideIconColor?: string; elements?: Array<{ type: string; content: string }>; fontFamily?: string; fontWeight?: number; textAlign?: "left" | "center" | "right"; startMs: number; endMs: number; durationMs: number; preset: "pop" | "slide" | "zoom" | "typewriter" | "impact" | "composition"; color: string; accent: string; fontSize: number; x: number; y: number; sound: "pop" | "whoosh" | "impact" | "click" | "none"; soundId?: string; soundVolume?: number };
 const motionPresets = [{id:"pop",label:"Pop Impact",sound:"pop"},{id:"slide",label:"Slide + Whoosh",sound:"whoosh"},{id:"zoom",label:"Zoom + Impact",sound:"impact"},{id:"typewriter",label:"Typewriter",sound:"click"},{id:"impact",label:"Big Impact",sound:"impact"}] as const;
+const lucideIconLibrary = {
+  Eye, Camera, BookOpen, Headphones, Lightbulb, Clock3, MessageCircle, CheckCircle2,
+  Globe2, Heart, Star, Zap, Target, Image, Music, Mic, Video, PlayCircle, AlertCircle,
+  ArrowRight, CircleHelp, Sparkles, Trophy, Rocket, Smile, ThumbsUp, Bookmark, MapPin,
+  Coffee, Sun, Moon, Cloud, Flame, ShieldCheck, Languages, GraduationCap, Pencil, Bell,
+  CalendarDays,
+};
+type LucideIconName = keyof typeof lucideIconLibrary;
+const lucideIconNames = Object.keys(lucideIconLibrary) as LucideIconName[];
+
 const defaultDuration = (asset: MediaAsset) => asset.durationMs && asset.durationMs > 0 ? asset.durationMs : asset.kind === "image" ? 5000 : 30000;
 const clipDuration = (clip: TimelineClip) => Math.max(0, clip.sourceEndMs - clip.sourceStartMs);
 const clipEnd = (clip: TimelineClip) => clip.timelineStartMs + clipDuration(clip);
@@ -91,6 +101,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
   const [selectedMotionId, setSelectedMotionId] = useState<string | null>(null);
   const [activeTool, setActiveTool] = useState<"media" | "audio" | "text" | "effects" | "templates">("media");
   const [sceneSpecMessage, setSceneSpecMessage] = useState("");
+  const [iconSearch, setIconSearch] = useState("");
   const [selectedTransition, setSelectedTransition] = useState<TimelineClip["transitionType"] | null>(null);
   const [timelineZoom, setTimelineZoom] = useState(100);
   const lastMotionSounds = useRef<Record<string, number>>({});
@@ -859,7 +870,10 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
         {activeMotion.map(item => {
           const animation = motionPreviewState(item, playheadMs);
           return <div key={item.id} className={"motion-overlay motion-" + item.preset + (selectedMotionId === item.id ? " motion-selected" : "")} style={{ "--motion-color": item.color, "--motion-accent": item.accent, "--motion-size": (item.fontSize * previewScale) + "px", "--motion-x": item.x + "%", "--motion-y": item.y + "%" , transform: item.textAlign === "left" ? "translate(0,-50%)" : item.textAlign === "right" ? "translate(-100%,-50%)" : "translate(-50%,-50%)" } as CSSProperties}>
-            <span className="motion-main-text" style={{fontFamily:item.fontFamily || "Arial",fontWeight:(item.fontWeight || 900) >= 700 ? 700 : 400,fontSize:item.fontSize * previewScale,textAlign:item.textAlign || "center",background:item.isCaption ? "rgba(0,0,0,.76)" : "transparent",padding:item.isCaption ? ".32em .55em" : "0",borderRadius:item.isCaption ? ".22em" : "0",boxDecorationBreak:"clone",WebkitBoxDecorationBreak:"clone",transform:animation.transform,opacity:animation.opacity,willChange:"transform,opacity"}} onPointerDown={event => { setSelectedId(null); setSelectedMotionId(item.id); event.preventDefault(); event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={event => { if (!event.currentTarget.hasPointerCapture(event.pointerId)) return; const rect = event.currentTarget.closest(".preview-media-frame")?.getBoundingClientRect(); if (!rect) return; updateMotion(item.id, { x: Math.max(0, Math.min(100, ((event.clientX - rect.left) / rect.width) * 100)), y: Math.max(0, Math.min(100, ((event.clientY - rect.top) / rect.height) * 100)) }); }} onPointerUp={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); }}>{animation.text}</span>
+            <span className={"motion-content-group anchor-" + (item.lucideIconAnchor || "left")} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: Math.max(4, (item.lucideIconSize ?? item.fontSize) * previewScale * 0.22), flexDirection: item.lucideIconAnchor === "top" ? "column" : item.lucideIconAnchor === "bottom" ? "column-reverse" : item.lucideIconAnchor === "right" ? "row-reverse" : "row", transform: animation.transform, opacity: animation.opacity, willChange: "transform,opacity" }} onPointerDown={event => { setSelectedId(null); setSelectedMotionId(item.id); event.preventDefault(); event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={event => { if (!event.currentTarget.hasPointerCapture(event.pointerId)) return; const rect = event.currentTarget.closest(".preview-media-frame")?.getBoundingClientRect(); if (!rect) return; updateMotion(item.id, { x: Math.max(0, Math.min(100, ((event.clientX - rect.left) / rect.width) * 100)), y: Math.max(0, Math.min(100, ((event.clientY - rect.top) / rect.height) * 100)) }); }} onPointerUp={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); }}>
+              {item.lucideIconName && lucideIconLibrary[item.lucideIconName as LucideIconName] && (() => { const IconView = lucideIconLibrary[item.lucideIconName as LucideIconName]; return <IconView size={(item.lucideIconSize ?? item.fontSize) * previewScale} color={item.lucideIconColor || item.accent} strokeWidth={2.2} aria-hidden="true"/>; })()}
+              <span className="motion-main-text" style={{fontFamily:item.fontFamily || "Arial",fontWeight:(item.fontWeight || 900) >= 700 ? 700 : 400,fontSize:item.fontSize * previewScale,textAlign:item.textAlign || "center",background:item.isCaption ? "rgba(0,0,0,.76)" : "transparent",padding:item.isCaption ? ".32em .55em" : "0",borderRadius:item.isCaption ? ".22em" : "0",boxDecorationBreak:"clone",WebkitBoxDecorationBreak:"clone"}}>{animation.text}</span>
+            </span>
           </div>;
         })}
       </div></div>
@@ -877,8 +891,26 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
         <div className="properties-scroll">
           <details open className="property-section"><summary>Texto</summary>
             <label className="motion-caption-toggle"><input type="checkbox" checked={!!selectedMotion.isCaption} onChange={event => updateMotion(selectedMotion.id, { isCaption: event.target.checked })}/> Exibir como legenda (com fundo)</label><small className="property-hint">Adiciona um fundo escuro semitransparente para destacar o texto sobre qualquer vídeo.</small><label>Conteúdo<textarea className="motion-textarea" rows={6} value={selectedMotion.text} onChange={event => updateMotion(selectedMotion.id, { text: event.target.value })} maxLength={1200} placeholder={"Digite sua frase. Use Enter para criar uma nova linha."}/></label><small className="property-hint">Use Enter para quebrar a linha. O texto será distribuído dentro da área segura do vídeo.</small>
-            <label>Ícone ao lado da palavra<input value={selectedMotion.icon || ""} onChange={event => updateMotion(selectedMotion.id, { icon: event.target.value })} maxLength={12} placeholder="Ex.: 👁  ★  →  ✓"/></label>
-            <small className="property-hint">Digite ou cole um emoji/símbolo. Deixe vazio para não exibir ícone.</small>
+            <div className="lucide-library">
+              <div className="lucide-library-heading"><b>Biblioteca Lucide SVG</b><small>Ícone vetorial ancorado ao texto</small></div>
+              <label className="lucide-search"><Search size={14}/><input value={iconSearch} onChange={event => setIconSearch(event.target.value)} placeholder="Buscar ícone..."/></label>
+              <div className="lucide-icon-grid">
+                {lucideIconNames.filter(name => name.toLowerCase().includes(iconSearch.trim().toLowerCase())).map(name => {
+                  const IconView = lucideIconLibrary[name];
+                  return <button type="button" key={name} className={"lucide-icon-option" + (selectedMotion.lucideIconName === name ? " selected" : "")} title={name} aria-label={name} onClick={() => updateMotion(selectedMotion.id, { lucideIconName: selectedMotion.lucideIconName === name ? undefined : name })}><IconView size={19}/><small>{name}</small></button>;
+                })}
+              </div>
+              {selectedMotion.lucideIconName && <>
+                <div className="motion-fields two">
+                  <label>Âncora<select value={selectedMotion.lucideIconAnchor || "left"} onChange={event => updateMotion(selectedMotion.id, { lucideIconAnchor: event.target.value as MotionGraphic["lucideIconAnchor"] })}><option value="left">À esquerda do texto</option><option value="right">À direita do texto</option><option value="top">Acima do texto</option><option value="bottom">Abaixo do texto</option></select></label>
+                  <label>Tamanho (px)<input type="number" min="12" max="180" value={selectedMotion.lucideIconSize ?? selectedMotion.fontSize} onChange={event => updateMotion(selectedMotion.id, { lucideIconSize: Math.max(12, Math.min(180, Number(event.target.value))) })}/></label>
+                </div>
+                <label>Cor do ícone<input type="color" value={selectedMotion.lucideIconColor || selectedMotion.accent} onChange={event => updateMotion(selectedMotion.id, { lucideIconColor: event.target.value })}/></label>
+                <button type="button" className="secondary-action" onClick={() => updateMotion(selectedMotion.id, { lucideIconName: undefined })}>Remover ícone SVG</button>
+              </>}
+              <small className="property-hint">O ícone acompanha o bloco quando você arrasta o texto na prévia. A exportação MP4 dos SVGs será conectada ao renderizador na próxima etapa.</small>
+            </div>
+            <label>Emoji ou símbolo (opcional)<input value={selectedMotion.icon || ""} onChange={event => updateMotion(selectedMotion.id, { icon: event.target.value })} maxLength={12} placeholder="Ex.: ★  →  ✓"/></label>
           </details>
           <details open className="property-section"><summary>Tempo</summary><div className="motion-fields two"><label>Início (s)<input type="number" min="0" step="0.1" value={(selectedMotion.startMs / 1000).toFixed(1)} onChange={event => updateMotion(selectedMotion.id, { startMs: Math.max(0, Number(event.target.value) * 1000) })}/></label><label>Saída (s)<input type="number" min={(selectedMotion.startMs / 1000 + 0.3).toFixed(1)} step="0.1" value={(selectedMotion.endMs / 1000).toFixed(1)} onChange={event => updateMotion(selectedMotion.id, { endMs: Math.max(selectedMotion.startMs + 300, Number(event.target.value) * 1000) })}/></label><label>Duração calculada (s)<input type="number" value={(selectedMotion.durationMs / 1000).toFixed(1)} readOnly title="Calculada automaticamente pelo início e pelo horário de saída"/></label></div></details>
           <details open className="property-section"><summary>Estilo</summary>
