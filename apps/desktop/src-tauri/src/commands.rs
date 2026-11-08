@@ -150,6 +150,10 @@ pub struct ExportMotion {
     lucide_icon_anchor: String,
     #[serde(default)]
     lucide_icon_size: u32,
+    #[serde(default)]
+    lucide_icon_offset_x: f64,
+    #[serde(default)]
+    lucide_icon_offset_y: f64,
 }
 
 #[derive(serde::Deserialize)]
@@ -596,12 +600,8 @@ pub async fn export_timeline(
             let anchor_x = (item.x.clamp(0.0, 100.0) / 100.0) * 1080.0;
             let anchor_y = (item.y.clamp(0.0, 100.0) / 100.0) * 1920.0;
             let gap = (icon_size * 0.18).max(8.0);
-            let (x, y) = match item.lucide_icon_anchor.as_str() {
-                "right" => (format!("{anchor_x}+{gap}"), format!("{anchor_y}-{} / 2", icon_size)),
-                "top" => (format!("{anchor_x}-{} / 2", icon_size), format!("{anchor_y}-{}-{gap}", icon_size)),
-                "bottom" => (format!("{anchor_x}-{} / 2", icon_size), format!("{anchor_y}+{gap}")),
-                _ => (format!("{anchor_x}-{icon_size}-{gap}"), format!("{anchor_y}-{} / 2", icon_size)),
-            };
+            let x = format!("{}+{}", anchor_x, item.lucide_icon_offset_x);
+            let y = format!("{}+{}", anchor_y, item.lucide_icon_offset_y);
             let next = format!("icon{icon_position}_{motion_index}");
             filter_parts.push(format!("[{previous}][{input_index}:v]overlay=x='{x}':y='{y}':format=auto:eof_action=pass:shortest=0:enable='gte(t,{:.6})*lt(t,{:.6})'[{next}]", item.start_ms as f64 / 1000.0, item.end_ms as f64 / 1000.0));
             previous = next;
