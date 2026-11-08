@@ -89,6 +89,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
   const [soundMessage, setSoundMessage] = useState("");
   const [selectedMotionId, setSelectedMotionId] = useState<string | null>(null);
   const [activeTool, setActiveTool] = useState<"media" | "audio" | "text" | "effects">("media");
+  const [selectedTransition, setSelectedTransition] = useState<TimelineClip["transitionType"] | null>(null);
   const [timelineZoom, setTimelineZoom] = useState(100);
   const lastMotionSounds = useRef<Record<string, number>>({});
   const [loadedStorageKey, setLoadedStorageKey] = useState<string | null>(null);
@@ -564,6 +565,25 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
     stopPlayback();
   }
 
+  function insertSelectedTransition() {
+    if (!selectedTransition) return;
+    const targetClip = visualClips.find(clip => playheadMs >= clip.timelineStartMs && playheadMs < clipEnd(clip))
+      ?? visualClips.filter(clip => clip.timelineStartMs >= playheadMs).sort((a, b) => a.timelineStartMs - b.timelineStartMs)[0];
+    if (!targetClip) {
+      setExportMessage("Posicione o marcador sobre um clipe ou antes do próximo clipe para inserir a transição.");
+      return;
+    }
+    updateClip(targetClip.id, {
+      transitionType: selectedTransition,
+      transitionMs: selectedTransition === "flash" ? 250 : 600
+    });
+    setSelectedId(targetClip.id);
+    setSelectedMotionId(null);
+    setSelectedTransition(null);
+    setExportMessage("");
+    stopPlayback();
+  }
+
   function removeClip(id: string) {
     setClips(current => current.filter(clip => clip.id !== id));
     if (selectedId === id) setSelectedId(null);
@@ -691,9 +711,13 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
         <div className="motion-presets editor-preset-grid">{motionPresets.map(preset => <button key={preset.id} className="motion-preset" onClick={() => addMotion(preset.id)}><b>{preset.label}</b><small>Som: {preset.sound}</small><span>+ Adicionar</span></button>)}</div>
       </>}
       {activeTool === "effects" && <>
-        <div className="editor-panel-head"><div><b>Transições e sons</b><small>Arraste uma transição para antes do clipe desejado</small></div></div>
+        <div className="editor-panel-head"><div><b>Transições e sons</b><small>Posicione o marcador na timeline, escolha uma transição e insira.</small></div></div>
         <div className="transition-library">
-          {[{id:"fade-black",name:"Fade para preto",detail:"Entrada suave a partir do preto",symbol:"◐"},{id:"fade-white",name:"Fade para branco",detail:"Entrada suave a partir do branco",symbol:"◑"},{id:"flash",name:"Flash branco",detail:"Abertura rápida com clarão",symbol:"✦"}].map(item=><div key={item.id} className="transition-library-item" draggable={true} onDragStart={event=>{event.stopPropagation();event.dataTransfer.effectAllowed="copy";event.dataTransfer.setData("text/plain",item.id);try{event.dataTransfer.setData("text/transition-type",item.id);}catch{}}}><span>{item.symbol}</span><b>{item.name}</b><small>{item.detail}</small><em>Arraste para a timeline</em></div>)}
+          {[{id:"fade-black",name:"Fade para preto",detail:"Entrada suave a partir do preto",symbol:"◐"},{id:"fade-white",name:"Fade para branco",detail:"Entrada suave a partir do branco",symbol:"◑"},{id:"flash",name:"Flash branco",detail:"Abertura rápida com clarão",symbol:"✦"}].map(item=><button type="button" key={item.id} className={"transition-library-item"+(selectedTransition===item.id?" selected":"")} onClick={()=>setSelectedTransition(item.id as TimelineClip["transitionType"])}><span>{item.symbol}</span><b>{item.name}</b><small>{item.detail}</small><em>{selectedTransition===item.id?"Selecionada":"Selecionar transição"}</em></button>)}
+        </div>
+        <div className="transition-insert-panel">
+          <small>Posição do marcador: <b>{timeLabel(playheadMs)}</b></small>
+          <button className="primary" type="button" onClick={insertSelectedTransition} disabled={!selectedTransition || !visualClips.length}><Plus size={14}/> Inserir transição</button>
         </div>
         <div className="editor-panel-head sound-library-heading"><div><b>Biblioteca de sons</b><small>{globalSounds.length} efeito(s) global(is), disponíveis em todos os projetos</small></div></div>
         <div className="sound-library-import">
