@@ -518,7 +518,8 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
       setMotion(current => [...current, ...created]);
       setSelectedMotionId(created[0]?.id ?? null);
       setActiveTool("text");
-      setSceneSpecMessage(`Importação concluída: ${created.length} elementos adicionados.`);
+      const hasPendingMetadata = parsed.scenes.some(scene => !!scene.audio || !!scene.character || !!scene.captions?.enabled);
+      setSceneSpecMessage(`Importação concluída: ${created.length} elementos adicionados.${hasPendingMetadata ? " Observação: áudio, personagem e legendas do JSON serão integrados em etapas posteriores." : ""}`);
       stopPlayback();
     } catch (error) {
       setSceneSpecMessage("Falha ao importar Scene Spec: " + String(error));
