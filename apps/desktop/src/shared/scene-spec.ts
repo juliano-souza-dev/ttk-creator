@@ -14,6 +14,10 @@ export type SceneBlock = {
   role: SceneBlockRole;
   text: string;
   icon?: string;
+  iconName?: string;
+  iconAnchor?: "left" | "right" | "top" | "bottom";
+  iconSize?: number;
+  iconColor?: string;
   anchor?: string;
   startOffsetMs?: number;
   durationMs?: number;
@@ -192,7 +196,11 @@ export function validateSceneSpec(value: unknown): value is SceneSpec {
         && typeof item.x === "number" && Number.isFinite(item.x) && item.x >= 0 && item.x <= 100
         && typeof item.y === "number" && Number.isFinite(item.y) && item.y >= 0 && item.y <= 100
         && typeof item.fontSize === "number" && Number.isFinite(item.fontSize) && item.fontSize >= 8 && item.fontSize <= 240
-        && typeof item.color === "string";
+        && typeof item.color === "string"
+        && (item.iconAnchor === undefined || ["left", "right", "top", "bottom"].includes(String(item.iconAnchor)))
+        && (item.iconSize === undefined || (typeof item.iconSize === "number" && Number.isFinite(item.iconSize) && item.iconSize >= 12 && item.iconSize <= 180))
+        && (item.iconName === undefined || typeof item.iconName === "string")
+        && (item.iconColor === undefined || typeof item.iconColor === "string");
     });
   });
 }
@@ -202,6 +210,10 @@ export function createSceneSpecFromMotion(
     id: string;
     text: string;
     icon?: string;
+    lucideIconName?: string;
+    lucideIconAnchor?: "left" | "right" | "top" | "bottom";
+    lucideIconSize?: number;
+    lucideIconColor?: string;
     startMs: number;
     endMs: number;
     x: number;
@@ -228,6 +240,10 @@ export function createSceneSpecFromMotion(
         role: "item",
         text: item.text,
         icon: item.icon,
+        iconName: item.lucideIconName,
+        iconAnchor: item.lucideIconAnchor,
+        iconSize: item.lucideIconSize,
+        iconColor: item.lucideIconColor,
         startOffsetMs: Math.max(0, item.startMs - start),
         durationMs: Math.max(300, item.endMs - item.startMs),
         x: item.x,
