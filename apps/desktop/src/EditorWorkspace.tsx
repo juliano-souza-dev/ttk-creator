@@ -40,6 +40,32 @@ const lucideIconLibrary = {
 type LucideIconName = keyof typeof lucideIconLibrary;
 const lucideIconNames = Object.keys(lucideIconLibrary) as LucideIconName[];
 
+function getLucideIconExportOffset(item: MotionGraphic, iconSize: number) {
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+  const fontSize = Math.max(18, item.fontSize);
+  const fontWeight = item.fontWeight || 900;
+  const fontFamily = item.fontFamily || "Arial";
+  if (context) context.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
+  const label = (item.icon ? item.icon + " " : "") + item.text;
+  const textWidth = context ? context.measureText(label).width : fontSize * Math.max(1, label.length) * 0.55;
+  const textHeight = fontSize * 1.2;
+  const gap = Math.max(4, iconSize * 0.22);
+  const vertical = item.lucideIconAnchor === "top" || item.lucideIconAnchor === "bottom";
+  const groupWidth = vertical ? Math.max(iconSize, textWidth) : iconSize + gap + textWidth;
+  const groupHeight = vertical ? iconSize + gap + textHeight : Math.max(iconSize, textHeight);
+  const groupLeft = item.textAlign === "left" ? 0 : item.textAlign === "right" ? -groupWidth : -groupWidth / 2;
+  const groupTop = -groupHeight / 2;
+  const x = vertical
+    ? groupLeft + (groupWidth - iconSize) / 2
+    : item.lucideIconAnchor === "right" ? groupLeft + iconSize + gap + textWidth : groupLeft;
+  const y = item.lucideIconAnchor === "top"
+    ? groupTop
+    : item.lucideIconAnchor === "bottom" ? groupTop + textHeight + gap
+    : groupTop + (groupHeight - iconSize) / 2;
+  return { x, y };
+}
+
 async function renderLucideIconPng(name: LucideIconName, color: string, size: number): Promise<string> {
   const IconView = lucideIconLibrary[name];
   const svg = renderToStaticMarkup(<IconView xmlns="http://www.w3.org/2000/svg" width={size} height={size} color={color || "#ffffff"} strokeWidth={2.2} />);
@@ -436,7 +462,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
         projectId,
         destination,
         clips: exportClips,
-        motion: await Promise.all(motion.map(async item => ({startMs:item.startMs,endMs:item.endMs,durationMs:item.durationMs,preset:item.preset,x:item.x,y:item.y,text:(item.icon ? item.icon + " " : "") + item.text,color:item.color,fontSize:item.fontSize,fontFamily:item.fontFamily || "Arial",fontWeight:item.fontWeight || 900,textAlign:item.textAlign || "center",isCaption:!!item.isCaption,lucideIconPng:item.lucideIconName && lucideIconLibrary[item.lucideIconName as LucideIconName] ? await renderLucideIconPng(item.lucideIconName as LucideIconName,item.lucideIconColor || item.accent,Math.max(24,Math.min(512,Math.round(item.lucideIconSize ?? item.fontSize)))) : undefined,lucideIconAnchor:item.lucideIconAnchor || "left",lucideIconSize:Math.max(24,Math.min(512,Math.round(item.lucideIconSize ?? item.fontSize)))}))),
+        motion: await Promise.all(motion.map(async item => ({startMs:item.startMs,endMs:item.endMs,durationMs:item.durationMs,preset:item.preset,x:item.x,y:item.y,text:(item.icon ? item.icon + " " : "") + item.text,color:item.color,fontSize:item.fontSize,fontFamily:item.fontFamily || "Arial",fontWeight:item.fontWeight || 900,textAlign:item.textAlign || "center",isCaption:!!item.isCaption,lucideIconPng:item.lucideIconName && lucideIconLibrary[item.lucideIconName as LucideIconName] ? await renderLucideIconPng(item.lucideIconName as LucideIconName,item.lucideIconColor || item.accent,Math.max(24,Math.min(512,Math.round(item.lucideIconSize ?? item.fontSize)))) : undefined,lucideIconAnchor:item.lucideIconAnchor || "left",lucideIconSize:Math.max(24,Math.min(512,Math.round(item.lucideIconSize ?? item.fontSize))),...getLucideIconExportOffset(item,Math.max(24,Math.min(512,Math.round(item.lucideIconSize ?? item.fontSize))))}))),
         soundEffects: motion.filter(item => !!item.soundId).map(item => ({ soundId: item.soundId!, timelineStartMs: item.startMs, volume: item.soundVolume ?? 80 })),
       });
       setExportProgress(100);
