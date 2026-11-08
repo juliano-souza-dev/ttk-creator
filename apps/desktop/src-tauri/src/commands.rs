@@ -116,6 +116,10 @@ pub struct ExportClip {
     timeline_start_ms: u64,
     volume: f64,
     muted: Option<bool>,
+    #[serde(default)]
+    transition_type: String,
+    #[serde(default)]
+    transition_ms: u64,
 }
 
 #[derive(serde::Deserialize)]
@@ -471,7 +475,13 @@ pub async fn export_timeline(
         for (position, (input_index, clip)) in visual_inputs.iter().enumerate() {
             let label = format!("visual{position}");
             let start = clip.timeline_start_ms as f64 / 1000.0;
-            filter_parts.push(format!("[{input_index}:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,setsar=1,setpts=PTS-STARTPTS+{start:.3}/TB[{label}]"));
+            let transition_ms = clip.transition_ms.min(2000);
+            let transition_filter = if transition_ms == 0 { String::new() } else {
+                let color = match clip.transition_type.as_str() { "fade-white" | "flash" => "white", _ => "black" };
+                let duration = transition_ms as f64 / 1000.0;
+                format!("fade=t=in:st=0:d={duration:.3}:color={color},")
+            };
+            filter_parts.push(format!("[{input_index}:v]{transition_filter}scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,setsar=1,setpts=PTS-STARTPTS+{start:.3}/TB[{label}]"));
             let next = format!("base{}", position + 1);
             let end = (clip.timeline_start_ms + clip.source_end_ms - clip.source_start_ms) as f64 / 1000.0;
             filter_parts.push(format!("[{previous}][{label}]overlay=0:0:eof_action=pass:shortest=0:enable='gte(t,{start:.6})*lt(t,{end:.6})'[{next}]"));
@@ -583,7 +593,7 @@ pub async fn export_timeline(
         // Builds do FFmpeg podem existir sem filtros opcionais, como drawtext.
         let (ffmpeg_path, ffmpeg_version) = resolve_ffmpeg_executable()?;
         let mut required_filters = vec![
-            "color", "scale", "crop", "fps", "setsar", "setpts", "overlay", "format",
+            "color", "scale", "crop", "fps", "setsar", "setpts", "overlay", "format", "fade",
         ];
         if !request.motion.is_empty() {
             required_filters.push("drawtext");
