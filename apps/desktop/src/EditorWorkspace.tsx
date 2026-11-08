@@ -500,6 +500,10 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
       if (!validateSceneSpec(parsed)) {
         throw new Error("JSON incompatível. Confira a versão 1.0 e os campos obrigatórios do Scene Spec.");
       }
+      const unsupportedIcons = parsed.scenes.flatMap(scene => scene.blocks.map(block => block.iconName).filter((name): name is string => !!name && !lucideIconNames.includes(name as LucideIconName)));
+      if (unsupportedIcons.length) {
+        throw new Error("O Scene Spec contém ícones Lucide não disponíveis nesta biblioteca: " + [...new Set(unsupportedIcons)].join(", "));
+      }
       const created: MotionGraphic[] = parsed.scenes.flatMap(scene =>
         scene.blocks.map(block => {
           const startMs = playheadMs + (block.startOffsetMs ?? 0);
