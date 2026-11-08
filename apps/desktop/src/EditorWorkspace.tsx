@@ -638,7 +638,9 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
     const rect = event.currentTarget.getBoundingClientRect();
     const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
     const atMs = ratio * scale;
-    const transitionType = event.dataTransfer.getData("text/transition-type");
+    const customTransitionType = event.dataTransfer.getData("text/transition-type");
+    const plainTransitionData = event.dataTransfer.getData("text/plain");
+    const transitionType = customTransitionType || (plainTransitionData.startsWith("transition:") ? plainTransitionData.slice("transition:".length) : plainTransitionData);
     if (transitionType && ["fade-black", "fade-white", "flash"].includes(transitionType)) {
       if (event.currentTarget.closest(".audio-track")) return;
       const nextClip = visualClips.filter(clip => clip.timelineStartMs >= atMs - 150).sort((a, b) => a.timelineStartMs - b.timelineStartMs)[0];
@@ -691,7 +693,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
       {activeTool === "effects" && <>
         <div className="editor-panel-head"><div><b>Transições e sons</b><small>Arraste uma transição para antes do clipe desejado</small></div></div>
         <div className="transition-library">
-          {[{id:"fade-black",name:"Fade para preto",detail:"Entrada suave a partir do preto",symbol:"◐"},{id:"fade-white",name:"Fade para branco",detail:"Entrada suave a partir do branco",symbol:"◑"},{id:"flash",name:"Flash branco",detail:"Abertura rápida com clarão",symbol:"✦"}].map(item=><button key={item.id} className="transition-library-item" draggable onDragStart={event=>{event.dataTransfer.effectAllowed="copy";event.dataTransfer.setData("text/plain","transition:"+item.id);event.dataTransfer.setData("text/transition-type",item.id);}}><span>{item.symbol}</span><b>{item.name}</b><small>{item.detail}</small><em>Arraste para a timeline</em></button>)}
+          {[{id:"fade-black",name:"Fade para preto",detail:"Entrada suave a partir do preto",symbol:"◐"},{id:"fade-white",name:"Fade para branco",detail:"Entrada suave a partir do branco",symbol:"◑"},{id:"flash",name:"Flash branco",detail:"Abertura rápida com clarão",symbol:"✦"}].map(item=><div key={item.id} className="transition-library-item" draggable={true} onDragStart={event=>{event.stopPropagation();event.dataTransfer.effectAllowed="copy";event.dataTransfer.setData("text/plain",item.id);try{event.dataTransfer.setData("text/transition-type",item.id);}catch{}}}><span>{item.symbol}</span><b>{item.name}</b><small>{item.detail}</small><em>Arraste para a timeline</em></div>)}
         </div>
         <div className="editor-panel-head sound-library-heading"><div><b>Biblioteca de sons</b><small>{globalSounds.length} efeito(s) global(is), disponíveis em todos os projetos</small></div></div>
         <div className="sound-library-import">
