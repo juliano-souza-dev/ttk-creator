@@ -463,7 +463,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
         projectId,
         destination,
         clips: exportClips,
-        motion: await Promise.all(motion.map(async item => ({startMs:item.startMs,endMs:item.endMs,durationMs:item.durationMs,preset:item.preset,x:item.x,y:item.y,text:(item.icon ? item.icon + " " : "") + item.text,color:item.color,fontSize:item.fontSize,fontFamily:item.fontFamily || "Arial",fontWeight:item.fontWeight || 900,textAlign:item.textAlign || "center",isCaption:!!item.isCaption,lucideIconPng:item.lucideIconName && lucideIconLibrary[item.lucideIconName as LucideIconName] ? await renderLucideIconPng(item.lucideIconName as LucideIconName,item.lucideIconColor || item.accent,Math.max(24,Math.min(512,Math.round(item.lucideIconSize ?? item.fontSize)))) : undefined,lucideIconAnchor:item.lucideIconAnchor || "left",lucideIconSize:Math.max(24,Math.min(512,Math.round(item.lucideIconSize ?? item.fontSize))),...getLucideIconExportOffset(item,Math.max(24,Math.min(512,Math.round(item.lucideIconSize ?? item.fontSize))))}))),
+        motion: await Promise.all(motion.map(async item => ({startMs:item.startMs,endMs:item.endMs,durationMs:item.durationMs,preset:item.preset,x:item.x,y:item.y,text:item.isCaption ? (item.captionMode === "source" ? (item.captionEnglish || item.text) : [item.captionEnglish || item.text, item.captionTranslation].filter(Boolean).join("\n")) : (item.icon ? item.icon + " " : "") + item.text,color:item.color,fontSize:item.fontSize,fontFamily:item.fontFamily || "Arial",fontWeight:item.fontWeight || 900,textAlign:item.textAlign || "center",isCaption:!!item.isCaption,lucideIconPng:item.lucideIconName && lucideIconLibrary[item.lucideIconName as LucideIconName] ? await renderLucideIconPng(item.lucideIconName as LucideIconName,item.lucideIconColor || item.accent,Math.max(24,Math.min(512,Math.round(item.lucideIconSize ?? item.fontSize)))) : undefined,lucideIconAnchor:item.lucideIconAnchor || "left",lucideIconSize:Math.max(24,Math.min(512,Math.round(item.lucideIconSize ?? item.fontSize))),...getLucideIconExportOffset(item,Math.max(24,Math.min(512,Math.round(item.lucideIconSize ?? item.fontSize))))}))),
         soundEffects: motion.filter(item => !!item.soundId).map(item => ({ soundId: item.soundId!, timelineStartMs: item.startMs, volume: item.soundVolume ?? 80 })),
       });
       setExportProgress(100);
@@ -586,7 +586,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
               captionEnglish: english,
               captionTranslation: portuguese,
               captionWords: words.map(word => ({ ...word, startMs: playheadMs + word.startMs, endMs: playheadMs + word.endMs })),
-              text: portuguese ? english + "\\n" + portuguese : english || portuguese,
+              text: portuguese ? english + "\n" + portuguese : english || portuguese,
               icon: "",
               fontFamily: "Arial",
               fontWeight: 900,
@@ -958,7 +958,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
           <button className="primary" type="button" onClick={() => applySceneTemplate(template.id)}><Plus size={14}/> Aplicar na posição {timeLabel(playheadMs)}</button>
         </article>)}</div>
         <div className="scene-spec-tools">
-          <div><b><FileJson size={15}/> Scene Spec JSON</b><small>Importe uma especificação ou exporte os elementos atuais.</small></div>
+          <div><b><FileJson size={15}/> Scene Spec JSON</b><small>Importe Scene Spec ou Super JSON do iHubEnglish. Legendas e tempos por palavra serão preservados.</small></div>
           <label className="secondary-action scene-spec-import"><Upload size={14}/> Importar JSON<input type="file" accept=".json,application/json" onChange={event => void importSceneSpec(event)}/></label>
           <button className="secondary-action" type="button" onClick={exportSceneSpec}><Download size={14}/> Exportar JSON</button>
         </div>
@@ -1017,7 +1017,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
         <div className="editor-panel-head"><div><b>Propriedades</b><small>Texto, tipografia e animação</small></div></div>
         <div className="properties-scroll">
           <details open className="property-section"><summary>Texto</summary>
-            <label className="motion-caption-toggle"><input type="checkbox" checked={!!selectedMotion.isCaption} onChange={event => updateMotion(selectedMotion.id, { isCaption: event.target.checked })}/> Exibir como legenda (com fundo)</label><small className="property-hint">Adiciona um fundo escuro semitransparente para destacar o texto sobre qualquer vídeo.</small><label>Conteúdo<textarea className="motion-textarea" rows={6} value={selectedMotion.text} onChange={event => updateMotion(selectedMotion.id, { text: event.target.value })} maxLength={1200} placeholder={"Digite sua frase. Use Enter para criar uma nova linha."}/></label><small className="property-hint">Use Enter para quebrar a linha. O texto será distribuído dentro da área segura do vídeo.</small>
+            <label className="motion-caption-toggle"><input type="checkbox" checked={!!selectedMotion.isCaption} onChange={event => updateMotion(selectedMotion.id, { isCaption: event.target.checked })}/> Exibir como legenda (com fundo)</label><small className="property-hint">Adiciona um fundo escuro semitransparente para destacar o texto sobre qualquer vídeo.</small>{selectedMotion.isCaption && <label className="property-control">Modo da legenda<select value={selectedMotion.captionMode || (selectedMotion.captionTranslation ? "bilingual" : "source")} onChange={event => updateMotion(selectedMotion.id, { captionMode: event.target.value as MotionGraphic["captionMode"] })}><option value="source">Original</option><option value="bilingual" disabled={!selectedMotion.captionTranslation}>Original + tradução</option><option value="karaoke" disabled={!selectedMotion.captionWords?.length}>Karaoke por palavra</option></select></label>}<label>Conteúdo<textarea className="motion-textarea" rows={6} value={selectedMotion.text} onChange={event => updateMotion(selectedMotion.id, { text: event.target.value })} maxLength={1200} placeholder={"Digite sua frase. Use Enter para criar uma nova linha."}/></label><small className="property-hint">Use Enter para quebrar a linha. O texto será distribuído dentro da área segura do vídeo.</small>
             <div className="lucide-library">
               <div className="lucide-library-heading"><b>Biblioteca Lucide SVG</b><small>Ícone vetorial ancorado ao texto</small></div>
               <label className="lucide-search"><Search size={14}/><input value={iconSearch} onChange={event => setIconSearch(event.target.value)} placeholder="Buscar ícone..."/></label>
