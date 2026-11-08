@@ -502,3 +502,21 @@
 .scene-spec-tools .secondary-action{display:flex;align-items:center;justify-content:center;gap:6px;min-height:32px;font-size:10px}
 .scene-spec-import{position:relative;overflow:hidden}
 .scene-spec-import input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
+
+
+/* Lucide SVG library: icons remain anchored to their text motion block */
+.motion-content-group{user-select:none;cursor:grab;white-space:pre-wrap}
+.motion-content-group:active{cursor:grabbing}
+.motion-content-group svg{display:block;flex:0 0 auto;overflow:visible}
+.lucide-library{display:grid;gap:9px;padding:10px;margin:8px 0;border:1px solid #393342;border-radius:9px;background:#19171f}
+.lucide-library-heading{display:grid;gap:4px}
+.lucide-library-heading b{font-size:11px;color:#eee}
+.lucide-library-heading small{font-size:9px;color:#9992a2}
+.lucide-search{display:flex!important;align-items:center;gap:7px;padding:0 9px;border:1px solid #40394a;border-radius:7px;background:#131218}
+.lucide-search svg{color:#a99bbd;flex:0 0 auto}
+.lucide-search input{min-width:0;width:100%;height:32px;border:0!important;outline:0;background:transparent!important;color:#eee;font-size:10px}
+.lucide-icon-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;max-height:230px;overflow:auto}
+.lucide-icon-option{display:flex;min-width:0;min-height:58px;flex-direction:column;align-items:center;justify-content:center;gap:5px;padding:7px 3px;border:1px solid #393342;border-radius:7px;background:#211e28;color:#c9c2d3}
+.lucide-icon-option:hover{border-color:#8c70c4;background:#2b2536}
+.lucide-icon-option.selected{border-color:#a98af8;background:#392d50;color:#fff;box-shadow:inset 0 0 0 1px #a98af855}
+.lucide-icon-option small{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:8px;color:#aaa2b5}
