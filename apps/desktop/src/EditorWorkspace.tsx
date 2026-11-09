@@ -7,7 +7,7 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import { desktopApi, isDesktopRuntime } from "./services/desktop-api";
 import type { GlobalSound } from "./services/desktop-api";
 import type { MediaAsset } from "./shared/types";
-import { AudioLines, Film, Plus, Play, Pause, Trash2, Scissors, Copy, SkipBack, SkipForward, Volume2, VolumeX, Music2, Type, WandSparkles, MousePointer2, ChevronLeft, ChevronRight, Download, LoaderCircle, PanelsTopLeft, FileJson, Upload, Eye, Camera, BookOpen, Headphones, Lightbulb, Clock3, MessageCircle, CheckCircle2, Globe2, Heart, Star, Zap, Target, Search, Image, Music, Mic, Video, PlayCircle, AlertCircle, ArrowRight, CircleHelp, Sparkles, Trophy, Rocket, Smile, ThumbsUp, Bookmark, MapPin, Coffee, Sun, Moon, Cloud, Flame, ShieldCheck, Languages, GraduationCap, Pencil, Bell, CalendarDays } from "lucide-react";
+import { AudioLines, Film, Plus, Play, Pause, Trash2, Scissors, Copy, SkipBack, SkipForward, Volume2, VolumeX, Music2, Type, WandSparkles, MousePointer2, ChevronLeft, ChevronRight, Download, LoaderCircle, PanelsTopLeft, FileJson, Upload, Eye, Camera, BookOpen, Headphones, Lightbulb, Clock3, MessageCircle, CheckCircle2, Globe2, Heart, Star, Zap, Target, Search, Image, Music, Mic, Video, PlayCircle, AlertCircle, ArrowRight, CircleHelp, Sparkles, Trophy, Rocket, Smile, ThumbsUp, Bookmark, MapPin, Coffee, Sun, Moon, Cloud, Flame, ShieldCheck, Languages, GraduationCap, Pencil, Bell, CalendarDays, RotateCcw, Maximize, Minimize, Captions, Clapperboard, MicOff, Presentation, Monitor, Smartphone, Home, Menu, X, CircleCheck, CircleX, Check, Award, Medal, Flag, Info, AlertTriangle, Timer, Brain, Puzzle, Calculator, Hash, ChartColumn, ChartPie, Palette, Shapes, Share2, Settings, User, Users, Minus, Layers, List, Map as MapIcon } from "lucide-react";
 import { SCENE_TEMPLATES, buildTemplateScene, createSceneSpecFromMotion, validateSceneSpec } from "./shared/scene-spec";
 
 type TimelineClip = {
@@ -32,11 +32,31 @@ type CaptionWord = { text: string; startMs: number; endMs: number; translation?:
 type MotionGraphic = { id: string; isCaption?: boolean; captionMode?: "source" | "bilingual" | "karaoke"; captionEnglish?: string; captionTranslation?: string; captionWords?: CaptionWord[]; text: string; icon?: string; lucideIconName?: string; lucideIconAnchor?: "left" | "right" | "top" | "bottom"; lucideIconSize?: number; lucideIconColor?: string; elements?: Array<{ type: string; content: string }>; fontFamily?: string; fontWeight?: number; textAlign?: "left" | "center" | "right"; startMs: number; endMs: number; durationMs: number; preset: "pop" | "slide" | "zoom" | "typewriter" | "impact" | "composition"; color: string; accent: string; fontSize: number; x: number; y: number; sound: "pop" | "whoosh" | "impact" | "click" | "none"; soundId?: string; soundVolume?: number };
 const motionPresets = [{id:"pop",label:"Pop Impact",sound:"pop"},{id:"slide",label:"Slide + Whoosh",sound:"whoosh"},{id:"zoom",label:"Zoom + Impact",sound:"impact"},{id:"typewriter",label:"Typewriter",sound:"click"},{id:"impact",label:"Big Impact",sound:"impact"}] as const;
 const lucideIconLibrary = {
+  // Nomes legados preservados para não quebrar projetos já salvos.
   Eye, Camera, BookOpen, Headphones, Lightbulb, Clock3, MessageCircle, CheckCircle2,
   Globe2, Heart, Star, Zap, Target, Image, Music, Mic, Video, PlayCircle, AlertCircle,
   ArrowRight, CircleHelp, Sparkles, Trophy, Rocket, Smile, ThumbsUp, Bookmark, MapPin,
   Coffee, Sun, Moon, Cloud, Flame, ShieldCheck, Languages, GraduationCap, Pencil, Bell,
   CalendarDays,
+  // Biblioteca ampliada: nomes em kebab-case para busca e compatibilidade com Scene Spec.
+  "play": Play, "pause": Pause, "skip-back": SkipBack, "skip-forward": SkipForward,
+  "rotate-ccw": RotateCcw, "volume-2": Volume2, "volume-x": VolumeX,
+  "maximize": Maximize, "minimize": Minimize, "captions": Captions, "video": Video,
+  "film": Film, "clapperboard": Clapperboard, "mic": Mic, "mic-off": MicOff,
+  "camera": Camera, "headphones": Headphones, "music": Music,
+  "book-open": BookOpen, "graduation-cap": GraduationCap, "layers": Layers, "list": List,
+  "chevron-right": ChevronRight, "arrow-right": ArrowRight, "presentation": Presentation,
+  "monitor": Monitor, "smartphone": Smartphone, "home": Home, "menu": Menu, "x": X,
+  "circle-check": CircleCheck, "circle-x": CircleX, "check": Check, "star": Star,
+  "trophy": Trophy, "award": Award, "medal": Medal, "flag": Flag, "lightbulb": Lightbulb,
+  "circle-question-mark": CircleHelp, "info": Info, "triangle-alert": AlertTriangle,
+  "timer": Timer, "clock": Clock3, "brain": Brain, "target": Target, "puzzle": Puzzle,
+  "rocket": Rocket, "sparkles": Sparkles, "calculator": Calculator, "hash": Hash,
+  "chart-column": ChartColumn, "chart-pie": ChartPie, "pencil": Pencil, "type": Type,
+  "languages": Languages, "globe": Globe2, "map": MapIcon, "image": Image,
+  "palette": Palette, "shapes": Shapes, "heart": Heart, "download": Download,
+  "upload": Upload, "share-2": Share2, "settings": Settings, "user": User, "users": Users,
+  "eye": Eye, "search": Search, "plus": Plus, "minus": Minus,
 };
 type LucideIconName = keyof typeof lucideIconLibrary;
 const lucideIconNames = Object.keys(lucideIconLibrary) as LucideIconName[];
