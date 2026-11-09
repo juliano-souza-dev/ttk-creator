@@ -10,14 +10,14 @@ const GROQ_MODEL: &str = "whisper-large-v3-turbo";
 const CHUNK_SECONDS: u64 = 58;
 const OVERLAP_SECONDS: u64 = 2;
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TranscriptWord {
     pub text: String,
     pub start_ms: u64,
     pub end_ms: u64,
 }
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TranscriptCue {
     pub id: String,
