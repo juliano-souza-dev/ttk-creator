@@ -3,7 +3,7 @@ mod commands;
 mod domain;
 mod infrastructure;
 mod logging;
-mod state;
+mod state;\nmod translation;
 
 use std::{path::PathBuf, sync::{Arc, Mutex}};
 use tauri::Manager;
