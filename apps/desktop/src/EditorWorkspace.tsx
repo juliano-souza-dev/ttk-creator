@@ -304,7 +304,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
           const translated = byId.get(item.id);
           if (!translated) return item;
           const words = item.captionWords?.map(word => ({ ...word }));
-          return { ...item, captionTranslation: translated, captionMode: "bilingual", ...(words ? { captionWords: words } : {}) };
+          return { ...item, captionTranslation: translated, captionMode: words?.length ? "karaoke" : "bilingual", ...(words ? { captionWords: words } : {}) };
         }));
         completed += chunks[index].length;
         setTranslationProgress({ done: completed, total: pending.length });
@@ -1000,6 +1000,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
 <section className="translation-panel">
   <div className="translation-panel-heading"><div><b><Languages size={15}/> Tradução com Groq</b><small>Traduza as legendas em lotes sequenciais, sem alterar a sincronização.</small></div><span className="preview-live">{motion.filter(item=>item.isCaption).length} LEGENDAS</span></div>
   <button className="primary translation-action" type="button" onClick={()=>void translateCaptions()} disabled={translationBusy || !motion.some(item=>item.isCaption && !(item.captionTranslation||"").trim())}>{translationBusy?<><LoaderCircle className="spin" size={14}/> Traduzindo...</>:<><Languages size={14}/> Traduzir legendas sem tradução</>}</button>
+  {translationBusy && <button className="secondary-action" type="button" onClick={()=>{translationStopRef.current=true;setTranslationMessage("Aguardando o lote atual terminar para interromper com segurança...");}}>Parar após o lote atual</button>}
   {translationBusy && <div className="translation-progress"><div><span>Progresso dos lotes</span><b>{translationProgress.done}/{translationProgress.total}</b></div><div className="progress-track"><i style={{width:(translationProgress.total?translationProgress.done/translationProgress.total*100:0)+"%"}}/></div></div>}
   {translationMessage && <p className="translation-message" role="status">{translationMessage}</p>}
   <small className="property-hint">As legendas concluídas ficam salvas automaticamente. Se houver erro ou limite da API, execute novamente para continuar apenas as pendentes.</small>
