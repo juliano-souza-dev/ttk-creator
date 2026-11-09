@@ -38,7 +38,7 @@ fn read_settings(app: &AppHandle) -> Result<GroqSettings, String> {
     settings.configured = Entry::new(SERVICE, USER).ok().and_then(|entry| entry.get_password().ok()).is_some() || session_key().lock().map(|key| key.is_some()).unwrap_or(false);
     Ok(settings)
 }
-fn api_key() -> Result<String, String> {
+pub(crate) fn api_key() -> Result<String, String> {
     if let Ok(entry) = Entry::new(SERVICE, USER) {
         if let Ok(key) = entry.get_password() { return Ok(key); }
     }
