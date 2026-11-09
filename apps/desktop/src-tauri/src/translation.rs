@@ -80,7 +80,7 @@ struct TranslationPayload { translations: Vec<TranslationItem> }
 struct TranslationItem { id: String, translation: String }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CueInput { pub id: String, pub text: String }
+pub struct CueInput { pub id: String, pub text: String, pub context_before: Option<String>, pub context_after: Option<String> }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CueTranslation { pub id: String, pub translation: String }
@@ -110,9 +110,9 @@ pub async fn translate_groq_chunk(app: AppHandle, model: String, target_language
     let total_chars: usize = cues.iter().map(|c| c.text.len()).sum();
     if total_chars > 18000 { return Err("O lote excede o limite de 18.000 caracteres.".into()); }
     let key = api_key()?;
-    let payload = cues.iter().map(|cue| serde_json::json!({"id":cue.id,"text":cue.text})).collect::<Vec<_>>();
+    let payload = cues.iter().map(|cue| serde_json::json!({"id":cue.id,"text":cue.text,"contextBefore":cue.context_before,"contextAfter":cue.context_after})).collect::<Vec<_>>();
     let system = format!(
-        "You are a professional audiovisual subtitle translator. Translate each item into {}. Preserve meaning, tone, register, idioms and continuity. Keep translations concise and natural for subtitles. Do not translate names unnecessarily. Return ONLY valid JSON in this exact shape: {{\"translations\":[{{\"id\":\"same id\",\"translation\":\"translated text\"}}]}}. Include every input id exactly once. Never add commentary.",
+        "You are a professional audiovisual subtitle translator. Translate each item into {}. Use contextBefore and contextAfter only to understand continuity, references and tone; translate only the text field. Preserve meaning, tone, register, idioms and continuity. Keep translations concise and natural for subtitles. Do not translate names unnecessarily. Return ONLY valid JSON in this exact shape: {{\"translations\":[{{\"id\":\"same id\",\"translation\":\"translated text\"}}]}}. Include every input id exactly once. Never add commentary.",
         target_language
     );
     let client = Client::builder().timeout(Duration::from_secs(90)).build().map_err(|e| e.to_string())?;
