@@ -11,8 +11,17 @@ export const isDesktopRuntime =
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
 export type GlobalSound = { id: string; name: string; fileName: string };
+export type GroqSettings = { configured: boolean; model: string; maxChunkChars: number; maxCuesPerChunk: number; delayMs: number; targetLanguage: string };
+export type TranslationCue = { id: string; text: string };
+export type CueTranslation = { id: string; translation: string };
 
 export const desktopApi = {
+  getGroqSettings: () => invoke<GroqSettings>("get_groq_settings"),
+  saveGroqSettings: (settings: { apiKey: string; model: string; maxChunkChars: number; maxCuesPerChunk: number; delayMs: number; targetLanguage: string }) =>
+    invoke<GroqSettings>("save_groq_settings", settings),
+  testGroqConnection: (model: string) => invoke<string>("test_groq_connection", { model }),
+  translateGroqChunk: (model: string, targetLanguage: string, cues: TranslationCue[]) =>
+    invoke<CueTranslation[]>("translate_groq_chunk", { model, targetLanguage, cues }),
   listGlobalSounds: () => invoke<GlobalSound[]>("list_global_sounds"),
   importGlobalSound: (sourcePath: string, name: string) => invoke<GlobalSound>("import_global_sound", { sourcePath, name }),
   getGlobalSoundPath: (soundId: string) => invoke<string>("get_global_sound_path", { soundId }),
