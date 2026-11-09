@@ -2,7 +2,7 @@ use reqwest::multipart;
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use std::{path::{Path, PathBuf}, process::Command, time::Duration};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter};
 use crate::{application::services::MediaService, infrastructure::media_storage::MediaStorage};
 
 const GROQ_URL: &str = "https://api.groq.com/openai/v1/audio/transcriptions";
@@ -74,12 +74,22 @@ fn emit(app: &AppHandle, project_id: &str, stage: &str, percent: f32, done: usiz
 }
 fn ffmpeg() -> Result<PathBuf, String> {
     let name = if cfg!(windows) { "ffmpeg.exe" } else { "ffmpeg" };
+    let mut candidates = Vec::new();
     if let Some(path) = std::env::var_os("PATH") {
-        for dir in std::env::split_paths(&path) {
-            let candidate = dir.join(name);
-            if candidate.is_file() && Command::new(&candidate).arg("-version").output().map(|o| o.status.success()).unwrap_or(false) {
-                return Ok(candidate);
-            }
+        candidates.extend(std::env::split_paths(&path).map(|dir| dir.join(name)));
+    }
+    // O alias do WinGet pode não estar no PATH herdado pelo aplicativo desktop.
+    if cfg!(windows) {
+        if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+            candidates.push(PathBuf::from(local).join("Microsoft").join("WinGet").join("Links").join(name));
+        }
+        if let Some(profile) = std::env::var_os("USERPROFILE") {
+            candidates.push(PathBuf::from(profile).join("AppData").join("Local").join("Microsoft").join("WinGet").join("Links").join(name));
+        }
+    }
+    for candidate in candidates {
+        if candidate.is_file() && Command::new(&candidate).arg("-version").output().map(|o| o.status.success()).unwrap_or(false) {
+            return Ok(candidate);
         }
     }
     Err("FFmpeg não foi encontrado. Configure o FFmpeg antes de transcrever.".into())
