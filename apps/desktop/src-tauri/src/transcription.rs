@@ -258,6 +258,8 @@ pub fn install_local_asr() -> Result<String, String> {
 }
 
 pub fn transcribe(app: AppHandle, media: MediaService, storage: MediaStorage, project_id: String, asset_id: String, mode: String, language: Option<String>, local_model: String) -> Result<TranscriptResult, String> {
+    if !["auto", "cloud", "local"].contains(&mode.as_str()) { return Err("Modo de transcrição inválido.".into()); }
+    if !["tiny", "base", "small", "medium", "large-v3"].contains(&local_model.as_str()) { return Err("Modelo local não reconhecido.".into()); }
     let source = safe_asset_path(&media, &storage, &project_id, &asset_id)?;
     let ffmpeg_path = ffmpeg()?;
     let temp = std::env::temp_dir().join(format!("framelab-asr-{}", uuid::Uuid::new_v4()));
