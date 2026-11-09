@@ -14,9 +14,17 @@ export type GlobalSound = { id: string; name: string; fileName: string };
 export type GroqSettings = { configured: boolean; model: string; maxChunkChars: number; maxCuesPerChunk: number; delayMs: number; targetLanguage: string };
 export type TranslationCue = { id: string; text: string; contextBefore?: string; contextAfter?: string };
 export type CueTranslation = { id: string; translation: string };
+export type TranscriptWord = { text: string; startMs: number; endMs: number };
+export type TranscriptCue = { id: string; text: string; startMs: number; endMs: number; words: TranscriptWord[] };
+export type TranscriptResult = { engine: string; model: string; language?: string | null; durationMs: number; cues: TranscriptCue[] };
+export type TranscriptionProgress = { projectId: string; stage: string; percent: number; completedChunks: number; totalChunks: number; message: string };
 
 export const desktopApi = {
   getGroqSettings: () => invoke<GroqSettings>("get_groq_settings"),
+  transcribeMedia: (projectId: string, assetId: string, mode: "auto" | "cloud" | "local", language: string, localModel: string) =>
+    invoke<TranscriptResult>("transcribe_media", { projectId, assetId, mode, language: language || null, localModel }),
+  checkLocalAsr: () => invoke<boolean>("check_local_asr"),
+  installLocalAsr: () => invoke<string>("install_local_asr"),
   saveGroqSettings: (settings: { apiKey: string; model: string; maxChunkChars: number; maxCuesPerChunk: number; delayMs: number; targetLanguage: string }) =>
     invoke<GroqSettings>("save_groq_settings", settings),
   testGroqConnection: (model: string) => invoke<string>("test_groq_connection", { model }),
@@ -73,6 +81,9 @@ export const desktopApi = {
         })),
       },
     }),
+
+  subscribeToTranscriptionProgress: (onProgress: (progress: TranscriptionProgress) => void) =>
+    listen<TranscriptionProgress>("transcription-progress", event => onProgress(event.payload)),
 
   subscribeToYoutubeProgress: (
     onProgress: (progress: DownloadProgress) => void,
