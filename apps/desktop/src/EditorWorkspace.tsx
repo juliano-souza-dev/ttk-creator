@@ -60,6 +60,17 @@ const lucideIconLibrary = {
 };
 type LucideIconName = keyof typeof lucideIconLibrary;
 const lucideIconNames = Object.keys(lucideIconLibrary) as LucideIconName[];
+const lucideIconPickerNames = [
+  "play", "pause", "skip-back", "skip-forward", "rotate-ccw", "volume-2", "volume-x",
+  "maximize", "minimize", "captions", "video", "film", "clapperboard", "mic", "mic-off",
+  "camera", "headphones", "music", "book-open", "graduation-cap", "layers", "list",
+  "chevron-right", "arrow-right", "presentation", "monitor", "smartphone", "home", "menu", "x",
+  "circle-check", "circle-x", "check", "star", "trophy", "award", "medal", "flag", "lightbulb",
+  "circle-question-mark", "info", "triangle-alert", "timer", "clock", "brain", "target", "puzzle",
+  "rocket", "sparkles", "calculator", "hash", "chart-column", "chart-pie", "pencil", "type",
+  "languages", "globe", "map", "image", "palette", "shapes", "heart", "download", "upload",
+  "share-2", "settings", "user", "users", "eye", "search", "plus", "minus",
+] as LucideIconName[];
 
 function getLucideIconExportOffset(item: MotionGraphic, iconSize: number) {
   const canvas = document.createElement("canvas");
@@ -1139,7 +1150,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
               <div className="lucide-library-heading"><b>Biblioteca Lucide SVG</b><small>Ícone vetorial ancorado ao texto</small></div>
               <label className="lucide-search"><Search size={14}/><input value={iconSearch} onChange={event => setIconSearch(event.target.value)} placeholder="Buscar ícone..."/></label>
               <div className="lucide-icon-grid">
-                {lucideIconNames.filter(name => name.toLowerCase().includes(iconSearch.trim().toLowerCase())).map(name => {
+                {lucideIconPickerNames.filter(name => name.toLowerCase().includes(iconSearch.trim().toLowerCase())).map(name => {
                   const IconView = lucideIconLibrary[name];
                   return <button type="button" key={name} className={"lucide-icon-option" + (selectedMotion.lucideIconName === name ? " selected" : "")} title={name} aria-label={name} onClick={() => updateMotion(selectedMotion.id, { lucideIconName: selectedMotion.lucideIconName === name ? undefined : name })}><IconView size={19}/><small>{name}</small></button>;
                 })}
