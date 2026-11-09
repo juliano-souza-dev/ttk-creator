@@ -1,12 +1,14 @@
 use keyring::Entry;
 use reqwest::{header, Client, StatusCode};
 use serde::{Deserialize, Serialize};
-use std::{path::PathBuf, time::Duration};
+use std::{path::PathBuf, sync::{Mutex, OnceLock}, time::Duration};
 use tauri::{AppHandle, Emitter, Manager};
 
 const SERVICE: &str = "com.julianosouza.ttkcreator";
 const USER: &str = "groq-api-key";
 const DEFAULT_MODEL: &str = "llama-3.3-70b-versatile";
+static SESSION_API_KEY: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+fn session_key() -> &'static Mutex<Option<String>> { SESSION_API_KEY.get_or_init(|| Mutex::new(None)) }
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -33,12 +35,15 @@ fn read_settings(app: &AppHandle) -> Result<GroqSettings, String> {
     let mut settings = if path.exists() {
         serde_json::from_slice::<GroqSettings>(&std::fs::read(path).map_err(|e| e.to_string())?).unwrap_or_default()
     } else { GroqSettings::default() };
-    settings.configured = Entry::new(SERVICE, USER).ok().and_then(|entry| entry.get_password().ok()).is_some();
+    settings.configured = Entry::new(SERVICE, USER).ok().and_then(|entry| entry.get_password().ok()).is_some() || session_key().lock().map(|key| key.is_some()).unwrap_or(false);
     Ok(settings)
 }
 fn api_key() -> Result<String, String> {
-    Entry::new(SERVICE, USER).map_err(|e| format!("Armazenamento seguro indisponível: {e}"))?
-        .get_password().map_err(|_| "Configure sua chave Groq antes de continuar.".into())
+    if let Ok(entry) = Entry::new(SERVICE, USER) {
+        if let Ok(key) = entry.get_password() { return Ok(key); }
+    }
+    session_key().lock().ok().and_then(|key| key.clone())
+        .ok_or_else(|| "A chave Groq não foi encontrada no Gerenciador de Credenciais do Windows nem na sessão atual. Abra Configurações da Groq e salve a chave novamente.".into())
 }
 #[tauri::command]
 pub fn get_groq_settings(app: AppHandle) -> Result<GroqSettings, String> { read_settings(&app) }
@@ -61,7 +66,10 @@ pub fn save_groq_settings(app: AppHandle, api_key: String, model: String, max_ch
         target_language: if target_language.trim().is_empty() { "Português brasileiro".into() } else { target_language.trim().chars().take(80).collect() },
     };
     if !api_key.trim().is_empty() {
-        Entry::new(SERVICE, USER).map_err(|e| e.to_string())?.set_password(api_key.trim()).map_err(|e| format!("Não foi possível salvar a chave no armazenamento seguro do sistema: {e}"))?;
+        let normalized_key = api_key.trim().to_string();
+        Entry::new(SERVICE, USER).map_err(|e| format!("Não foi possível acessar o Gerenciador de Credenciais do Windows: {e}"))?
+            .set_password(&normalized_key).map_err(|e| format!("Não foi possível salvar a chave no Gerenciador de Credenciais do Windows: {e}"))?;
+        if let Ok(mut cached) = session_key().lock() { *cached = Some(normalized_key); }
     }
     let path = settings_path(&app)?;
     std::fs::write(path, serde_json::to_vec_pretty(&settings).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
