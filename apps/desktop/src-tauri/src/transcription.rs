@@ -1,5 +1,4 @@
-use reqwest::multipart;
-use reqwest::blocking::Client;
+use reqwest::blocking::{multipart, Client};
 use serde::{Deserialize, Serialize};
 use std::{path::{Path, PathBuf}, process::Command, time::Duration};
 use tauri::{AppHandle, Emitter};
