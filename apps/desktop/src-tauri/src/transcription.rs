@@ -277,7 +277,7 @@ pub fn transcribe(app: AppHandle, media: MediaService, storage: MediaStorage, pr
         let duration = duration_ms(&ffprobe(&ffmpeg_path)?,&audio)?;
         let selected = mode.as_str();
         let output = if selected == "local" {
-            run_local_python(&audio,&local_model,&language)?
+            run_local_python(&audio,&local_model,language.as_deref())?
         } else if selected == "cloud" {
             transcribe_cloud(&app,&project_id,&audio,&temp,duration,language.as_deref())?
         } else {
@@ -285,7 +285,7 @@ pub fn transcribe(app: AppHandle, media: MediaService, storage: MediaStorage, pr
                 Ok(result) => result,
                 Err(cloud_error) => {
                     emit(&app,&project_id,"fallback",0.0,0,0,&format!("Groq indisponível. Tentando processamento local. {cloud_error}"));
-                    run_local_python(&audio,&local_model,&language).map_err(|local_error| format!("A transcrição na nuvem falhou: {cloud_error}. O processamento local também não pôde ser concluído: {local_error}"))?
+                    run_local_python(&audio,&local_model,language.as_deref()).map_err(|local_error| format!("A transcrição na nuvem falhou: {cloud_error}. O processamento local também não pôde ser concluído: {local_error}"))?
                 }
             }
         };
