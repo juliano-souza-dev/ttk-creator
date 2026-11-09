@@ -4,7 +4,7 @@ import { desktopApi, isDesktopRuntime } from "./services/desktop-api";
 import EditorWorkspace from "./EditorWorkspace";
 import type { DownloadProgress, MediaAsset, Project, YoutubeInspection } from "./shared/types";
 import type { GroqSettings } from "./services/desktop-api";
-import { Clapperboard, LayoutGrid, Film, GraduationCap, Settings2, Plus, Search, FolderOpen, FolderPlus, Clock3, Video, Sparkles, Play, X, ArrowUpRight, Upload, Youtube, CheckCircle2, LoaderCircle, Link2, Download, Undo2, Redo2, ArrowLeft } from "lucide-react"
+import { Clapperboard, LayoutGrid, Film, GraduationCap, Settings2, Plus, Search, FolderOpen, FolderPlus, Clock3, Video, Sparkles, Play, X, ArrowUpRight, Upload, Youtube, CheckCircle2, LoaderCircle, ShieldCheck, Link2, Download, Undo2, Redo2, ArrowLeft } from "lucide-react"
 
 const formatDuration = (n?:number|null) => !n ? "Duração não informada" : Math.floor(n/60000)+":"+String(Math.floor(n/1000)%60).padStart(2,"0");
 
