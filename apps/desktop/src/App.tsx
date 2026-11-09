@@ -142,7 +142,7 @@ export default function App() {
     } catch (error) { setGroqSettingsMessage("Não foi possível carregar as configurações: " + String(error)); }
   }
   async function saveAndTestGroq() {
-    if (!groqApiKey.trim()) { setGroqSettingsMessage("Informe sua chave Groq para salvar. Por segurança, ela nunca será exibida novamente."); return; }
+    if (!groqApiKey.trim() && !groqSettings?.configured) { setGroqSettingsMessage("Informe sua chave Groq para salvar. Por segurança, ela nunca será exibida novamente."); return; }
     setGroqSettingsBusy(true); setGroqSettingsMessage("");
     try {
       const saved = await desktopApi.saveGroqSettings({ apiKey:groqApiKey, model:groqModel, maxChunkChars:groqMaxChars, maxCuesPerChunk:groqMaxCues, delayMs:groqDelay, targetLanguage:groqLanguage });
@@ -214,7 +214,7 @@ export default function App() {
       </div>
       <div className="groq-free-note"><ShieldCheck size={15}/> Perfil conservador recomendado para conta gratuita: 7.000 caracteres, 25 legendas e 1,8 segundo entre lotes. A API ainda pode aplicar limites variáveis por modelo.</div>
       {groqSettingsMessage&&<div className="groq-settings-message" role="status">{groqSettingsMessage}</div>}
-      <div className="modal-footer"><button className="cancel-button" disabled={groqSettingsBusy} onClick={()=>setGroqSettingsOpen(false)}>Fechar</button><button className="primary" disabled={groqSettingsBusy||!groqApiKey.trim()||!groqModel.trim()} onClick={()=>void saveAndTestGroq()}>{groqSettingsBusy?<><LoaderCircle className="spin" size={14}/> Salvando...</>:<><CheckCircle2 size={14}/> Salvar e testar</>}</button></div>
+      <div className="modal-footer"><button className="cancel-button" disabled={groqSettingsBusy} onClick={()=>setGroqSettingsOpen(false)}>Fechar</button><button className="primary" disabled={groqSettingsBusy||(!groqApiKey.trim()&&!groqSettings?.configured)||!groqModel.trim()} onClick={()=>void saveAndTestGroq()}>{groqSettingsBusy?<><LoaderCircle className="spin" size={14}/> Salvando...</>:<><CheckCircle2 size={14}/> Salvar e testar</>}</button></div>
     </section></div>}
     {!isDesktopRuntime&&<div className="browser-warning">Prévia no navegador. Execute pelo Tauri para importar arquivos no computador.</div>}
   </main>;
