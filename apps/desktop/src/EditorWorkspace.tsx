@@ -5,7 +5,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { desktopApi, isDesktopRuntime } from "./services/desktop-api";
-import type { GlobalSound } from "./services/desktop-api";
+import type { GlobalSound, TranscriptResult } from "./services/desktop-api";
 import type { MediaAsset } from "./shared/types";
 import { AudioLines, Film, Plus, Play, Pause, Trash2, Scissors, Copy, SkipBack, SkipForward, Volume2, VolumeX, Music2, Type, WandSparkles, MousePointer2, ChevronLeft, ChevronRight, Download, LoaderCircle, PanelsTopLeft, FileJson, Upload, Eye, Camera, BookOpen, Headphones, Lightbulb, Clock3, MessageCircle, CheckCircle2, Globe2, Heart, Star, Zap, Target, Search, Image, Music, Mic, Video, PlayCircle, AlertCircle, ArrowRight, CircleHelp, Sparkles, Trophy, Rocket, Smile, ThumbsUp, Bookmark, MapPin, Coffee, Sun, Moon, Cloud, Flame, ShieldCheck, Languages, GraduationCap, Pencil, Bell, CalendarDays, RotateCcw, Maximize, Minimize, Captions, Clapperboard, MicOff, Presentation, Monitor, Smartphone, Home, Menu, X, XCircle, Check, Award, Medal, Flag, Info, AlertTriangle, Timer, Brain, Puzzle, Calculator, Hash, BarChart3, PieChart, Palette, Shapes, Share2, Settings, User, Users, Minus, Layers, List, Map as MapIcon } from "lucide-react";
 import { SCENE_TEMPLATES, buildTemplateScene, createSceneSpecFromMotion, validateSceneSpec } from "./shared/scene-spec";
@@ -169,6 +169,45 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const motionKey = "ttk-creator:motion:" + projectId;
   const [motion, setMotion] = useState<MotionGraphic[]>([]);
+
+  useEffect(() => {
+    const onTranscript = (event: Event) => {
+      const detail = (event as CustomEvent<{ projectId: string; result: TranscriptResult }>).detail;
+      if (!detail || detail.projectId !== projectId) return;
+      const created: MotionGraphic[] = detail.result.cues.map(cue => ({
+        id: cue.id,
+        isCaption: true,
+        captionMode: cue.words.length ? "karaoke" : "source",
+        captionEnglish: cue.text,
+        captionTranslation: "",
+        captionWords: cue.words.map(word => ({ text: word.text, startMs: word.startMs, endMs: word.endMs })),
+        text: cue.text,
+        icon: "",
+        fontFamily: "Arial",
+        fontWeight: 900,
+        textAlign: "center",
+        startMs: cue.startMs,
+        endMs: Math.max(cue.startMs + 300, cue.endMs),
+        durationMs: Math.max(300, cue.endMs - cue.startMs),
+        preset: "pop",
+        color: "#ffffff",
+        accent: "#65d6c0",
+        fontSize: 48,
+        x: 50,
+        y: 82,
+        sound: "none",
+        soundId: "",
+        soundVolume: 80,
+      }));
+      setMotion(current => [...current, ...created]);
+      setSelectedMotionId(created[0]?.id ?? null);
+      if (created.length) setPlayheadMs(created[0].startMs);
+      setActiveTool("text");
+      setSceneSpecMessage("Transcrição adicionada: " + created.length + " legendas editáveis. Revise o texto e os tempos antes de exportar.");
+    };
+    window.addEventListener("framelab:transcription-ready", onTranscript);
+    return () => window.removeEventListener("framelab:transcription-ready", onTranscript);
+  }, [projectId]);
   const [globalSounds, setGlobalSounds] = useState<GlobalSound[]>([]);
   const [soundUrls, setSoundUrls] = useState<Record<string, string>>({});
   const [newSoundName, setNewSoundName] = useState("");
