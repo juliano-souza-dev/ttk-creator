@@ -24,7 +24,7 @@ type TimelineClip = {
   transitionType?: "fade-black" | "fade-white" | "flash";
 };
 type TimelineGroup = { id: string; name: string; members: string[] };
-type Props = { projectId: string; assets: MediaAsset[]; onAddMedia: () => void };
+type Props = { projectId: string; assets: MediaAsset[]; onAddMedia: () => void; onOpenTranscription?: () => void };
 type TrimDrag = { clipId: string; edge: "start" | "end"; startX: number; sourceStartMs: number; sourceEndMs: number; timelineStartMs: number; scaleMs: number };
 type ClipMoveDrag = { clipId: string; startX: number; lastX: number; timelineStartMs: number; memberKeys: string[] };
 type MotionTrimDrag = { id: string; edge: "start" | "end" | "move"; startX: number; lastX: number; startMs: number; endMs: number; memberKeys: string[] };
@@ -160,7 +160,7 @@ function motionPreviewState(item: MotionGraphic, playheadMs: number) {
   return { text, transform, opacity };
 }
 
-export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props) {
+export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenTranscription }: Props) {
   const storageKey = `ttk-creator:timeline:${projectId}`;
   const sessionKey = `ttk-creator:session:${projectId}`;
   const [clips, setClips] = useState<TimelineClip[]>([]);
@@ -1091,6 +1091,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
       <button className={activeTool === "text" ? "active" : ""} onClick={() => setActiveTool("text")}><Type size={19}/><small>Texto</small></button>
       <button className={activeTool === "effects" ? "active" : ""} onClick={() => setActiveTool("effects")}><WandSparkles size={19}/><small>Efeitos</small></button>
       <button className={activeTool === "templates" ? "active" : ""} onClick={() => setActiveTool("templates")}><PanelsTopLeft size={19}/><small>Modelos</small></button>
+      <button className="transcription-tool" onClick={() => onOpenTranscription?.()} title="Gerar legendas automaticamente"><Captions size={19}/><small>Transcrever</small></button>
     </aside>
     <aside className="editor-content-panel">
       {activeTool === "media" && <>
