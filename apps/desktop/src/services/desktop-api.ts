@@ -12,7 +12,7 @@ export const isDesktopRuntime =
 
 export type GlobalSound = { id: string; name: string; fileName: string };
 export type GroqSettings = { configured: boolean; model: string; maxChunkChars: number; maxCuesPerChunk: number; delayMs: number; targetLanguage: string };
-export type TranslationCue = { id: string; text: string };
+export type TranslationCue = { id: string; text: string; contextBefore?: string; contextAfter?: string };
 export type CueTranslation = { id: string; translation: string };
 
 export const desktopApi = {
