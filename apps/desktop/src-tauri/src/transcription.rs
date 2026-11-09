@@ -1,4 +1,5 @@
-use reqwest::{header, multipart, Client, StatusCode};
+use reqwest::multipart;
+use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use std::{path::{Path, PathBuf}, process::Command, time::Duration};
 use tauri::{AppHandle, Emitter, Manager};
@@ -152,14 +153,14 @@ fn groq_chunk(client: &Client, key: &str, path: &Path, language: Option<&str>) -
         .text("temperature", "0").text("timestamp_granularities[]", "word")
         .text("timestamp_granularities[]", "segment").part("file", part);
     if let Some(lang) = language { if !lang.trim().is_empty() { form = form.text("language", lang.to_string()); } }
-    let response = tauri::async_runtime::block_on(client.post(GROQ_URL).bearer_auth(key).multipart(form).send())
+    let response = client.post(GROQ_URL).bearer_auth(key).multipart(form).send()
         .map_err(|e| format!("Falha de conexão com a Groq: {e}"))?;
     if !response.status().is_success() {
         let status = response.status();
-        let body = tauri::async_runtime::block_on(response.text()).unwrap_or_default();
+        let body = response.text().unwrap_or_default();
         return Err(format!("Groq HTTP {status}: {}", body.chars().take(500).collect::<String>()));
     }
-    tauri::async_runtime::block_on(response.json::<GroqResponse>()).map_err(|e| format!("Resposta de transcrição inválida: {e}"))
+    response.json::<GroqResponse>().map_err(|e| format!("Resposta de transcrição inválida: {e}"))
 }
 fn transcribe_cloud(app: &AppHandle, project_id: &str, audio: &Path, directory: &Path, duration: u64, language: Option<&str>) -> Result<TranscriptResult, String> {
     let chunks = chunk_audio(&ffmpeg()?, audio, directory, duration)?;
@@ -215,10 +216,11 @@ for s in segments:
 print(json.dumps({"language":info.language,"cues":out},ensure_ascii=False))
 "#;
     let lang = language.unwrap_or("");
+    let audio_arg = audio.to_string_lossy().into_owned();
     let mut command = Command::new("python");
-    command.args(["-c", SCRIPT, model, &audio.to_string_lossy(), lang]);
+    command.args(["-c", SCRIPT, model, audio_arg.as_str(), lang]);
     let output = command.output().or_else(|_| {
-        let mut py = Command::new("py"); py.args(["-3","-c",SCRIPT,model,&audio.to_string_lossy(),lang]); py.output()
+        let mut py = Command::new("py"); py.args(["-3","-c",SCRIPT,model,audio_arg.as_str(),lang]); py.output()
     }).map_err(|e| format!("Python não foi encontrado. Instale Python 3.10+ e o suporte Faster-Whisper: {e}"))?;
     if !output.status.success() {
         return Err(format!("Falha no Faster-Whisper local: {}", String::from_utf8_lossy(&output.stderr).chars().take(1000).collect::<String>()));
