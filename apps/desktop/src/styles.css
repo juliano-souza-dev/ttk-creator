@@ -560,3 +560,14 @@
 .transcription-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:13px;padding-top:12px;border-top:1px solid #302b38}.transcription-footer>span{display:flex;align-items:center;gap:6px;color:#9d97a7;font-size:9px}.transcription-footer>span svg{color:#83c99c}.transcription-footer .secondary-action{font-size:9px;padding:7px 10px}
 .transcription-progress{margin-top:13px;padding:11px;border:1px solid #40364f;border-radius:7px;background:#191620}.transcription-progress .progress-heading{font-size:9px}.transcription-progress small{font-size:9px;color:#918a9c}.transcription-message{margin-top:11px;padding:9px 10px;border:1px solid #3d5948;border-radius:6px;background:#1c2b23;color:#a5dcb6;font-size:10px;line-height:1.5}.transcription-privacy{display:block;margin-top:11px;color:#77727f;font-size:9px;line-height:1.5}
 @media(max-width:1100px){.transcription-controls{grid-template-columns:repeat(2,minmax(0,1fr))}.transcription-start{grid-column:1/-1}}
+
+
+/* Transcription is an on-demand, resizable tool dialog rather than a permanent workspace panel. */
+.transcription-backdrop{z-index:120;display:flex;align-items:center;justify-content:center;padding:28px}
+.transcription-dialog{position:relative;width:min(760px,calc(100vw - 56px));height:auto;max-height:calc(100vh - 56px);min-width:420px;min-height:300px;overflow:auto;resize:both;padding:22px;border:1px solid #493d59;border-radius:13px;background:linear-gradient(145deg,#211d29,#15151b 76%);box-shadow:0 24px 90px #000b}
+.transcription-dialog-top{display:flex;align-items:flex-start;justify-content:space-between;gap:20px}.transcription-dialog-top>.close{position:static;flex:0 0 34px;width:34px;height:34px;display:grid;place-items:center;border:1px solid #3d3747;border-radius:8px;background:#17151d;color:#aaa3b4}
+.transcription-dialog .transcription-heading{flex:1}.transcription-dialog .transcription-heading h3{font-size:18px}.transcription-dialog .transcription-controls{grid-template-columns:repeat(2,minmax(0,1fr));margin-top:22px}.transcription-dialog .transcription-start{grid-column:1/-1;justify-content:center;height:40px}
+.transcription-dialog .transcription-footer{margin-top:16px}.transcription-dialog .transcription-privacy{max-width:680px}
+.transcription-tool{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;width:100%;padding:11px 4px;border:0;border-radius:8px;background:transparent;color:#92909c;font-size:10px}
+.transcription-tool:hover{background:#24212c;color:#fff}.transcription-tool svg{color:#b99af5}.editor-tool-rail .transcription-tool{margin-top:7px;border-top:1px solid #29272f;border-radius:0;padding-top:16px}
+@media(max-width:650px){.transcription-dialog{min-width:0;width:calc(100vw - 24px);padding:16px}.transcription-dialog .transcription-controls{grid-template-columns:1fr}}
