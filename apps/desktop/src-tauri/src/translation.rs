@@ -45,8 +45,11 @@ pub fn get_groq_settings(app: AppHandle) -> Result<GroqSettings, String> { read_
 
 #[tauri::command]
 pub fn save_groq_settings(app: AppHandle, api_key: String, model: String, max_chunk_chars: usize, max_cues_per_chunk: usize, delay_ms: u64, target_language: String) -> Result<GroqSettings, String> {
-    if api_key.trim().len() < 20 || !api_key.trim().starts_with("gsk_") {
+    if !api_key.trim().is_empty() && (api_key.trim().len() < 20 || !api_key.trim().starts_with("gsk_")) {
         return Err("Informe uma chave Groq válida (ela normalmente começa com gsk_).".into());
+    }
+    if api_key.trim().is_empty() && Entry::new(SERVICE, USER).ok().and_then(|entry| entry.get_password().ok()).is_none() {
+        return Err("Informe sua chave Groq para configurar a primeira conexão.".into());
     }
     let model = model.trim();
     if model.is_empty() || model.len() > 120 { return Err("Informe um identificador de modelo válido.".into()); }
@@ -57,7 +60,9 @@ pub fn save_groq_settings(app: AppHandle, api_key: String, model: String, max_ch
         delay_ms: delay_ms.clamp(0, 15000),
         target_language: if target_language.trim().is_empty() { "Português brasileiro".into() } else { target_language.trim().chars().take(80).collect() },
     };
-    Entry::new(SERVICE, USER).map_err(|e| e.to_string())?.set_password(api_key.trim()).map_err(|e| format!("Não foi possível salvar a chave no armazenamento seguro do sistema: {e}"))?;
+    if !api_key.trim().is_empty() {
+        Entry::new(SERVICE, USER).map_err(|e| e.to_string())?.set_password(api_key.trim()).map_err(|e| format!("Não foi possível salvar a chave no armazenamento seguro do sistema: {e}"))?;
+    }
     let path = settings_path(&app)?;
     std::fs::write(path, serde_json::to_vec_pretty(&settings).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
     Ok(settings)
