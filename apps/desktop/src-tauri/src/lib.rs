@@ -5,6 +5,7 @@ mod infrastructure;
 mod logging;
 mod state;
 mod translation;
+mod transcription;
 
 use std::{path::PathBuf, sync::{Arc, Mutex}};
 use tauri::Manager;
@@ -59,6 +60,9 @@ pub fn run() {
             commands::import_global_sound,
             commands::get_global_sound_path,
             commands::delete_global_sound,
+            commands::transcribe_media,
+            commands::check_local_asr,
+            commands::install_local_asr,
             commands::export_timeline,
             translation::get_groq_settings,
             translation::save_groq_settings,
