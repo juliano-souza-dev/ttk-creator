@@ -144,7 +144,7 @@ export default function App() {
       const parsed: unknown = JSON.parse(await file.text());
       if (!validateSceneSpec(parsed)) throw new Error("Arquivo inválido. Selecione um Scene Spec versão 1.0 com cenas e blocos válidos.");
       const spec: SceneSpec = parsed;
-      const projectName = spec.project?.title?.trim() || file.name.replace(/\\.json$/i, "") || "Projeto Scene Spec";
+      const projectName = spec.project?.title?.trim() || file.name.replace(/\.json$/i, "") || "Projeto Scene Spec";
       createdProject = await desktopApi.createProject(projectName);
       const sceneOffsetById = new Map<string, number>();
       let sceneCursor = 0;
