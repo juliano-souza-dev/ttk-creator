@@ -146,11 +146,14 @@ export default function App() {
     setGroqSettingsBusy(true); setGroqSettingsMessage("");
     try {
       const saved = await desktopApi.saveGroqSettings({ apiKey:groqApiKey, model:groqModel, maxChunkChars:groqMaxChars, maxCuesPerChunk:groqMaxCues, delayMs:groqDelay, targetLanguage:groqLanguage });
-      setGroqSettings(saved); setGroqApiKey("");
+      setGroqSettings(saved);
+      setGroqApiKey("");
+      setGroqSettingsMessage("Configurações salvas. Testando a conexão com a Groq...");
       const result = await desktopApi.testGroqConnection(groqModel);
-      setGroqSettingsMessage(result);
-    } catch (error) { setGroqSettingsMessage("Não foi possível salvar/testar: " + String(error)); }
-    finally { setGroqSettingsBusy(false); }
+      setGroqSettingsMessage("Chave salva com segurança. " + result);
+    } catch (error) {
+      setGroqSettingsMessage("Falha ao salvar ou testar a Groq: " + (error instanceof Error ? error.message : String(error)));
+    } finally { setGroqSettingsBusy(false); }
   }
 
   const visible = projects.filter(p=>p.name.toLowerCase().includes(search.toLowerCase()));
