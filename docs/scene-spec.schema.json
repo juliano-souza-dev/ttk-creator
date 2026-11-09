@@ -173,13 +173,127 @@
           }
         },
         "captions": {
-          "type": "object"
+          "type": "object",
+          "required": [
+            "enabled",
+            "mode"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "mode": {
+              "enum": [
+                "off",
+                "source",
+                "bilingual",
+                "karaoke"
+              ]
+            },
+            "sourceLanguage": {
+              "type": "string"
+            },
+            "targetLanguage": {
+              "type": "string"
+            },
+            "lines": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "startMs",
+                  "endMs",
+                  "text"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "startMs": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "endMs": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "translation": {
+                    "type": "string"
+                  },
+                  "words": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "text",
+                        "startMs",
+                        "endMs"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "text": {
+                          "type": "string"
+                        },
+                        "startMs": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "endMs": {
+                          "type": "number",
+                          "exclusiveMinimum": 0
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
         },
         "audio": {
-          "type": "object"
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "source": {
+              "type": "string"
+            },
+            "narration": {
+              "type": "string"
+            },
+            "startMs": {
+              "type": "number",
+              "minimum": 0
+            },
+            "volume": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            }
+          }
         },
         "character": {
-          "type": "object"
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "asset": {
+              "type": "string"
+            },
+            "x": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "y": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            }
+          }
         }
       },
       "additionalProperties": false
