@@ -1,7 +1,7 @@
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { desktopApi, isDesktopRuntime } from "./services/desktop-api";
-import EditorWorkspace from "./EditorWorkspace";
+import EditorWorkspace, { supportedLucideIconNames } from "./EditorWorkspace";
 import type { DownloadProgress, MediaAsset, Project, YoutubeInspection } from "./shared/types";
 import type { GroqSettings } from "./services/desktop-api";
 import { validateSceneSpec, type SceneSpec } from "./shared/scene-spec";
@@ -144,6 +144,8 @@ export default function App() {
       const parsed: unknown = JSON.parse(await file.text());
       if (!validateSceneSpec(parsed)) throw new Error("Arquivo inválido. Selecione um Scene Spec versão 1.0 com cenas e blocos válidos.");
       const spec: SceneSpec = parsed;
+      const unsupportedIcons = [...new Set(spec.scenes.flatMap(scene => scene.blocks.map(block => block.iconName).filter((name): name is string => !!name && !supportedLucideIconNames.includes(name))))];
+      if (unsupportedIcons.length) throw new Error("O arquivo usa ícones que não existem na biblioteca atual do FrameLab: " + unsupportedIcons.join(", "));
       if (spec.project?.aspectRatio && spec.project.aspectRatio !== "9:16") {
         throw new Error('Este editor ainda trabalha com canvas vertical 9:16. Ajuste project.aspectRatio para "9:16" antes de importar.');
       }
