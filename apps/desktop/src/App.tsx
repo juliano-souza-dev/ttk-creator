@@ -364,7 +364,7 @@ export default function App() {
           </div>
           {transcriptionBusy&&transcriptionProgress&&<div className="transcription-progress"><div className="progress-heading"><b>{transcriptionProgress.message}</b><span>{Math.round(transcriptionProgress.percent)}%</span></div><div className="progress-track"><i style={{width:Math.max(0,Math.min(100,transcriptionProgress.percent))+"%"}}/></div>{transcriptionProgress.totalChunks>0&&<small>Blocos concluídos: {transcriptionProgress.completedChunks} de {transcriptionProgress.totalChunks}</small>}</div>}
           {transcriptionMessage&&<div className="transcription-message" role="status">{transcriptionMessage}</div>}
-          <small className="transcription-privacy">No modo local, o áudio permanece no computador. No modo Groq, o áudio é enviado à API para reconhecimento. O arquivo original não é modificado.</small>
+          <small className="transcription-privacy">Somente o modo local mantém o áudio no computador. Os modos Automático e Groq enviam o áudio à API da Groq; no Automático, o processamento local é usado como fallback. O modelo local é baixado na primeira utilização. O arquivo original não é modificado.</small>
         </section>
         <EditorWorkspace projectId={activeProject.id} assets={assets} onAddMedia={()=>{setMediaTab("local");setMediaModal(true);}}/>
         </> : null}
