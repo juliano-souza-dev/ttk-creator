@@ -79,7 +79,7 @@ Use **Workspace → Criar via JSON** to select a `.json` file. FrameLab validate
 
 The importer applies every scene in sequence using `durationMs`, graphic blocks with text, emoji/Lucide icons, position, typography, color, alignment and block timing, plus caption lines, translations and optional word timings. Caption times are relative to their scene.
 
-Audio files referenced by `audio.source` are imported into the project and placed on the audio track at `audio.startMs`; `audio.volume` controls clip volume. Character files referenced by `character.asset` are copied into the project's media library for later use. Audio and character asset values must be local file paths accessible to the computer running FrameLab. Character assets are not yet composited as image layers over video.
+Audio files referenced by `audio.source` are imported into the project and placed on the audio track at `audio.startMs`; `audio.volume` controls clip volume. `audio.narration` is retained as descriptive script metadata, but does not synthesize a voice. Character files referenced by `character.asset` are copied into the project's media library for later use. Audio and character asset values must be local file paths accessible to the computer running FrameLab. Character assets are not yet composited as image layers over video.
 
 The editor currently creates vertical 9:16 projects only. Other aspect ratios are rejected rather than silently distorted.
 
