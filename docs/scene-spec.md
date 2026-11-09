@@ -73,13 +73,19 @@ A scene contains an ID, name, layout, duration and one or more blocks. Blocks re
 }
 ```
 
-## Current editor support
+## Create a project from a Scene Spec
 
-The first Scene Spec integration imports and exports graphic blocks as Motion Graphics. It currently applies text, icon token, position, duration, font size, color and alignment.
+Use **Workspace → Criar via JSON** to select a `.json` file. FrameLab validates the document, creates a new project using `project.title`, and prepares its timeline before opening the editor. It does not append to the project currently open.
 
-The schema already reserves optional fields for captions, audio and character references so that future versions can add these capabilities without changing the overall scene envelope. These metadata fields are not yet applied by the editor importer; FrameLab displays a notice when such metadata is present.
+The importer applies every scene in sequence using `durationMs`, graphic blocks with text, emoji/Lucide icons, position, typography, color, alignment and block timing, plus caption lines, translations and optional word timings. Caption times are relative to their scene.
 
-See [scene-spec.schema.json](./scene-spec.schema.json) for the machine-readable JSON Schema.
+Audio files referenced by `audio.source` are imported into the project and placed on the audio track at `audio.startMs`; `audio.volume` controls clip volume. Character files referenced by `character.asset` are copied into the project's media library for later use. Audio and character asset values must be local file paths accessible to the computer running FrameLab. Character assets are not yet composited as image layers over video.
+
+The editor currently creates vertical 9:16 projects only. Other aspect ratios are rejected rather than silently distorted.
+
+The existing **Importar JSON** control inside the editor remains available to append graphic/caption content to the open project. Use **Criar via JSON** in the workspace to create a separate project.
+
+See [scene-spec.schema.json](./scene-spec.schema.json) for the machine-readable JSON Schema and [examples/scene-spec-take-english.json](./examples/scene-spec-take-english.json) for a complete 55-second English lesson example.
 
 ## Lucide SVG icons
 
