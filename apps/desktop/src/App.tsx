@@ -3,7 +3,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { desktopApi, isDesktopRuntime } from "./services/desktop-api";
 import EditorWorkspace, { supportedLucideIconNames } from "./EditorWorkspace";
 import type { DownloadProgress, MediaAsset, Project, YoutubeInspection } from "./shared/types";
-import type { GroqSettings } from "./services/desktop-api";
+import type { GroqSettings, TranscriptionProgress } from "./services/desktop-api";
 import { validateSceneSpec, type SceneSpec } from "./shared/scene-spec";
 import { Clapperboard, LayoutGrid, Film, GraduationCap, Settings2, Plus, Search, FolderOpen, FolderPlus, Clock3, Video, Sparkles, Play, X, ArrowUpRight, Upload, Youtube, CheckCircle2, LoaderCircle, ShieldCheck, Link2, Download, Undo2, Redo2, ArrowLeft, FileJson } from "lucide-react"
 
@@ -37,6 +37,16 @@ export default function App() {
   const [groqLanguage,setGroqLanguage] = useState("Português brasileiro");
   const [groqSettingsBusy,setGroqSettingsBusy] = useState(false);
   const [groqSettingsMessage,setGroqSettingsMessage] = useState("");
+  const [transcriptionAssetId,setTranscriptionAssetId] = useState("");
+  const [transcriptionMode,setTranscriptionMode] = useState<"auto"|"cloud"|"local">("auto");
+  const [transcriptionLanguage,setTranscriptionLanguage] = useState("");
+  const [transcriptionModel,setTranscriptionModel] = useState("small");
+  const [transcriptionBusy,setTranscriptionBusy] = useState(false);
+  const [transcriptionProgress,setTranscriptionProgress] = useState<TranscriptionProgress|null>(null);
+  const [localAsrInstalled,setLocalAsrInstalled] = useState(false);
+  const [localAsrChecking,setLocalAsrChecking] = useState(false);
+  const [localAsrInstalling,setLocalAsrInstalling] = useState(false);
+  const [transcriptionMessage,setTranscriptionMessage] = useState("");
 
   async function refresh() {
     if (!isDesktopRuntime) return;
@@ -72,6 +82,31 @@ export default function App() {
     }).then(fn=>{ if(disposed) fn(); else unlisten=fn; });
     return ()=>{disposed=true;unlisten?.();};
   },[activeProject?.id]);
+
+  useEffect(()=>{
+    let disposed=false;
+    let unlisten:(()=>void)|undefined;
+    void desktopApi.subscribeToTranscriptionProgress(event=>{
+      if(event.projectId===activeProject?.id) setTranscriptionProgress(event);
+    }).then(fn=>{ if(disposed) fn(); else unlisten=fn; });
+    return ()=>{disposed=true;unlisten?.();};
+  },[activeProject?.id]);
+
+  useEffect(()=>{
+    let cancelled=false;
+    if(!activeProject) return;
+    setLocalAsrChecking(true);
+    void desktopApi.checkLocalAsr().then(ready=>{if(!cancelled)setLocalAsrInstalled(ready);})
+      .catch(()=>{if(!cancelled)setLocalAsrInstalled(false);})
+      .finally(()=>{if(!cancelled)setLocalAsrChecking(false);});
+    return ()=>{cancelled=true;};
+  },[activeProject?.id]);
+
+  useEffect(()=>{
+    if(!assets.some(asset=>asset.id===transcriptionAssetId && (asset.kind==="video"||asset.kind==="audio"))) {
+      setTranscriptionAssetId(assets.find(asset=>asset.kind==="video"||asset.kind==="audio")?.id??"");
+    }
+  },[assets,transcriptionAssetId]);
 
   async function refreshAssets(project:Project) {
     if(!isDesktopRuntime) return;
@@ -239,6 +274,30 @@ export default function App() {
     } finally { setBusy(false); }
   }
 
+  async function installLocalTranscription() {
+    setLocalAsrInstalling(true); setTranscriptionMessage("");
+    try {
+      const message=await desktopApi.installLocalAsr();
+      setLocalAsrInstalled(await desktopApi.checkLocalAsr());
+      setTranscriptionMessage(message);
+    } catch(error) {
+      setTranscriptionMessage("Não foi possível instalar o suporte local: "+String(error));
+    } finally { setLocalAsrInstalling(false); }
+  }
+
+  async function transcribeSelectedMedia() {
+    if(!activeProject||!transcriptionAssetId||transcriptionBusy) return;
+    setTranscriptionBusy(true); setTranscriptionMessage(""); setTranscriptionProgress(null); setError("");
+    try {
+      const result=await desktopApi.transcribeMedia(activeProject.id,transcriptionAssetId,transcriptionMode,transcriptionLanguage,transcriptionModel);
+      window.dispatchEvent(new CustomEvent("framelab:transcription-ready",{detail:{projectId:activeProject.id,result}}));
+      setTranscriptionMessage(result.cues.length+" legendas criadas com "+(result.engine==="groq"?"Groq Whisper":"Faster-Whisper local")+". Revise-as na timeline.");
+      setTranscriptionProgress({projectId:activeProject.id,stage:"completed",percent:100,completedChunks:1,totalChunks:1,message:"Transcrição concluída"});
+    } catch(error) {
+      setTranscriptionMessage("Falha na transcrição: "+(error instanceof Error?error.message:String(error)));
+    } finally { setTranscriptionBusy(false); }
+  }
+
   async function openGroqSettings() {
     setGroqSettingsOpen(true); setGroqSettingsMessage("");
     if (!isDesktopRuntime) return;
@@ -290,6 +349,23 @@ export default function App() {
         </> : activeProject ? <>
         {error&&!mediaModal&&<div className="error editor-error">{error}</div>}
         {notice&&<div className="notice"><CheckCircle2 size={15}/>{notice}</div>}
+        <section className="transcription-panel">
+          <div className="transcription-heading"><div><label className="eyebrow muted">RECONHECIMENTO DE FALA</label><h3>Gerar legendas automaticamente</h3><p>Transcreva o áudio do vídeo ou de um arquivo de áudio e envie as falas para a timeline como legendas editáveis.</p></div><span className="transcription-chip"><Mic size={13}/> WHISPER</span></div>
+          <div className="transcription-controls">
+            <label>Arquivo de mídia<select value={transcriptionAssetId} onChange={event=>setTranscriptionAssetId(event.target.value)}><option value="">Selecione um vídeo ou áudio</option>{assets.filter(asset=>asset.kind==="video"||asset.kind==="audio").map(asset=><option key={asset.id} value={asset.id}>{asset.name}</option>)}</select></label>
+            <label>Processamento<select value={transcriptionMode} onChange={event=>setTranscriptionMode(event.target.value as "auto"|"cloud"|"local")}><option value="auto">Automático (Groq + fallback local)</option><option value="cloud">Somente Groq na nuvem</option><option value="local">Somente local (privado)</option></select></label>
+            <label>Idioma<select value={transcriptionLanguage} onChange={event=>setTranscriptionLanguage(event.target.value)}><option value="">Detectar automaticamente</option><option value="pt">Português</option><option value="en">Inglês</option><option value="es">Espanhol</option><option value="fr">Francês</option></select></label>
+            <label>Modelo local<select value={transcriptionModel} onChange={event=>setTranscriptionModel(event.target.value)}><option value="tiny">Tiny · mais rápido</option><option value="base">Base · leve</option><option value="small">Small · equilibrado</option><option value="medium">Medium · mais preciso</option><option value="large-v3">Large v3 · maior qualidade</option></select></label>
+            <button className="primary transcription-start" disabled={!transcriptionAssetId||transcriptionBusy||(!localAsrInstalled&&transcriptionMode==="local")} onClick={()=>void transcribeSelectedMedia()}>{transcriptionBusy?<><LoaderCircle className="spin" size={15}/> Transcrevendo...</>:<><Captions size={15}/> Transcrever</>}</button>
+          </div>
+          <div className="transcription-footer">
+            <span>{localAsrChecking?"Verificando suporte local...":localAsrInstalled?<><CheckCircle2 size={13}/> Faster-Whisper instalado</>:<><Info size={13}/> Processamento local ainda não instalado</>}</span>
+            {!localAsrInstalled&&<button className="secondary-action" disabled={localAsrChecking||localAsrInstalling} onClick={()=>void installLocalTranscription()}>{localAsrInstalling?<><LoaderCircle className="spin" size={13}/> Instalando...</>:<><Download size={13}/> Instalar suporte local</>}</button>}
+          </div>
+          {transcriptionBusy&&transcriptionProgress&&<div className="transcription-progress"><div className="progress-heading"><b>{transcriptionProgress.message}</b><span>{Math.round(transcriptionProgress.percent)}%</span></div><div className="progress-track"><i style={{width:Math.max(0,Math.min(100,transcriptionProgress.percent))+"%"}}/></div>{transcriptionProgress.totalChunks>0&&<small>Blocos concluídos: {transcriptionProgress.completedChunks} de {transcriptionProgress.totalChunks}</small>}</div>}
+          {transcriptionMessage&&<div className="transcription-message" role="status">{transcriptionMessage}</div>}
+          <small className="transcription-privacy">No modo local, o áudio permanece no computador. No modo Groq, o áudio é enviado à API para reconhecimento. O arquivo original não é modificado.</small>
+        </section>
         <EditorWorkspace projectId={activeProject.id} assets={assets} onAddMedia={()=>{setMediaTab("local");setMediaModal(true);}}/>
         </> : null}
         <footer>FRAME LAB · FEITO PARA IDEIAS EM MOVIMENTO <span>EARLY ACCESS · 0.2.0</span></footer>
