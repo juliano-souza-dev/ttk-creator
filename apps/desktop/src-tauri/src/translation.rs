@@ -115,7 +115,7 @@ pub async fn translate_groq_chunk(app: AppHandle, model: String, target_language
     for attempt in 0..4 {
         let response = client.post("https://api.groq.com/openai/v1/chat/completions")
             .bearer_auth(&key).json(&serde_json::json!({
-                "model":model,"messages":[{"role":"system","content":system},{"role":"user","content":serde_json::to_string(&payload).map_err(|e|e.to_string())?}],
+                "model":&model,"messages":[{"role":"system","content":system},{"role":"user","content":serde_json::to_string(&payload).map_err(|e|e.to_string())?}],
                 "temperature":0.2,"max_tokens":6000,"response_format":{"type":"json_object"}
             })).send().await;
         match response {
