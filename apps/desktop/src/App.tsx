@@ -3,6 +3,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { desktopApi, isDesktopRuntime } from "./services/desktop-api";
 import EditorWorkspace from "./EditorWorkspace";
 import type { DownloadProgress, MediaAsset, Project, YoutubeInspection } from "./shared/types";
+import type { GroqSettings } from "./services/desktop-api";
 import { Clapperboard, LayoutGrid, Film, GraduationCap, Settings2, Plus, Search, FolderOpen, FolderPlus, Clock3, Video, Sparkles, Play, X, ArrowUpRight, Upload, Youtube, CheckCircle2, LoaderCircle, Link2, Download, Undo2, Redo2, ArrowLeft } from "lucide-react"
 
 const formatDuration = (n?:number|null) => !n ? "Duração não informada" : Math.floor(n/60000)+":"+String(Math.floor(n/1000)%60).padStart(2,"0");
@@ -24,6 +25,16 @@ export default function App() {
   const [quality,setQuality] = useState(1080);
   const [progress,setProgress] = useState<DownloadProgress|null>(null);
   const [notice,setNotice] = useState("");
+  const [groqSettingsOpen,setGroqSettingsOpen] = useState(false);
+  const [groqSettings,setGroqSettings] = useState<GroqSettings|null>(null);
+  const [groqApiKey,setGroqApiKey] = useState("");
+  const [groqModel,setGroqModel] = useState("llama-3.3-70b-versatile");
+  const [groqMaxChars,setGroqMaxChars] = useState(7000);
+  const [groqMaxCues,setGroqMaxCues] = useState(25);
+  const [groqDelay,setGroqDelay] = useState(1800);
+  const [groqLanguage,setGroqLanguage] = useState("Português brasileiro");
+  const [groqSettingsBusy,setGroqSettingsBusy] = useState(false);
+  const [groqSettingsMessage,setGroqSettingsMessage] = useState("");
 
   async function refresh() {
     if (!isDesktopRuntime) return;
@@ -120,6 +131,28 @@ export default function App() {
     finally { setBusy(false); }
   }
 
+
+  async function openGroqSettings() {
+    setGroqSettingsOpen(true); setGroqSettingsMessage("");
+    if (!isDesktopRuntime) return;
+    try {
+      const settings = await desktopApi.getGroqSettings();
+      setGroqSettings(settings); setGroqModel(settings.model); setGroqMaxChars(settings.maxChunkChars);
+      setGroqMaxCues(settings.maxCuesPerChunk); setGroqDelay(settings.delayMs); setGroqLanguage(settings.targetLanguage);
+    } catch (error) { setGroqSettingsMessage("Não foi possível carregar as configurações: " + String(error)); }
+  }
+  async function saveAndTestGroq() {
+    if (!groqApiKey.trim()) { setGroqSettingsMessage("Informe sua chave Groq para salvar. Por segurança, ela nunca será exibida novamente."); return; }
+    setGroqSettingsBusy(true); setGroqSettingsMessage("");
+    try {
+      const saved = await desktopApi.saveGroqSettings({ apiKey:groqApiKey, model:groqModel, maxChunkChars:groqMaxChars, maxCuesPerChunk:groqMaxCues, delayMs:groqDelay, targetLanguage:groqLanguage });
+      setGroqSettings(saved); setGroqApiKey("");
+      const result = await desktopApi.testGroqConnection(groqModel);
+      setGroqSettingsMessage(result);
+    } catch (error) { setGroqSettingsMessage("Não foi possível salvar/testar: " + String(error)); }
+    finally { setGroqSettingsBusy(false); }
+  }
+
   const visible = projects.filter(p=>p.name.toLowerCase().includes(search.toLowerCase()));
   return <main className={"shell " + (view === "project" ? "project-shell" : "")}>
     <aside className="sidebar">
@@ -133,7 +166,7 @@ export default function App() {
       <div className="profile"><div className="avatar">J</div><div><b>Seu estúdio</b><small>Ambiente local</small></div><Settings2 size={17}/></div>
     </aside>
     <section className="main">
-      <header className="topbar"><div className="topbar-location">{view==="project"&&<button className="secondary-action back-to-projects" onClick={returnToWorkspace} title="Voltar para a página de projetos"><ArrowLeft size={15}/> Projetos</button>}<span>Workspace</span> <span>/</span> <b>{view==="project"&&activeProject?activeProject.name:"Visão geral"}</b></div><div className="top-right"><small><i/> Salvamento automático ativo</small>{view==="project"&&<><button className="secondary-action" disabled title="Histórico de desfazer ainda não disponível"><Undo2 size={15}/> Desfazer</button><button className="secondary-action" disabled title="Histórico de refazer ainda não disponível"><Redo2 size={15}/> Refazer</button></>}</div></header>
+      <header className="topbar"><div className="topbar-location">{view==="project"&&<button className="secondary-action back-to-projects" onClick={returnToWorkspace} title="Voltar para a página de projetos"><ArrowLeft size={15}/> Projetos</button>}<span>Workspace</span> <span>/</span> <b>{view==="project"&&activeProject?activeProject.name:"Visão geral"}</b></div><div className="top-right"><button className="secondary-action groq-settings-trigger" onClick={()=>void openGroqSettings()}><Settings2 size={14}/> Groq</button><small><i/> Salvamento automático ativo</small>{view==="project"&&<><button className="secondary-action" disabled title="Histórico de desfazer ainda não disponível"><Undo2 size={15}/> Desfazer</button><button className="secondary-action" disabled title="Histórico de refazer ainda não disponível"><Redo2 size={15}/> Refazer</button></>}</div></header>
       <div className={"content " + (view === "project" ? "project-content" : "")}>
         {view==="workspace" ? <>
         <section className="hero"><div><label className="eyebrow"><Sparkles size={13}/> SEU PRÓXIMO VÍDEO COMEÇA AQUI</label><h1>Boas ideias merecem<br/><em>uma boa edição.</em></h1><p>Seu espaço para transformar ideias em vídeos que prendem a atenção.</p></div><div className="hero-visual"><div className="preview-art"><div className="rec">REC <i/></div><div className="play"><Play size={22} fill="currentColor"/></div><strong>IDEIA <span>EM MOVIMENTO.</span></strong><div className="scrub">00:18 <div><i/><i/><i/><i/><i/></div> 00:55</div></div><div className="float-tag"><Sparkles size={13}/> MAKE IT MATTER</div></div></section>
@@ -163,6 +196,25 @@ export default function App() {
       <div className="youtube-note"><Youtube size={13}/> Importe somente vídeos que você tenha autorização para baixar e reutilizar.</div></div>}
       {error&&<div className="error modal-error">{error}</div>}
       <div className="modal-footer"><button className="cancel-button" disabled={busy} onClick={()=>setMediaModal(false)}>Cancelar</button>{mediaTab==="youtube"&&youtubeInfo&&<button className="primary" disabled={busy} onClick={()=>void downloadYoutube()}>{busy?<><LoaderCircle className="spin" size={15}/> Baixando...</>:<><Download size={15}/> Baixar e importar</>}</button>}</div>
+    </section></div>}
+
+    {groqSettingsOpen&&<div className="backdrop" onMouseDown={e=>{if(e.target===e.currentTarget&&!groqSettingsBusy)setGroqSettingsOpen(false);}}><section className="groq-settings-modal">
+      <button type="button" className="close" onClick={()=>!groqSettingsBusy&&setGroqSettingsOpen(false)}><X size={18}/></button>
+      <label className="eyebrow muted"><Settings2 size={13}/> INTELIGÊNCIA ARTIFICIAL</label><h2>Configurações da Groq</h2>
+      <p>Configure a conexão uma vez. A chave fica no armazenamento seguro do Windows e não é incluída nos projetos.</p>
+      <label className="field-label" htmlFor="groq-key">Chave de API {groqSettings?.configured&&<span className="groq-configured">· Chave cadastrada</span>}</label>
+      <input id="groq-key" type="password" autoComplete="new-password" value={groqApiKey} onChange={e=>setGroqApiKey(e.target.value)} placeholder={groqSettings?.configured?"Informe uma nova chave para substituir":"gsk_..."} />
+      <small className="groq-field-hint">A chave não pode ser recuperada pelo aplicativo. Para alterá-la, informe uma nova.</small>
+      <label className="field-label" htmlFor="groq-model">Modelo Groq</label><input id="groq-model" value={groqModel} onChange={e=>setGroqModel(e.target.value)} placeholder="llama-3.3-70b-versatile"/>
+      <div className="groq-settings-grid">
+        <label><span>Máx. caracteres por lote</span><input type="number" min={1000} max={18000} value={groqMaxChars} onChange={e=>setGroqMaxChars(Number(e.target.value))}/></label>
+        <label><span>Máx. legendas por lote</span><input type="number" min={1} max={60} value={groqMaxCues} onChange={e=>setGroqMaxCues(Number(e.target.value))}/></label>
+        <label><span>Intervalo entre lotes (ms)</span><input type="number" min={0} max={15000} step={100} value={groqDelay} onChange={e=>setGroqDelay(Number(e.target.value))}/></label>
+        <label><span>Idioma de destino</span><input value={groqLanguage} onChange={e=>setGroqLanguage(e.target.value)}/></label>
+      </div>
+      <div className="groq-free-note"><ShieldCheck size={15}/> Perfil conservador recomendado para conta gratuita: 7.000 caracteres, 25 legendas e 1,8 segundo entre lotes. A API ainda pode aplicar limites variáveis por modelo.</div>
+      {groqSettingsMessage&&<div className="groq-settings-message" role="status">{groqSettingsMessage}</div>}
+      <div className="modal-footer"><button className="cancel-button" disabled={groqSettingsBusy} onClick={()=>setGroqSettingsOpen(false)}>Fechar</button><button className="primary" disabled={groqSettingsBusy||!groqApiKey.trim()||!groqModel.trim()} onClick={()=>void saveAndTestGroq()}>{groqSettingsBusy?<><LoaderCircle className="spin" size={14}/> Salvando...</>:<><CheckCircle2 size={14}/> Salvar e testar</>}</button></div>
     </section></div>}
     {!isDesktopRuntime&&<div className="browser-warning">Prévia no navegador. Execute pelo Tauri para importar arquivos no computador.</div>}
   </main>;
