@@ -144,6 +144,9 @@ export default function App() {
       const parsed: unknown = JSON.parse(await file.text());
       if (!validateSceneSpec(parsed)) throw new Error("Arquivo inválido. Selecione um Scene Spec versão 1.0 com cenas e blocos válidos.");
       const spec: SceneSpec = parsed;
+      if (spec.project?.aspectRatio && spec.project.aspectRatio !== "9:16") {
+        throw new Error('Este editor ainda trabalha com canvas vertical 9:16. Ajuste project.aspectRatio para "9:16" antes de importar.');
+      }
       const projectName = spec.project?.title?.trim() || file.name.replace(/\.json$/i, "") || "Projeto Scene Spec";
       createdProject = await desktopApi.createProject(projectName);
       const sceneOffsetById = new Map<string, number>();
@@ -189,9 +192,9 @@ export default function App() {
         return [...blocks, ...captions];
       });
 
-      const audioSources = [...new Set(spec.scenes.map(scene => scene.audio?.source?.trim()).filter((source): source is string => !!source))];
+      const projectMediaSources = [...new Set(spec.scenes.flatMap(scene => [scene.audio?.source?.trim(), scene.character?.asset?.trim()]).filter((source): source is string => !!source))];
       let importedAssets: MediaAsset[] = [];
-      if (audioSources.length) importedAssets = await desktopApi.importMediaFiles(createdProject.id, audioSources);
+      if (projectMediaSources.length) importedAssets = await desktopApi.importMediaFiles(createdProject.id, projectMediaSources);
       const clips = spec.scenes.flatMap(scene => {
         const source = scene.audio?.source?.trim();
         if (!source) return [];
@@ -220,7 +223,7 @@ export default function App() {
       const audioCount = clips.length;
       const captionCount = motion.filter(item => item.isCaption).length;
       const characterRefs = spec.scenes.filter(scene => scene.character?.asset).length;
-      setNotice("Projeto criado pelo Scene Spec: " + spec.scenes.length + " cenas, " + motion.length + " elementos gráficos, " + captionCount + " legendas e " + audioCount + " faixa(s) de áudio." + (characterRefs ? " " + characterRefs + " referência(s) de personagem foram preservadas no JSON, mas a camada visual de personagem ainda não é renderizada pelo editor." : ""));
+      setNotice("Projeto criado pelo Scene Spec: " + spec.scenes.length + " cenas, " + motion.length + " elementos gráficos, " + captionCount + " legendas e " + audioCount + " faixa(s) de áudio." + (characterRefs ? " " + characterRefs + " mídia(s) de personagem foram importadas para a biblioteca, mas ainda não são exibidas como camada sobre o vídeo." : ""));
     } catch (error) {
       if (createdProject) {
         setProjects(current => [createdProject!, ...current]);
@@ -283,6 +286,7 @@ export default function App() {
         </section>
         </> : activeProject ? <>
         {error&&!mediaModal&&<div className="error editor-error">{error}</div>}
+        {notice&&<div className="notice"><CheckCircle2 size={15}/>{notice}</div>}
         <EditorWorkspace projectId={activeProject.id} assets={assets} onAddMedia={()=>{setMediaTab("local");setMediaModal(true);}}/>
         </> : null}
         <footer>FRAME LAB · FEITO PARA IDEIAS EM MOVIMENTO <span>EARLY ACCESS · 0.2.0</span></footer>
