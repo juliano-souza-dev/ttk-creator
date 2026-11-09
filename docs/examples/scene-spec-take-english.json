@@ -1,0 +1,326 @@
+{
+  "version": "1.0",
+  "project": {
+    "title": "TAKE: muito além de pegar",
+    "language": ["en", "pt-BR"],
+    "aspectRatio": "9:16"
+  },
+  "scenes": [
+    {
+      "id": "take-01",
+      "name": "Abertura",
+      "layout": "question-answer",
+      "durationMs": 6000,
+      "blocks": [
+        {
+          "id": "take-01-title",
+          "role": "title",
+          "text": "TAKE",
+          "icon": "🎯",
+          "x": 50,
+          "y": 35,
+          "fontSize": 112,
+          "color": "#ffffff",
+          "accent": "#65d6c0",
+          "align": "center"
+        },
+        {
+          "id": "take-01-subtitle",
+          "role": "question",
+          "text": "É SÓ PEGAR?",
+          "iconName": "circle-question-mark",
+          "iconAnchor": "left",
+          "iconSize": 54,
+          "iconColor": "#65d6c0",
+          "startOffsetMs": 700,
+          "x": 50,
+          "y": 57,
+          "fontSize": 58,
+          "color": "#65d6c0",
+          "align": "center"
+        }
+      ],
+      "captions": {
+        "enabled": true,
+        "mode": "bilingual",
+        "sourceLanguage": "en",
+        "targetLanguage": "pt-BR",
+        "lines": [
+          {
+            "startMs": 0,
+            "endMs": 5800,
+            "text": "Do you think TAKE only means to grab?",
+            "translation": "Você acha que TAKE significa apenas pegar?"
+          }
+        ]
+      }
+    },
+    {
+      "id": "take-02",
+      "name": "Take a picture",
+      "layout": "title-icon-caption",
+      "durationMs": 7000,
+      "blocks": [
+        {
+          "id": "take-02-title",
+          "role": "title",
+          "text": "TAKE A PICTURE",
+          "iconName": "camera",
+          "iconAnchor": "top",
+          "iconSize": 82,
+          "iconColor": "#65d6c0",
+          "x": 50,
+          "y": 40,
+          "fontSize": 64,
+          "color": "#ffffff",
+          "align": "center"
+        },
+        {
+          "id": "take-02-caption",
+          "role": "caption",
+          "text": "TIRAR UMA FOTO",
+          "x": 50,
+          "y": 65,
+          "fontSize": 46,
+          "color": "#65d6c0",
+          "align": "center"
+        }
+      ],
+      "captions": {
+        "enabled": true,
+        "mode": "bilingual",
+        "lines": [
+          {
+            "startMs": 300,
+            "endMs": 6600,
+            "text": "Take a picture.",
+            "translation": "Tirar uma foto."
+          }
+        ]
+      }
+    },
+    {
+      "id": "take-03",
+      "name": "Take your medicine",
+      "layout": "title-icon-caption",
+      "durationMs": 7000,
+      "blocks": [
+        {
+          "id": "take-03-title",
+          "role": "title",
+          "text": "TAKE YOUR MEDICINE",
+          "icon": "💊",
+          "x": 50,
+          "y": 39,
+          "fontSize": 58,
+          "color": "#ffffff",
+          "align": "center"
+        },
+        {
+          "id": "take-03-caption",
+          "role": "caption",
+          "text": "TOMAR SEU REMÉDIO",
+          "x": 50,
+          "y": 62,
+          "fontSize": 43,
+          "color": "#65d6c0",
+          "align": "center"
+        }
+      ],
+      "captions": {
+        "enabled": true,
+        "mode": "bilingual",
+        "lines": [
+          {
+            "startMs": 200,
+            "endMs": 6700,
+            "text": "Take your medicine.",
+            "translation": "Tome seu remédio."
+          }
+        ]
+      }
+    },
+    {
+      "id": "take-04",
+      "name": "Take the bus",
+      "layout": "title-icon-caption",
+      "durationMs": 7000,
+      "blocks": [
+        {
+          "id": "take-04-title",
+          "role": "title",
+          "text": "TAKE THE BUS",
+          "icon": "🚌",
+          "x": 50,
+          "y": 39,
+          "fontSize": 68,
+          "color": "#ffffff",
+          "align": "center"
+        },
+        {
+          "id": "take-04-caption",
+          "role": "caption",
+          "text": "PEGAR O ÔNIBUS",
+          "x": 50,
+          "y": 62,
+          "fontSize": 46,
+          "color": "#65d6c0",
+          "align": "center"
+        }
+      ],
+      "captions": {
+        "enabled": true,
+        "mode": "bilingual",
+        "lines": [
+          {
+            "startMs": 200,
+            "endMs": 6700,
+            "text": "Take the bus.",
+            "translation": "Pegue o ônibus."
+          }
+        ]
+      }
+    },
+    {
+      "id": "take-05",
+      "name": "Take a shower",
+      "layout": "title-icon-caption",
+      "durationMs": 7000,
+      "blocks": [
+        {
+          "id": "take-05-title",
+          "role": "title",
+          "text": "TAKE A SHOWER",
+          "icon": "🚿",
+          "x": 50,
+          "y": 39,
+          "fontSize": 65,
+          "color": "#ffffff",
+          "align": "center"
+        },
+        {
+          "id": "take-05-caption",
+          "role": "caption",
+          "text": "TOMAR BANHO",
+          "x": 50,
+          "y": 62,
+          "fontSize": 48,
+          "color": "#65d6c0",
+          "align": "center"
+        }
+      ],
+      "captions": {
+        "enabled": true,
+        "mode": "bilingual",
+        "lines": [
+          {
+            "startMs": 200,
+            "endMs": 6700,
+            "text": "Take a shower.",
+            "translation": "Tome um banho."
+          }
+        ]
+      }
+    },
+    {
+      "id": "take-06",
+      "name": "Take a break",
+      "layout": "title-icon-caption",
+      "durationMs": 9000,
+      "blocks": [
+        {
+          "id": "take-06-title",
+          "role": "title",
+          "text": "TAKE A BREAK",
+          "iconName": "coffee",
+          "iconAnchor": "top",
+          "iconSize": 84,
+          "iconColor": "#65d6c0",
+          "x": 50,
+          "y": 37,
+          "fontSize": 68,
+          "color": "#ffffff",
+          "align": "center"
+        },
+        {
+          "id": "take-06-caption",
+          "role": "caption",
+          "text": "FAZER UMA PAUSA",
+          "x": 50,
+          "y": 62,
+          "fontSize": 46,
+          "color": "#65d6c0",
+          "align": "center"
+        }
+      ],
+      "captions": {
+        "enabled": true,
+        "mode": "bilingual",
+        "lines": [
+          {
+            "startMs": 200,
+            "endMs": 8700,
+            "text": "Take a break.",
+            "translation": "Faça uma pausa."
+          }
+        ]
+      }
+    },
+    {
+      "id": "take-07",
+      "name": "Fechamento",
+      "layout": "question-answer",
+      "durationMs": 12000,
+      "blocks": [
+        {
+          "id": "take-07-title",
+          "role": "title",
+          "text": "CONTEXT IS EVERYTHING",
+          "iconName": "lightbulb",
+          "iconAnchor": "top",
+          "iconSize": 78,
+          "iconColor": "#65d6c0",
+          "x": 50,
+          "y": 37,
+          "fontSize": 56,
+          "color": "#ffffff",
+          "align": "center"
+        },
+        {
+          "id": "take-07-caption",
+          "role": "caption",
+          "text": "NÃO TRADUZA PALAVRA POR PALAVRA",
+          "x": 50,
+          "y": 61,
+          "fontSize": 40,
+          "color": "#65d6c0",
+          "align": "center"
+        },
+        {
+          "id": "take-07-cta",
+          "role": "item",
+          "text": "SALVE ESTA AULA",
+          "icon": "⭐",
+          "startOffsetMs": 4500,
+          "x": 50,
+          "y": 78,
+          "fontSize": 44,
+          "color": "#ffffff",
+          "align": "center"
+        }
+      ],
+      "captions": {
+        "enabled": true,
+        "mode": "bilingual",
+        "lines": [
+          {
+            "startMs": 0,
+            "endMs": 11500,
+            "text": "Don't translate word by word. Pay attention to the context.",
+            "translation": "Não traduza palavra por palavra. Observe o contexto."
+          }
+        ]
+      }
+    }
+  ]
+}
