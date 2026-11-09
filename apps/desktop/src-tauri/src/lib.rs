@@ -58,7 +58,11 @@ pub fn run() {
             commands::import_global_sound,
             commands::get_global_sound_path,
             commands::delete_global_sound,
-            commands::export_timeline
+            commands::export_timeline,
+            translation::get_groq_settings,
+            translation::save_groq_settings,
+            translation::test_groq_connection,
+            translation::translate_groq_chunk
         ])
         .run(tauri::generate_context!())
         .expect("error while running TikTok Media Creator");
