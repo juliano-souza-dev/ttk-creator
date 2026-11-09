@@ -213,6 +213,21 @@ fn transcribe_cloud(app: &AppHandle, project_id: &str, audio: &Path, directory: 
     cues.sort_by_key(|cue| cue.start_ms);
     Ok(TranscriptResult { engine: "groq".into(), model: GROQ_MODEL.into(), language: detected_language, duration_ms: duration, cues })
 }
+fn run_python(args: &[&str]) -> Result<std::process::Output, String> {
+    let first_error = match Command::new("python").args(args).output() {
+        Ok(output) if output.status.success() => return Ok(output),
+        Ok(output) => format!("python: {}", String::from_utf8_lossy(&output.stderr).chars().take(500).collect::<String>()),
+        Err(error) => format!("python: {error}"),
+    };
+    let mut py_args = vec!["-3"];
+    py_args.extend_from_slice(args);
+    match Command::new("py").args(py_args).output() {
+        Ok(output) if output.status.success() => Ok(output),
+        Ok(output) => Err(format!("{first_error}; py -3: {}", String::from_utf8_lossy(&output.stderr).chars().take(700).collect::<String>())),
+        Err(error) => Err(format!("{first_error}; py -3: {error}")),
+    }
+}
+
 fn run_local_python(audio: &Path, model: &str, language: Option<&str>) -> Result<TranscriptResult, String> {
     const SCRIPT: &str = r#"import json,sys
 from faster_whisper import WhisperModel
@@ -227,14 +242,8 @@ print(json.dumps({"language":info.language,"cues":out},ensure_ascii=False))
 "#;
     let lang = language.unwrap_or("");
     let audio_arg = audio.to_string_lossy().into_owned();
-    let mut command = Command::new("python");
-    command.args(["-c", SCRIPT, model, audio_arg.as_str(), lang]);
-    let output = command.output().or_else(|_| {
-        let mut py = Command::new("py"); py.args(["-3","-c",SCRIPT,model,audio_arg.as_str(),lang]); py.output()
-    }).map_err(|e| format!("Python não foi encontrado. Instale Python 3.10+ e o suporte Faster-Whisper: {e}"))?;
-    if !output.status.success() {
-        return Err(format!("Falha no Faster-Whisper local: {}", String::from_utf8_lossy(&output.stderr).chars().take(1000).collect::<String>()));
-    }
+    let output = run_python(&["-c", SCRIPT, model, audio_arg.as_str(), lang])
+        .map_err(|error| format!("Falha no Faster-Whisper local. Instale Python 3.10+ e o suporte local: {error}"))?;
     #[derive(Deserialize)] #[serde(rename_all="camelCase")]
     struct LocalOutput { language: Option<String>, cues: Vec<TranscriptCue> }
     let mut parsed: LocalOutput = serde_json::from_slice(&output.stdout).map_err(|e| format!("O mecanismo local retornou dados inválidos: {e}"))?;
@@ -243,17 +252,14 @@ print(json.dumps({"language":info.language,"cues":out},ensure_ascii=False))
 }
 
 pub fn check_local_asr() -> Result<bool, String> {
-    let output = Command::new("python").args(["-c","import faster_whisper; print('ready')"]).output()
-        .or_else(|_| Command::new("py").args(["-3","-c","import faster_whisper; print('ready')"]).output())
-        .map_err(|e| format!("Python não foi encontrado: {e}"))?;
-    Ok(output.status.success() && String::from_utf8_lossy(&output.stdout).contains("ready"))
+    match run_python(&["-c","import faster_whisper; print('ready')"]) {
+        Ok(output) => Ok(String::from_utf8_lossy(&output.stdout).contains("ready")),
+        Err(_) => Ok(false),
+    }
 }
 pub fn install_local_asr() -> Result<String, String> {
-    let args = ["-m","pip","install","faster-whisper>=1.1,<2","av>=11,<19"];
-    let output = Command::new("python").args(args).output()
-        .or_else(|_| Command::new("py").args(["-3"].iter().chain(args.iter()).copied()).output())
-        .map_err(|e| format!("Não foi possível iniciar a instalação do suporte local: {e}"))?;
-    if !output.status.success() { return Err(format!("Instalação do Faster-Whisper falhou: {}", String::from_utf8_lossy(&output.stderr).chars().take(1200).collect::<String>())); }
+    run_python(&["-m","pip","install","faster-whisper>=1.1,<2","av>=11,<19"])
+        .map_err(|error| format!("Instalação do Faster-Whisper falhou: {error}"))?;
     Ok("Faster-Whisper instalado. O modelo será baixado automaticamente na primeira transcrição local.".into())
 }
 
