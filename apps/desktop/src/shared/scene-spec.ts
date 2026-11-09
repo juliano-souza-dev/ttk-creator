@@ -177,31 +177,81 @@ export function buildTemplateScene(templateId: string, startMs: number) {
 }
 
 export function validateSceneSpec(value: unknown): value is SceneSpec {
-  if (!value || typeof value !== "object") return false;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const candidate = value as Record<string, unknown>;
   if (candidate.version !== SCENE_SPEC_VERSION || !Array.isArray(candidate.scenes) || candidate.scenes.length === 0) return false;
+  if (candidate.project !== undefined) {
+    if (!candidate.project || typeof candidate.project !== "object" || Array.isArray(candidate.project)) return false;
+    const project = candidate.project as Record<string, unknown>;
+    if (project.title !== undefined && typeof project.title !== "string") return false;
+    if (project.language !== undefined && (!Array.isArray(project.language) || !project.language.every(item => typeof item === "string"))) return false;
+    if (project.aspectRatio !== undefined && !["9:16", "16:9", "1:1"].includes(String(project.aspectRatio))) return false;
+  }
   return candidate.scenes.every((raw) => {
-    if (!raw || typeof raw !== "object") return false;
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
     const scene = raw as Record<string, unknown>;
-    if (typeof scene.id !== "string" || typeof scene.name !== "string") return false;
+    if (typeof scene.id !== "string" || !scene.id.trim() || typeof scene.name !== "string" || !scene.name.trim()) return false;
     if (!["category-list", "question-answer", "before-after", "title-icon-caption", "freeform"].includes(String(scene.layout))) return false;
     if (typeof scene.durationMs !== "number" || !Number.isFinite(scene.durationMs) || scene.durationMs <= 0) return false;
     if (!Array.isArray(scene.blocks) || scene.blocks.length === 0) return false;
-    return scene.blocks.every((rawBlock) => {
-      if (!rawBlock || typeof rawBlock !== "object") return false;
+    const validBlocks = scene.blocks.every((rawBlock) => {
+      if (!rawBlock || typeof rawBlock !== "object" || Array.isArray(rawBlock)) return false;
       const item = rawBlock as Record<string, unknown>;
-      return typeof item.id === "string"
+      return typeof item.id === "string" && !!item.id.trim()
         && typeof item.text === "string"
-        && typeof item.role === "string"
+        && ["title", "item", "question", "answer", "before", "after", "caption"].includes(String(item.role))
         && typeof item.x === "number" && Number.isFinite(item.x) && item.x >= 0 && item.x <= 100
         && typeof item.y === "number" && Number.isFinite(item.y) && item.y >= 0 && item.y <= 100
         && typeof item.fontSize === "number" && Number.isFinite(item.fontSize) && item.fontSize >= 8 && item.fontSize <= 240
         && typeof item.color === "string"
+        && (item.accent === undefined || typeof item.accent === "string")
+        && (item.align === undefined || ["left", "center", "right"].includes(String(item.align)))
+        && (item.icon === undefined || typeof item.icon === "string")
+        && (item.anchor === undefined || typeof item.anchor === "string")
+        && (item.startOffsetMs === undefined || (typeof item.startOffsetMs === "number" && Number.isFinite(item.startOffsetMs) && item.startOffsetMs >= 0))
+        && (item.durationMs === undefined || (typeof item.durationMs === "number" && Number.isFinite(item.durationMs) && item.durationMs > 0))
         && (item.iconAnchor === undefined || ["left", "right", "top", "bottom"].includes(String(item.iconAnchor)))
         && (item.iconSize === undefined || (typeof item.iconSize === "number" && Number.isFinite(item.iconSize) && item.iconSize >= 12 && item.iconSize <= 180))
         && (item.iconName === undefined || typeof item.iconName === "string")
         && (item.iconColor === undefined || typeof item.iconColor === "string");
     });
+    if (!validBlocks) return false;
+    if (scene.captions !== undefined) {
+      if (!scene.captions || typeof scene.captions !== "object" || Array.isArray(scene.captions)) return false;
+      const captions = scene.captions as Record<string, unknown>;
+      if (typeof captions.enabled !== "boolean" || !["off", "source", "bilingual", "karaoke"].includes(String(captions.mode))) return false;
+      if (captions.lines !== undefined && (!Array.isArray(captions.lines) || !captions.lines.every(line => {
+        if (!line || typeof line !== "object" || Array.isArray(line)) return false;
+        const cue = line as Record<string, unknown>;
+        if (typeof cue.startMs !== "number" || !Number.isFinite(cue.startMs) || cue.startMs < 0
+          || typeof cue.endMs !== "number" || !Number.isFinite(cue.endMs) || cue.endMs <= cue.startMs
+          || typeof cue.text !== "string") return false;
+        if (cue.translation !== undefined && typeof cue.translation !== "string") return false;
+        return cue.words === undefined || (Array.isArray(cue.words) && cue.words.every(word => {
+          if (!word || typeof word !== "object" || Array.isArray(word)) return false;
+          const entry = word as Record<string, unknown>;
+          return typeof entry.text === "string" && typeof entry.startMs === "number" && Number.isFinite(entry.startMs)
+            && typeof entry.endMs === "number" && Number.isFinite(entry.endMs) && entry.endMs > entry.startMs;
+        }));
+      }))) return false;
+    }
+    if (scene.audio !== undefined) {
+      if (!scene.audio || typeof scene.audio !== "object" || Array.isArray(scene.audio)) return false;
+      const audio = scene.audio as Record<string, unknown>;
+      if (audio.source !== undefined && typeof audio.source !== "string") return false;
+      if (audio.narration !== undefined && typeof audio.narration !== "string") return false;
+      if (audio.startMs !== undefined && (typeof audio.startMs !== "number" || !Number.isFinite(audio.startMs) || audio.startMs < 0)) return false;
+      if (audio.volume !== undefined && (typeof audio.volume !== "number" || !Number.isFinite(audio.volume) || audio.volume < 0 || audio.volume > 100)) return false;
+    }
+    if (scene.character !== undefined) {
+      if (!scene.character || typeof scene.character !== "object" || Array.isArray(scene.character)) return false;
+      const character = scene.character as Record<string, unknown>;
+      if (character.id !== undefined && typeof character.id !== "string") return false;
+      if (character.asset !== undefined && typeof character.asset !== "string") return false;
+      if (character.x !== undefined && (typeof character.x !== "number" || !Number.isFinite(character.x) || character.x < 0 || character.x > 100)) return false;
+      if (character.y !== undefined && (typeof character.y !== "number" || !Number.isFinite(character.y) || character.y < 0 || character.y > 100)) return false;
+    }
+    return true;
   });
 }
 
