@@ -142,6 +142,10 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
   const [newSoundName, setNewSoundName] = useState("");
   const [soundBusy, setSoundBusy] = useState(false);
   const [soundMessage, setSoundMessage] = useState("");
+  const [translationBusy, setTranslationBusy] = useState(false);
+  const [translationProgress, setTranslationProgress] = useState({ done: 0, total: 0 });
+  const [translationMessage, setTranslationMessage] = useState("");
+  const translationStopRef = useRef(false);
   const [selectedMotionId, setSelectedMotionId] = useState<string | null>(null);
   const [activeTool, setActiveTool] = useState<"media" | "audio" | "text" | "effects" | "templates">("media");
   const [sceneSpecMessage, setSceneSpecMessage] = useState("");
@@ -270,6 +274,49 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
     void loadGlobalSounds();
     return () => { cancelled = true; };
   }, []);
+
+
+  async function translateCaptions() {
+    if (!isDesktopRuntime || translationBusy) return;
+    const pending = motion.filter(item => item.isCaption && !(item.captionTranslation || "").trim() && (item.captionEnglish || item.text || "").trim());
+    if (!pending.length) { setTranslationMessage("Todas as legendas já possuem tradução."); return; }
+    setTranslationBusy(true); setTranslationMessage(""); translationStopRef.current = false;
+    try {
+      const settings = await desktopApi.getGroqSettings();
+      if (!settings.configured) throw new Error("Configure sua chave Groq em Configurações antes de traduzir.");
+      const chunks: Array<Array<{id:string;text:string}>> = [];
+      let chunk: Array<{id:string;text:string}> = []; let chars = 0;
+      for (const item of pending) {
+        const cue = { id: item.id, text: (item.captionEnglish || item.text).trim() };
+        if (chunk.length && (chunk.length >= settings.maxCuesPerChunk || chars + cue.text.length > settings.maxChunkChars)) {
+          chunks.push(chunk); chunk = []; chars = 0;
+        }
+        chunk.push(cue); chars += cue.text.length;
+      }
+      if (chunk.length) chunks.push(chunk);
+      setTranslationProgress({ done: 0, total: pending.length });
+      let completed = 0;
+      for (let index = 0; index < chunks.length; index++) {
+        if (translationStopRef.current) break;
+        const result = await desktopApi.translateGroqChunk(settings.model, settings.targetLanguage, chunks[index]);
+        const byId = new Map(result.map(item => [item.id, item.translation]));
+        setMotion(current => current.map(item => {
+          const translated = byId.get(item.id);
+          if (!translated) return item;
+          const words = item.captionWords?.map(word => ({ ...word }));
+          return { ...item, captionTranslation: translated, captionMode: "bilingual", ...(words ? { captionWords: words } : {}) };
+        }));
+        completed += chunks[index].length;
+        setTranslationProgress({ done: completed, total: pending.length });
+        setTranslationMessage("Lote " + (index + 1) + " de " + chunks.length + " concluído. O progresso foi salvo no projeto.");
+        if (index < chunks.length - 1 && settings.delayMs > 0) await new Promise(resolve => window.setTimeout(resolve, settings.delayMs));
+      }
+      if (completed === pending.length) setTranslationMessage("Tradução concluída. Revise as legendas no painel de propriedades.");
+      else setTranslationMessage("Processamento interrompido após " + completed + " legendas. Execute novamente para continuar.");
+    } catch (error) {
+      setTranslationMessage("Tradução pausada: " + String(error) + " As legendas já concluídas foram preservadas.");
+    } finally { setTranslationBusy(false); }
+  }
 
   async function importGlobalSound() {
     if (!isDesktopRuntime || soundBusy) return;
@@ -950,6 +997,13 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
       {activeTool === "text" && <>
         <div className="editor-panel-head"><div><b>Motion Graphics</b><small>Composições e textos animados com efeitos sonoros.</small></div><span className="preview-live">{motion.length} ELEMENTO(S)</span></div>
         <div className="motion-presets editor-preset-grid">{motionPresets.map(preset => <button key={preset.id} className="motion-preset" onClick={() => addMotion(preset.id)}><b>{preset.label}</b><small>Som: {preset.sound}</small><span>+ Adicionar</span></button>)}</div>
+<section className="translation-panel">
+  <div className="translation-panel-heading"><div><b><Languages size={15}/> Tradução com Groq</b><small>Traduza as legendas em lotes sequenciais, sem alterar a sincronização.</small></div><span className="preview-live">{motion.filter(item=>item.isCaption).length} LEGENDAS</span></div>
+  <button className="primary translation-action" type="button" onClick={()=>void translateCaptions()} disabled={translationBusy || !motion.some(item=>item.isCaption && !(item.captionTranslation||"").trim())}>{translationBusy?<><LoaderCircle className="spin" size={14}/> Traduzindo...</>:<><Languages size={14}/> Traduzir legendas sem tradução</>}</button>
+  {translationBusy && <div className="translation-progress"><div><span>Progresso dos lotes</span><b>{translationProgress.done}/{translationProgress.total}</b></div><div className="progress-track"><i style={{width:(translationProgress.total?translationProgress.done/translationProgress.total*100:0)+"%"}}/></div></div>}
+  {translationMessage && <p className="translation-message" role="status">{translationMessage}</p>}
+  <small className="property-hint">As legendas concluídas ficam salvas automaticamente. Se houver erro ou limite da API, execute novamente para continuar apenas as pendentes.</small>
+</section>
       </>}
       {activeTool === "templates" && <>
         <div className="editor-panel-head"><div><b>Presets de cena</b><small>Layouts prontos com tipografia e posicionamento definidos.</small></div><span className="preview-live">{SCENE_TEMPLATES.length} MODELOS</span></div>
