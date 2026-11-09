@@ -104,7 +104,7 @@ pub async fn test_groq_connection(app: AppHandle, model: String) -> Result<Strin
 }
 
 #[tauri::command]
-pub async fn translate_groq_chunk(app: AppHandle, model: String, target_language: String, cues: Vec<CueInput>) -> Result<Vec<CueTranslation>, String> {
+pub async fn translate_groq_chunk(model: String, target_language: String, cues: Vec<CueInput>) -> Result<Vec<CueTranslation>, String> {
     if cues.is_empty() { return Ok(Vec::new()); }
     if cues.len() > 60 { return Err("O lote excede o limite de 60 legendas.".into()); }
     let total_chars: usize = cues.iter().map(|c| c.text.len()).sum();
