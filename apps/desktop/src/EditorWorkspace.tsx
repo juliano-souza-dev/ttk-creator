@@ -278,7 +278,8 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
 
   async function translateCaptions() {
     if (!isDesktopRuntime || translationBusy) return;
-    const pending = motion.filter(item => item.isCaption && !(item.captionTranslation || "").trim() && (item.captionEnglish || item.text || "").trim());
+    const captionSequence = motion.filter(item => item.isCaption).sort((a,b) => a.startMs - b.startMs);
+    const pending = captionSequence.filter(item => !(item.captionTranslation || "").trim() && (item.captionEnglish || item.text || "").trim());
     if (!pending.length) { setTranslationMessage("Todas as legendas já possuem tradução."); return; }
     setTranslationBusy(true); setTranslationMessage(""); translationStopRef.current = false;
     try {
@@ -287,11 +288,19 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia }: Props
       const chunks: Array<Array<{id:string;text:string}>> = [];
       let chunk: Array<{id:string;text:string}> = []; let chars = 0;
       for (const item of pending) {
-        const cue = { id: item.id, text: (item.captionEnglish || item.text).trim() };
-        if (chunk.length && (chunk.length >= settings.maxCuesPerChunk || chars + cue.text.length > settings.maxChunkChars)) {
+        const cueIndex = captionSequence.findIndex(caption => caption.id === item.id);
+        const cueText = (item.captionEnglish || item.text).trim();
+        const cueBytes = new TextEncoder().encode(cueText).length;
+        if (cueBytes > settings.maxChunkChars || cueBytes > 18000) throw new Error("A legenda " + item.id + " excede o limite configurado para um lote. Reduza o texto antes de traduzir.");
+        const cue = {
+          id: item.id, text: cueText,
+          contextBefore: cueIndex > 0 ? (captionSequence[cueIndex - 1].captionEnglish || captionSequence[cueIndex - 1].text).slice(-240) : undefined,
+          contextAfter: cueIndex >= 0 && cueIndex < captionSequence.length - 1 ? (captionSequence[cueIndex + 1].captionEnglish || captionSequence[cueIndex + 1].text).slice(0, 240) : undefined,
+        };
+        if (chunk.length && (chunk.length >= settings.maxCuesPerChunk || chars + cueBytes > settings.maxChunkChars)) {
           chunks.push(chunk); chunk = []; chars = 0;
         }
-        chunk.push(cue); chars += cue.text.length;
+        chunk.push(cue); chars += cueBytes;
       }
       if (chunk.length) chunks.push(chunk);
       setTranslationProgress({ done: 0, total: pending.length });
