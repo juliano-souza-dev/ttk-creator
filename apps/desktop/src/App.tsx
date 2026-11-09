@@ -1,10 +1,11 @@
-import { FormEvent, useEffect, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { desktopApi, isDesktopRuntime } from "./services/desktop-api";
 import EditorWorkspace from "./EditorWorkspace";
 import type { DownloadProgress, MediaAsset, Project, YoutubeInspection } from "./shared/types";
 import type { GroqSettings } from "./services/desktop-api";
-import { Clapperboard, LayoutGrid, Film, GraduationCap, Settings2, Plus, Search, FolderOpen, FolderPlus, Clock3, Video, Sparkles, Play, X, ArrowUpRight, Upload, Youtube, CheckCircle2, LoaderCircle, ShieldCheck, Link2, Download, Undo2, Redo2, ArrowLeft } from "lucide-react"
+import { validateSceneSpec, type SceneSpec } from "./shared/scene-spec";
+import { Clapperboard, LayoutGrid, Film, GraduationCap, Settings2, Plus, Search, FolderOpen, FolderPlus, Clock3, Video, Sparkles, Play, X, ArrowUpRight, Upload, Youtube, CheckCircle2, LoaderCircle, ShieldCheck, Link2, Download, Undo2, Redo2, ArrowLeft, FileJson } from "lucide-react"
 
 const formatDuration = (n?:number|null) => !n ? "Duração não informada" : Math.floor(n/60000)+":"+String(Math.floor(n/1000)%60).padStart(2,"0");
 
@@ -25,6 +26,7 @@ export default function App() {
   const [quality,setQuality] = useState(1080);
   const [progress,setProgress] = useState<DownloadProgress|null>(null);
   const [notice,setNotice] = useState("");
+  const sceneSpecProjectInput = useRef<HTMLInputElement|null>(null);
   const [groqSettingsOpen,setGroqSettingsOpen] = useState(false);
   const [groqSettings,setGroqSettings] = useState<GroqSettings|null>(null);
   const [groqApiKey,setGroqApiKey] = useState("");
@@ -132,6 +134,105 @@ export default function App() {
   }
 
 
+  async function importSceneSpecProject(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !isDesktopRuntime) return;
+    setBusy(true); setError(""); setNotice("");
+    let createdProject: Project | null = null;
+    try {
+      const parsed: unknown = JSON.parse(await file.text());
+      if (!validateSceneSpec(parsed)) throw new Error("Arquivo inválido. Selecione um Scene Spec versão 1.0 com cenas e blocos válidos.");
+      const spec: SceneSpec = parsed;
+      const projectName = spec.project?.title?.trim() || file.name.replace(/\\.json$/i, "") || "Projeto Scene Spec";
+      createdProject = await desktopApi.createProject(projectName);
+      const sceneOffsetById = new Map<string, number>();
+      let sceneCursor = 0;
+      for (const scene of spec.scenes) { sceneOffsetById.set(scene.id, sceneCursor); sceneCursor += scene.durationMs; }
+
+      const motion = spec.scenes.flatMap(scene => {
+        const sceneStart = sceneOffsetById.get(scene.id) ?? 0;
+        const blocks = scene.blocks.map(block => {
+          const startMs = sceneStart + (block.startOffsetMs ?? 0);
+          const endMs = Math.min(sceneStart + scene.durationMs, startMs + (block.durationMs ?? scene.durationMs));
+          return {
+            id: crypto.randomUUID(), text: block.text, icon: block.icon ?? "",
+            lucideIconName: block.iconName ?? "", lucideIconAnchor: block.iconAnchor ?? "left",
+            lucideIconSize: block.iconSize, lucideIconColor: block.iconColor,
+            fontFamily: "Arial", fontWeight: 900, textAlign: block.align ?? "center",
+            startMs, endMs: Math.max(startMs + 300, endMs), durationMs: Math.max(300, endMs - startMs),
+            preset: "pop" as const, color: block.color, accent: block.accent ?? "#65d6c0",
+            fontSize: block.fontSize, x: block.x, y: block.y, sound: "none" as const,
+            soundId: "", soundVolume: 80,
+          };
+        });
+        const captionConfig = scene.captions;
+        const captions = !captionConfig || !captionConfig.enabled || captionConfig.mode === "off" ? [] :
+          (captionConfig.lines ?? []).flatMap(line => {
+            const startMs = sceneStart + line.startMs;
+            const endMs = sceneStart + line.endMs;
+            const words = (line.words ?? []).map(word => ({
+              text: word.text, startMs: sceneStart + word.startMs, endMs: sceneStart + word.endMs,
+            }));
+            const translation = line.translation ?? "";
+            return [{
+              id: crypto.randomUUID(), isCaption: true,
+              captionMode: (captionConfig.mode === "karaoke" && words.length ? "karaoke" : captionConfig.mode === "bilingual" && translation ? "bilingual" : "source") as "source" | "bilingual" | "karaoke",
+              captionEnglish: line.text, captionTranslation: translation, captionWords: words,
+              text: translation ? line.text + "\\n" + translation : line.text, icon: "",
+              fontFamily: "Arial", fontWeight: 900, textAlign: "center" as const,
+              startMs, endMs, durationMs: endMs - startMs, preset: "pop" as const,
+              color: "#ffffff", accent: "#65d6c0", fontSize: 48, x: 50, y: 82,
+              sound: "none" as const, soundId: "", soundVolume: 80,
+            }];
+          });
+        return [...blocks, ...captions];
+      });
+
+      const audioSources = [...new Set(spec.scenes.map(scene => scene.audio?.source?.trim()).filter((source): source is string => !!source))];
+      let importedAssets: MediaAsset[] = [];
+      if (audioSources.length) importedAssets = await desktopApi.importMediaFiles(createdProject.id, audioSources);
+      const clips = spec.scenes.flatMap(scene => {
+        const source = scene.audio?.source?.trim();
+        if (!source) return [];
+        const asset = importedAssets.find(item => item.originalName === source.split(/[\\/]/).pop() || item.name === source.split(/[\\/]/).pop());
+        if (!asset || asset.kind !== "audio") return [];
+        const duration = Math.max(1000, asset.durationMs ?? scene.durationMs);
+        const start = (sceneOffsetById.get(scene.id) ?? 0) + (scene.audio?.startMs ?? 0);
+        return [{
+          id: crypto.randomUUID(), assetId: asset.id, sourceStartMs: 0, sourceEndMs: duration,
+          sourceDurationMs: asset.durationMs ?? duration, timelineStartMs: start,
+          volume: Math.max(0, Math.min(100, scene.audio?.volume ?? 100)), muted: false,
+        }];
+      });
+
+      window.localStorage.setItem("ttk-creator:motion:" + createdProject.id, JSON.stringify(motion));
+      window.localStorage.setItem("ttk-creator:timeline:" + createdProject.id, JSON.stringify(clips));
+      window.localStorage.setItem("ttk-creator:groups:" + createdProject.id, JSON.stringify([]));
+      window.localStorage.setItem("ttk-creator:session:" + createdProject.id, JSON.stringify({ playheadMs: 0, timelineZoom: 100, activeTool: "text", savedAt: Date.now() }));
+      window.localStorage.setItem("ttk-creator:scene-spec:" + createdProject.id, JSON.stringify(spec));
+      const refreshedAssets = await desktopApi.listProjectAssets(createdProject.id);
+      setProjects(current => [createdProject!, ...current]);
+      setActiveProject(createdProject);
+      setAssets(refreshedAssets);
+      window.localStorage.setItem("ttk-creator:last-open-project", createdProject.id);
+      setView("project");
+      const audioCount = clips.length;
+      const captionCount = motion.filter(item => item.isCaption).length;
+      const characterRefs = spec.scenes.filter(scene => scene.character?.asset).length;
+      setNotice("Projeto criado pelo Scene Spec: " + spec.scenes.length + " cenas, " + motion.length + " elementos gráficos, " + captionCount + " legendas e " + audioCount + " faixa(s) de áudio." + (characterRefs ? " " + characterRefs + " referência(s) de personagem foram preservadas no JSON, mas a camada visual de personagem ainda não é renderizada pelo editor." : ""));
+    } catch (error) {
+      if (createdProject) {
+        setProjects(current => [createdProject!, ...current]);
+        setActiveProject(createdProject);
+        try { setAssets(await desktopApi.listProjectAssets(createdProject.id)); } catch { setAssets([]); }
+        window.localStorage.setItem("ttk-creator:last-open-project", createdProject.id);
+        setView("project");
+      }
+      setError("Não foi possível criar o projeto a partir do Scene Spec: " + (error instanceof Error ? error.message : String(error)));
+    } finally { setBusy(false); }
+  }
+
   async function openGroqSettings() {
     setGroqSettingsOpen(true); setGroqSettingsMessage("");
     if (!isDesktopRuntime) return;
@@ -169,7 +270,7 @@ export default function App() {
       <div className="profile"><div className="avatar">J</div><div><b>Seu estúdio</b><small>Ambiente local</small></div><Settings2 size={17}/></div>
     </aside>
     <section className="main">
-      <header className="topbar"><div className="topbar-location">{view==="project"&&<button className="secondary-action back-to-projects" onClick={returnToWorkspace} title="Voltar para a página de projetos"><ArrowLeft size={15}/> Projetos</button>}<span>Workspace</span> <span>/</span> <b>{view==="project"&&activeProject?activeProject.name:"Visão geral"}</b></div><div className="top-right"><button className="secondary-action groq-settings-trigger" onClick={()=>void openGroqSettings()}><Settings2 size={14}/> Groq</button><small><i/> Salvamento automático ativo</small>{view==="project"&&<><button className="secondary-action" disabled title="Histórico de desfazer ainda não disponível"><Undo2 size={15}/> Desfazer</button><button className="secondary-action" disabled title="Histórico de refazer ainda não disponível"><Redo2 size={15}/> Refazer</button></>}</div></header>
+      <header className="topbar"><div className="topbar-location">{view==="project"&&<button className="secondary-action back-to-projects" onClick={returnToWorkspace} title="Voltar para a página de projetos"><ArrowLeft size={15}/> Projetos</button>}<span>Workspace</span> <span>/</span> <b>{view==="project"&&activeProject?activeProject.name:"Visão geral"}</b></div><div className="top-right"><button className="secondary-action" disabled={busy} onClick={()=>sceneSpecProjectInput.current?.click()} title="Criar um projeto novo a partir de um Scene Spec JSON"><FileJson size={14}/> Criar via JSON</button><input ref={sceneSpecProjectInput} type="file" accept=".json,application/json" style={{display:"none"}} onChange={event=>void importSceneSpecProject(event)}/><button className="secondary-action groq-settings-trigger" onClick={()=>void openGroqSettings()}><Settings2 size={14}/> Groq</button><small><i/> Salvamento automático ativo</small>{view==="project"&&<><button className="secondary-action" disabled title="Histórico de desfazer ainda não disponível"><Undo2 size={15}/> Desfazer</button><button className="secondary-action" disabled title="Histórico de refazer ainda não disponível"><Redo2 size={15}/> Refazer</button></>}</div></header>
       <div className={"content " + (view === "project" ? "project-content" : "")}>
         {view==="workspace" ? <>
         <section className="hero"><div><label className="eyebrow"><Sparkles size={13}/> SEU PRÓXIMO VÍDEO COMEÇA AQUI</label><h1>Boas ideias merecem<br/><em>uma boa edição.</em></h1><p>Seu espaço para transformar ideias em vídeos que prendem a atenção.</p></div><div className="hero-visual"><div className="preview-art"><div className="rec">REC <i/></div><div className="play"><Play size={22} fill="currentColor"/></div><strong>IDEIA <span>EM MOVIMENTO.</span></strong><div className="scrub">00:18 <div><i/><i/><i/><i/><i/></div> 00:55</div></div><div className="float-tag"><Sparkles size={13}/> MAKE IT MATTER</div></div></section>
