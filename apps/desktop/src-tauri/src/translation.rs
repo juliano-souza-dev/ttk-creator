@@ -2,7 +2,7 @@ use keyring::Entry;
 use reqwest::{header, Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, time::Duration};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Manager};
 
 const SERVICE: &str = "com.julianosouza.ttkcreator";
 const USER: &str = "groq-api-key";
