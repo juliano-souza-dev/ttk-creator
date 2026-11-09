@@ -7,7 +7,7 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import { desktopApi, isDesktopRuntime } from "./services/desktop-api";
 import type { GlobalSound } from "./services/desktop-api";
 import type { MediaAsset } from "./shared/types";
-import { AudioLines, Film, Plus, Play, Pause, Trash2, Scissors, Copy, SkipBack, SkipForward, Volume2, VolumeX, Music2, Type, WandSparkles, MousePointer2, ChevronLeft, ChevronRight, Download, LoaderCircle, PanelsTopLeft, FileJson, Upload, Eye, Camera, BookOpen, Headphones, Lightbulb, Clock3, MessageCircle, CheckCircle2, Globe2, Heart, Star, Zap, Target, Search, Image, Music, Mic, Video, PlayCircle, AlertCircle, ArrowRight, CircleHelp, Sparkles, Trophy, Rocket, Smile, ThumbsUp, Bookmark, MapPin, Coffee, Sun, Moon, Cloud, Flame, ShieldCheck, Languages, GraduationCap, Pencil, Bell, CalendarDays, RotateCcw, Maximize, Minimize, Captions, Clapperboard, MicOff, Presentation, Monitor, Smartphone, Home, Menu, X, CircleCheck, CircleX, Check, Award, Medal, Flag, Info, AlertTriangle, Timer, Brain, Puzzle, Calculator, Hash, ChartColumn, ChartPie, Palette, Shapes, Share2, Settings, User, Users, Minus, Layers, List, Map as MapIcon } from "lucide-react";
+import { AudioLines, Film, Plus, Play, Pause, Trash2, Scissors, Copy, SkipBack, SkipForward, Volume2, VolumeX, Music2, Type, WandSparkles, MousePointer2, ChevronLeft, ChevronRight, Download, LoaderCircle, PanelsTopLeft, FileJson, Upload, Eye, Camera, BookOpen, Headphones, Lightbulb, Clock3, MessageCircle, CheckCircle2, Globe2, Heart, Star, Zap, Target, Search, Image, Music, Mic, Video, PlayCircle, AlertCircle, ArrowRight, CircleHelp, Sparkles, Trophy, Rocket, Smile, ThumbsUp, Bookmark, MapPin, Coffee, Sun, Moon, Cloud, Flame, ShieldCheck, Languages, GraduationCap, Pencil, Bell, CalendarDays, RotateCcw, Maximize, Minimize, Captions, Clapperboard, MicOff, Presentation, Monitor, Smartphone, Home, Menu, X, XCircle, Check, Award, Medal, Flag, Info, AlertTriangle, Timer, Brain, Puzzle, Calculator, Hash, BarChart3, PieChart, Palette, Shapes, Share2, Settings, User, Users, Minus, Layers, List, Map as MapIcon } from "lucide-react";
 import { SCENE_TEMPLATES, buildTemplateScene, createSceneSpecFromMotion, validateSceneSpec } from "./shared/scene-spec";
 
 type TimelineClip = {
@@ -47,12 +47,12 @@ const lucideIconLibrary = {
   "book-open": BookOpen, "graduation-cap": GraduationCap, "layers": Layers, "list": List,
   "chevron-right": ChevronRight, "arrow-right": ArrowRight, "presentation": Presentation,
   "monitor": Monitor, "smartphone": Smartphone, "home": Home, "menu": Menu, "x": X,
-  "circle-check": CircleCheck, "circle-x": CircleX, "check": Check, "star": Star,
+  "circle-check": CheckCircle2, "circle-x": XCircle, "check": Check, "star": Star,
   "trophy": Trophy, "award": Award, "medal": Medal, "flag": Flag, "lightbulb": Lightbulb,
   "circle-question-mark": CircleHelp, "info": Info, "triangle-alert": AlertTriangle,
   "timer": Timer, "clock": Clock3, "brain": Brain, "target": Target, "puzzle": Puzzle,
   "rocket": Rocket, "sparkles": Sparkles, "calculator": Calculator, "hash": Hash,
-  "chart-column": ChartColumn, "chart-pie": ChartPie, "pencil": Pencil, "type": Type,
+  "chart-column": BarChart3, "chart-pie": PieChart, "pencil": Pencil, "type": Type,
   "languages": Languages, "globe": Globe2, "map": MapIcon, "image": Image,
   "palette": Palette, "shapes": Shapes, "heart": Heart, "download": Download,
   "upload": Upload, "share-2": Share2, "settings": Settings, "user": User, "users": Users,
