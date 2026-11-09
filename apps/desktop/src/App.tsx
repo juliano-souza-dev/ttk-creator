@@ -159,7 +159,8 @@ export default function App() {
         const sceneStart = sceneOffsetById.get(scene.id) ?? 0;
         const blocks = scene.blocks.map(block => {
           const startMs = sceneStart + (block.startOffsetMs ?? 0);
-          const endMs = Math.min(sceneStart + scene.durationMs, startMs + (block.durationMs ?? scene.durationMs));
+          const blockDuration = block.durationMs ?? Math.max(300, scene.durationMs - (block.startOffsetMs ?? 0));
+          const endMs = Math.min(sceneStart + scene.durationMs, startMs + blockDuration);
           return {
             id: crypto.randomUUID(), text: block.text, icon: block.icon ?? "",
             lucideIconName: block.iconName ?? "", lucideIconAnchor: block.iconAnchor ?? "left",
