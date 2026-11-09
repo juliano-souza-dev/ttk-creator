@@ -548,3 +548,6 @@
 .translation-progress .progress-track{margin:0}
 .translation-message{margin:0;color:#bca9df;font-size:9px;line-height:1.5;overflow-wrap:anywhere}
 @media(max-width:650px){.groq-settings-grid{grid-template-columns:1fr}.groq-settings-modal{padding:23px 18px}.groq-settings-trigger{padding:7px 9px}}
+
+/* Live Groq translation feedback: visible state while the API is processing. */
+.translation-live-status{display:flex;align-items:flex-start;gap:10px;padding:12px;border:1px solid #51436a;border-radius:8px;background:#241e30;color:#d8c6f7}.translation-live-status>svg{flex:0 0 auto;margin-top:1px;color:#c2a5f4}.translation-live-status>div{display:grid;gap:5px;min-width:0}.translation-live-status b{font-size:10px;color:#eee5fa}.translation-live-status span{font-size:9px;line-height:1.5;color:#b7acc8;overflow-wrap:anywhere}.translation-message.is-error{padding:10px;border:1px solid #704348;border-radius:7px;background:#301d21;color:#ffb5b5}.translation-message.is-success{padding:10px;border:1px solid #3b654b;border-radius:7px;background:#1b2a21;color:#a8e0b8}
