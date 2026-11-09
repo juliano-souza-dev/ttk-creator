@@ -60,6 +60,7 @@ const lucideIconLibrary = {
 };
 type LucideIconName = keyof typeof lucideIconLibrary;
 const lucideIconNames = Object.keys(lucideIconLibrary) as LucideIconName[];
+export const supportedLucideIconNames: string[] = lucideIconNames;
 const lucideIconPickerNames = [
   "play", "pause", "skip-back", "skip-forward", "rotate-ccw", "volume-2", "volume-x",
   "maximize", "minimize", "captions", "video", "film", "clapperboard", "mic", "mic-off",
