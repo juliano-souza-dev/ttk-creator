@@ -1,7 +1,7 @@
 use std::{
     io::{BufRead, BufReader},
     path::PathBuf,
-    process::{Command, Stdio},
+    process::Stdio,
     sync::Arc,
     thread,
 };
@@ -44,7 +44,7 @@ impl YoutubeDownloader {
             format!("bv*[height<={selected_height}]+ba/b[height<={selected_height}]")
         };
 
-        let mut child = Command::new(program)
+        let mut child = crate::process::hidden_command(program)
             .args(prefix)
             .args([
                 "--no-warnings", "--newline", "--progress", "--progress-template",
@@ -200,7 +200,7 @@ fn ytdlp_command() -> Result<(String, Vec<String>), String> {
         ("python3", vec!["-m", "yt_dlp"]),
     ];
     for (program, prefix) in candidates {
-        let found = Command::new(program)
+        let found = crate::process::hidden_command(program)
             .args(&prefix)
             .arg("--version")
             .stdout(Stdio::null())
@@ -233,7 +233,7 @@ fn youtube_error(detail: &str) -> String {
 fn inspect_source(raw_url: &str) -> Result<YoutubeInspection, String> {
     let (video_id, canonical_url) = normalize_youtube_url(raw_url)?;
     let (program, prefix) = ytdlp_command()?;
-    let output = Command::new(program)
+    let output = crate::process::hidden_command(program)
         .args(prefix)
         .args([
             "--dump-single-json", "--skip-download", "--no-playlist",
