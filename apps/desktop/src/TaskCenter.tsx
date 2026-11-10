@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { Activity, CheckCircle2, ChevronDown, ChevronUp, CircleAlert, Clock3, LoaderCircle, Terminal, X } from "lucide-react";
+import { Activity, CheckCircle2, ChevronDown, CircleAlert, Clock3, LoaderCircle, Terminal, X } from "lucide-react";
 import { isDesktopRuntime, type TranscriptionProgress } from "./services/desktop-api";
 import type { DownloadProgress } from "./shared/types";
 import { TASK_CENTER_EVENT, type TaskEvent, type TaskKind, type TaskStatus } from "./services/task-center";
