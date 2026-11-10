@@ -3,6 +3,7 @@ mod commands;
 mod domain;
 mod infrastructure;
 mod logging;
+mod process;
 mod state;
 mod translation;
 mod transcription;
