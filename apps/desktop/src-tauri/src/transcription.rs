@@ -1,6 +1,6 @@
 use reqwest::blocking::{multipart, Client};
 use serde::{Deserialize, Serialize};
-use std::{path::{Path, PathBuf}, process::Command, time::Duration};
+use std::{path::{Path, PathBuf}, time::Duration};
 use tauri::{AppHandle, Emitter};
 use crate::{application::services::MediaService, infrastructure::media_storage::MediaStorage};
 
@@ -87,7 +87,7 @@ fn ffmpeg() -> Result<PathBuf, String> {
         }
     }
     for candidate in candidates {
-        if candidate.is_file() && Command::new(&candidate).arg("-version").output().map(|o| o.status.success()).unwrap_or(false) {
+        if candidate.is_file() && crate::process::hidden_command(&candidate).arg("-version").output().map(|o| o.status.success()).unwrap_or(false) {
             return Ok(candidate);
         }
     }
@@ -106,7 +106,7 @@ fn ffprobe(ffmpeg_path: &Path) -> Result<PathBuf, String> {
     Err("ffprobe não foi encontrado. Instale a distribuição completa do FFmpeg.".into())
 }
 fn duration_ms(probe: &Path, input: &Path) -> Result<u64, String> {
-    let output = Command::new(probe).args(["-v","error","-show_entries","format=duration","-of","default=noprint_wrappers=1:nokey=1"])
+    let output = crate::process::hidden_command(probe).args(["-v","error","-show_entries","format=duration","-of","default=noprint_wrappers=1:nokey=1"])
         .arg(input).output().map_err(|e| format!("Falha ao consultar duração do áudio: {e}"))?;
     if !output.status.success() { return Err(String::from_utf8_lossy(&output.stderr).to_string()); }
     let seconds = String::from_utf8_lossy(&output.stdout).trim().parse::<f64>().map_err(|_| "Não foi possível identificar a duração do áudio.")?;
@@ -126,7 +126,7 @@ fn safe_asset_path(media: &MediaService, storage: &MediaStorage, project_id: &st
     Ok(path)
 }
 fn extract_audio(ffmpeg_path: &Path, source: &Path, destination: &Path) -> Result<(), String> {
-    let output = Command::new(ffmpeg_path).args(["-y","-hide_banner","-loglevel","error","-i"])
+    let output = crate::process::hidden_command(ffmpeg_path).args(["-y","-hide_banner","-loglevel","error","-i"])
         .arg(source).args(["-vn","-ac","1","-ar","16000","-c:a","flac"]).arg(destination)
         .output().map_err(|e| format!("Não foi possível iniciar o FFmpeg: {e}"))?;
     if !output.status.success() { return Err(format!("Falha ao preparar o áudio: {}", String::from_utf8_lossy(&output.stderr).chars().take(600).collect::<String>())); }
@@ -142,7 +142,7 @@ fn chunk_audio(ffmpeg_path: &Path, audio: &Path, directory: &Path, duration_ms: 
         let end = (start + step_ms).min(duration_ms);
         let path = directory.join(format!("chunk-{index:05}.flac"));
         let seconds = (end.saturating_sub(actual_start)) as f64 / 1000.0;
-        let output = Command::new(ffmpeg_path).args(["-y","-hide_banner","-loglevel","error","-ss"])
+        let output = crate::process::hidden_command(ffmpeg_path).args(["-y","-hide_banner","-loglevel","error","-ss"])
             .arg(format!("{:.3}", actual_start as f64 / 1000.0)).arg("-i").arg(audio)
             .arg("-t").arg(format!("{seconds:.3}")).args(["-ac","1","-ar","16000","-c:a","flac"])
             .arg(&path).output().map_err(|e| format!("Falha ao dividir o áudio: {e}"))?;
@@ -213,14 +213,14 @@ fn transcribe_cloud(app: &AppHandle, project_id: &str, audio: &Path, directory: 
     Ok(TranscriptResult { engine: "groq".into(), model: GROQ_MODEL.into(), language: detected_language, duration_ms: duration, cues })
 }
 fn run_python(args: &[&str]) -> Result<std::process::Output, String> {
-    let first_error = match Command::new("python").args(args).output() {
+    let first_error = match crate::process::hidden_command("python").args(args).output() {
         Ok(output) if output.status.success() => return Ok(output),
         Ok(output) => format!("python: {}", String::from_utf8_lossy(&output.stderr).chars().take(500).collect::<String>()),
         Err(error) => format!("python: {error}"),
     };
     let mut py_args = vec!["-3"];
     py_args.extend_from_slice(args);
-    match Command::new("py").args(py_args).output() {
+    match crate::process::hidden_command("py").args(py_args).output() {
         Ok(output) if output.status.success() => Ok(output),
         Ok(output) => Err(format!("{first_error}; py -3: {}", String::from_utf8_lossy(&output.stderr).chars().take(700).collect::<String>())),
         Err(error) => Err(format!("{first_error}; py -3: {error}")),
