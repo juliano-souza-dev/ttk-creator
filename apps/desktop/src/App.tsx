@@ -260,7 +260,7 @@ export default function App() {
       window.localStorage.setItem("ttk-creator:last-open-project", createdProject.id);
       setView("project");
       const audioCount = clips.length;
-      const captionCount = motion.filter(item => item.isCaption).length;
+      const captionCount = spec.scenes.reduce((total, scene) => total + (scene.captions?.enabled && scene.captions.mode !== "off" ? (scene.captions.lines?.length ?? 0) : 0), 0);
       const characterRefs = spec.scenes.filter(scene => scene.character?.asset).length;
       setNotice("Projeto criado pelo Scene Spec: " + spec.scenes.length + " cenas, " + motion.length + " elementos gráficos, " + captionCount + " legendas e " + audioCount + " faixa(s) de áudio." + (characterRefs ? " " + characterRefs + " mídia(s) de personagem foram importadas para a biblioteca, mas ainda não são exibidas como camada sobre o vídeo." : ""));
     } catch (error) {
