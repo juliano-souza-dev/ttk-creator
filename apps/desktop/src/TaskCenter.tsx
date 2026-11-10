@@ -120,7 +120,7 @@ export default function TaskCenter() {
               </div>
               <div className="task-progress-track"><i className={task.progress == null && task.status === "running" ? "indeterminate" : ""} style={{ width: task.progress == null ? (task.status === "completed" ? "100%" : "28%") : task.progress + "%" }}/></div>
               <p className="task-card-message">{task.message}</p>
-              <details className="task-logs">
+              <details className="task-logs" open={task.status === "running"}>
                 <summary><Terminal size={13}/> Logs da tarefa <span>{task.logs.length}</span><ChevronDown className="task-log-chevron" size={13}/></summary>
                 <div className="task-log-list">{task.logs.map((line, index) => <div key={task.id + "-" + index}>{line}</div>)}</div>
               </details>
