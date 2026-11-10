@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { runTrackedTask } from "./task-center";
 import type {
   DownloadProgress,
   MediaAsset,
@@ -22,9 +23,9 @@ export type TranscriptionProgress = { projectId: string; stage: string; percent:
 export const desktopApi = {
   getGroqSettings: () => invoke<GroqSettings>("get_groq_settings"),
   transcribeMedia: (projectId: string, assetId: string, mode: "auto" | "cloud" | "local", language: string, localModel: string) =>
-    invoke<TranscriptResult>("transcribe_media", { projectId, assetId, mode, language: language || null, localModel }),
+    runTrackedTask("transcription", "Transcrição de mídia", () => invoke<TranscriptResult>("transcribe_media", { projectId, assetId, mode, language: language || null, localModel })),
   checkLocalAsr: () => invoke<boolean>("check_local_asr"),
-  installLocalAsr: () => invoke<string>("install_local_asr"),
+  installLocalAsr: () => runTrackedTask("installation", "Instalação do suporte de transcrição local", () => invoke<string>("install_local_asr")),
   saveGroqSettings: (settings: { apiKey: string; model: string; maxChunkChars: number; maxCuesPerChunk: number; delayMs: number; targetLanguage: string }) =>
     invoke<GroqSettings>("save_groq_settings", settings),
   testGroqConnection: (model: string) => invoke<string>("test_groq_connection", { model }),
@@ -55,12 +56,12 @@ export const desktopApi = {
     invoke<YoutubeInspection>("inspect_youtube", { url }),
 
   downloadYoutube: (projectId: string, url: string, maxHeight: number) =>
-    invoke<MediaAsset>("download_youtube", { projectId, url, maxHeight }),
+    runTrackedTask("download", "Download de vídeo do YouTube", () => invoke<MediaAsset>("download_youtube", { projectId, url, maxHeight })),
 
   checkFfmpeg: () => invoke<string>("check_ffmpeg"),
 
   exportTimeline: (request: { projectId: string; destination: string; clips: Array<{ id: string; assetId: string; kind: "video" | "audio" | "image"; sourceStartMs: number; sourceEndMs: number; timelineStartMs: number; volume: number; muted?: boolean; transitionType?: "fade-black" | "fade-white" | "flash"; transitionMs?: number }>; motion: Array<{ text: string; startMs: number; endMs: number; durationMs?: number; preset?: "pop" | "slide" | "zoom" | "typewriter" | "impact" | "composition"; color: string; fontSize: number; x: number; y: number; fontFamily?: string; fontWeight?: number; textAlign?: "left" | "center" | "right"; isCaption?: boolean; lucideIconPng?: string; lucideIconAnchor?: "left" | "right" | "top" | "bottom"; lucideIconSize?: number; lucideIconOffsetX?: number; lucideIconOffsetY?: number; soundId?: string; soundVolume?: number }>; soundEffects?: Array<{ soundId: string; timelineStartMs: number; volume: number }> }) =>
-    invoke<string>("export_timeline", {
+    runTrackedTask("export", "Exportação de vídeo", () => invoke<string>("export_timeline", {
       request: {
         ...request,
         // Rust receives timeline timestamps as u64. Timeline interactions can
@@ -80,7 +81,7 @@ export const desktopApi = {
           fontSize: Math.max(1, Math.round(item.fontSize)),
         })),
       },
-    }),
+    })),
 
   subscribeToTranscriptionProgress: (onProgress: (progress: TranscriptionProgress) => void) =>
     listen<TranscriptionProgress>("transcription-progress", event => onProgress(event.payload)),
