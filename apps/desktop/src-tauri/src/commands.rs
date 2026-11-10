@@ -205,7 +205,7 @@ pub struct ExportRequest {
 }
 
 fn resolve_ffmpeg_executable() -> Result<(std::path::PathBuf, String), String> {
-    use std::{collections::HashSet, path::PathBuf, process::Command};
+    use std::{collections::HashSet, path::PathBuf};
 
     let executable_name = if cfg!(windows) { "ffmpeg.exe" } else { "ffmpeg" };
     let mut candidates: Vec<PathBuf> = Vec::new();
@@ -264,7 +264,6 @@ fn resolve_ffmpeg_executable() -> Result<(std::path::PathBuf, String), String> {
 }
 
 fn media_has_audio_stream(ffmpeg_path: &std::path::Path, media_path: &std::path::Path) -> Result<bool, String> {
-    use std::process::Command;
     let probe_name = if cfg!(windows) { "ffprobe.exe" } else { "ffprobe" };
     let sibling = ffmpeg_path.parent().map(|directory| directory.join(probe_name));
     let mut candidates = Vec::new();
