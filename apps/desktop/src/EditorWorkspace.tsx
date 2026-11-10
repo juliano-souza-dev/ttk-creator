@@ -1015,13 +1015,34 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
   }
 
   function splitAtPlayhead() {
-    const clip = activeVisualClip ?? selectedClip;
-    if (!clip || playheadMs <= clip.timelineStartMs + 250 || playheadMs >= clipEnd(clip) - 250) return;
+    // Prefer the selected clip when the playhead is inside it. This makes
+    // splitting predictable even when video and audio overlap in the timeline.
+    const selectedAtPlayhead = selectedClip
+      && playheadMs > selectedClip.timelineStartMs + 250
+      && playheadMs < clipEnd(selectedClip) - 250
+      ? selectedClip
+      : null;
+    const clip = selectedAtPlayhead
+      ?? activeVisualClip
+      ?? audioClips.find(item => playheadMs > item.timelineStartMs + 250 && playheadMs < clipEnd(item) - 250)
+      ?? null;
+    if (!clip) return;
+
+    // Non-destructive split: both segments keep the same source asset and
+    // retain their original timeline positions. Only source ranges change.
     const sourceSplit = clip.sourceStartMs + playheadMs - clip.timelineStartMs;
+    if (sourceSplit <= clip.sourceStartMs || sourceSplit >= clip.sourceEndMs) return;
     const left = { ...clip, sourceEndMs: sourceSplit };
-    const right = { ...clip, id: crypto.randomUUID(), sourceStartMs: sourceSplit, timelineStartMs: playheadMs };
+    const right = {
+      ...clip,
+      id: crypto.randomUUID(),
+      sourceStartMs: sourceSplit,
+      timelineStartMs: playheadMs,
+    };
     setClips(current => current.flatMap(item => item.id === clip.id ? [left, right] : [item]));
     setSelectedId(right.id);
+    setSelectedMotionId(null);
+    setSelectedMembers([]);
     stopPlayback();
   }
 
@@ -1246,7 +1267,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
           <small className="timeline-group-hint">Clique para posicionar a mídia · Ctrl + clique para agrupar</small>
           <button className="secondary-action" onClick={createGroup} disabled={selectedMembers.length < 2}><Copy size={13}/> Agrupar ({selectedMembers.length})</button>
           <button className="secondary-action" onClick={ungroupSelection} disabled={!groups.some(group => group.members.some(member => selectedMembers.includes(member)))}>Desagrupar</button>
-          <button className="secondary-action" onClick={splitAtPlayhead} disabled={!activeVisualClip || playheadMs <= activeVisualClip.timelineStartMs + 250 || playheadMs >= clipEnd(activeVisualClip) - 250}><Scissors size={13}/> Dividir no cursor</button>
+          <button className="secondary-action" onClick={splitAtPlayhead} disabled={!clips.some(clip => playheadMs > clip.timelineStartMs + 250 && playheadMs < clipEnd(clip) - 250)} title="Divide o clipe selecionado ou o clipe sob o cursor, seja vídeo ou áudio"><Scissors size={13}/> Dividir no cursor</button>
           <button className="secondary-action" onClick={() => selectedClip && duplicateClip(selectedClip)} disabled={!selectedClip}><Copy size={13}/> Duplicar</button>
           <button className="secondary-action danger-action" onClick={() => selectedClip && removeClip(selectedClip.id)} disabled={!selectedClip}><Trash2 size={13}/> Excluir selecionado</button>
           <button className="secondary-action" onClick={() => { stopPlayback(); setClips([]); setSelectedId(null); setPlayheadMs(0); }} disabled={!clips.length}><Trash2 size={13}/> Limpar timeline</button>
