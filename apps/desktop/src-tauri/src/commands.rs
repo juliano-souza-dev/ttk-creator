@@ -237,7 +237,7 @@ fn resolve_ffmpeg_executable() -> Result<(std::path::PathBuf, String), String> {
             continue;
         }
 
-        match Command::new(&candidate).arg("-version").output() {
+        match crate::process::hidden_command(&candidate).arg("-version").output() {
             Ok(output) if output.status.success() => {
                 let version = String::from_utf8_lossy(&output.stdout)
                     .lines().next().unwrap_or("FFmpeg disponível").to_string();
@@ -274,7 +274,7 @@ fn media_has_audio_stream(ffmpeg_path: &std::path::Path, media_path: &std::path:
     }
     let probe = candidates.into_iter().find(|candidate| candidate.is_file())
         .ok_or_else(|| "Não foi possível localizar o ffprobe ao lado do FFmpeg. Instale a distribuição completa do FFmpeg para incluir o áudio original dos vídeos.".to_string())?;
-    let output = Command::new(probe)
+    let output = crate::process::hidden_command(probe)
         .args(["-v", "error", "-select_streams", "a:0", "-show_entries", "stream=index", "-of", "csv=p=0"])
         .arg(media_path)
         .output()
@@ -291,7 +291,7 @@ fn ensure_ffmpeg_capabilities(
 ) -> Result<(), String> {
     use std::process::Command;
 
-    let output = Command::new(ffmpeg_path)
+    let output = crate::process::hidden_command(ffmpeg_path)
         .args(["-hide_banner", "-filters"])
         .output()
         .map_err(|error| format!("Não foi possível consultar os filtros do FFmpeg: {error}"))?;
@@ -324,7 +324,7 @@ fn ensure_ffmpeg_capabilities(
         ));
     }
 
-    let encoders = Command::new(ffmpeg_path)
+    let encoders = crate::process::hidden_command(ffmpeg_path)
         .args(["-hide_banner", "-encoders"])
         .output()
         .map_err(|error| format!("Não foi possível consultar os encoders do FFmpeg: {error}"))?;
@@ -421,7 +421,7 @@ pub async fn export_timeline(
     let sound_directory = state.sound_library_directory.clone();
 
     tauri::async_runtime::spawn_blocking(move || {
-        use std::{io::{BufRead, BufReader, Read}, path::PathBuf, process::{Command, Stdio}, thread};
+        use std::{io::{BufRead, BufReader, Read}, path::PathBuf, process::Stdio, thread};
 
         if request.clips.is_empty() {
             return Err("Adicione pelo menos uma mídia à timeline antes de exportar.".to_string());
@@ -739,7 +739,7 @@ pub async fn export_timeline(
         }
         args.extend(["-t".into(), format!("{:.3}", total_ms as f64 / 1000.0), "-c:v".into(), "libx264".into(), "-preset".into(), "medium".into(), "-crf".into(), "20".into(), "-pix_fmt".into(), "yuv420p".into(), "-movflags".into(), "+faststart".into(), "-progress".into(), "pipe:1".into(), "-nostats".into(), destination.to_string_lossy().into_owned()]);
 
-        let output_result = Command::new(&ffmpeg_path)
+        let output_result = crate::process::hidden_command(&ffmpeg_path)
             .args(&args)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
