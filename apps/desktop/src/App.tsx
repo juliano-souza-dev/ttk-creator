@@ -2,6 +2,7 @@ import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { desktopApi, isDesktopRuntime } from "./services/desktop-api";
 import EditorWorkspace, { supportedLucideIconNames } from "./EditorWorkspace";
+import TaskCenter from "./TaskCenter";
 import type { DownloadProgress, MediaAsset, Project, YoutubeInspection } from "./shared/types";
 import type { GroqSettings, TranscriptionProgress } from "./services/desktop-api";
 import { validateSceneSpec, type SceneSpec } from "./shared/scene-spec";
@@ -324,7 +325,7 @@ export default function App() {
   }
 
   const visible = projects.filter(p=>p.name.toLowerCase().includes(search.toLowerCase()));
-  return <main className={"shell " + (view === "project" ? "project-shell" : "")}>
+  return <><main className={"shell " + (view === "project" ? "project-shell" : "")}>
     <aside className="sidebar">
       <div className="brand"><div className="brand-icon"><Clapperboard size={21}/></div><div><b>FRAME<span>LAB</span></b><small>CREATOR STUDIO</small></div></div>
       <label className="side-label">WORKSPACE</label>
@@ -404,5 +405,5 @@ export default function App() {
       <div className="modal-footer"><button className="cancel-button" disabled={groqSettingsBusy} onClick={()=>setGroqSettingsOpen(false)}>Fechar</button><button className="primary" disabled={groqSettingsBusy||(!groqApiKey.trim()&&!groqSettings?.configured)||!groqModel.trim()} onClick={()=>void saveAndTestGroq()}>{groqSettingsBusy?<><LoaderCircle className="spin" size={14}/> Salvando...</>:<><CheckCircle2 size={14}/> Salvar e testar</>}</button></div>
     </section></div>}
     {!isDesktopRuntime&&<div className="browser-warning">Prévia no navegador. Execute pelo Tauri para importar arquivos no computador.</div>}
-  </main>;
+  </main><TaskCenter /></>;
 }
