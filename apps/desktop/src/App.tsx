@@ -1,9 +1,10 @@
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { desktopApi, isDesktopRuntime } from "./services/desktop-api";
 import EditorWorkspace, { supportedLucideIconNames } from "./EditorWorkspace";
 import TaskCenter from "./TaskCenter";
-import type { DownloadProgress, MediaAsset, Project, YoutubeInspection } from "./shared/types";
+import type { DownloadProgress, MediaAsset, Project, YoutubeInspection, YoutubeCacheEntry } from "./shared/types";
 import type { GroqSettings, TranscriptionProgress } from "./services/desktop-api";
 import { validateSceneSpec, type SceneSpec } from "./shared/scene-spec";
 import { Clapperboard, LayoutGrid, Film, GraduationCap, Settings2, Plus, Search, FolderOpen, FolderPlus, Clock3, Video, Sparkles, Play, X, ArrowUpRight, Upload, Youtube, CheckCircle2, LoaderCircle, ShieldCheck, Link2, Download, Undo2, Redo2, ArrowLeft, FileJson, Mic, Captions, Info } from "lucide-react"
@@ -27,6 +28,11 @@ export default function App() {
   const [quality,setQuality] = useState(1080);
   const [progress,setProgress] = useState<DownloadProgress|null>(null);
   const [notice,setNotice] = useState("");
+  const [youtubeCache,setYoutubeCache] = useState<YoutubeCacheEntry|null>(null);
+  const [trimStartMs,setTrimStartMs] = useState(0);
+  const [trimEndMs,setTrimEndMs] = useState(0);
+  const [trimBusy,setTrimBusy] = useState(false);
+  const trimVideoRef = useRef<HTMLVideoElement|null>(null);
   const sceneSpecProjectInput = useRef<HTMLInputElement|null>(null);
   const [groqSettingsOpen,setGroqSettingsOpen] = useState(false);
   const [groqSettings,setGroqSettings] = useState<GroqSettings|null>(null);
@@ -149,13 +155,27 @@ export default function App() {
     } catch(e) { setError(String(e)); } finally { setBusy(false); }
   }
   async function downloadYoutube() {
-    if(!activeProject||!youtubeInfo) return;
-    setBusy(true); setError(""); setProgress({projectId:activeProject.id,percent:0,status:"starting"});
+    if(!youtubeInfo) return;
+    setBusy(true); setError(""); setProgress({projectId:activeProject?.id??"",percent:0,status:"starting"});
     try {
-      const asset=await desktopApi.downloadYoutube(activeProject.id,youtubeInfo.url,quality);
-      setAssets(current=>[asset,...current]); setNotice("Vídeo do YouTube importado."); setMediaModal(false);
-      setYoutubeUrl(""); setYoutubeInfo(null); setProgress(null);
+      const cached=await desktopApi.prepareYoutubeCache(youtubeInfo.url,quality);
+      setYoutubeCache(cached);
+      setTrimStartMs(0);
+      setTrimEndMs(cached.durationMs??youtubeInfo.durationMs??0);
+      setMediaModal(false);
+      setProgress(null);
     } catch(e) { setError(String(e)); setProgress(null); } finally { setBusy(false); }
+  }
+
+  async function confirmYoutubeTrim() {
+    if(!activeProject||!youtubeCache) return;
+    setTrimBusy(true); setError("");
+    try {
+      const asset=await desktopApi.trimYoutubeCache(activeProject.id,youtubeCache.videoId,trimStartMs,trimEndMs);
+      setAssets(current=>[asset,...current]);
+      setNotice("Trecho importado para a biblioteca. O vídeo original permanece no cache temporário por até 7 dias.");
+      setYoutubeCache(null); setYoutubeUrl(""); setYoutubeInfo(null); setProgress(null);
+    } catch(e) { setError(String(e)); } finally { setTrimBusy(false); }
   }
 
   async function createProject(e:FormEvent) {
@@ -383,9 +403,31 @@ export default function App() {
       {progress&&<div className="download-progress"><div className="progress-heading"><b>Baixando vídeo...</b><span>{progress.percent==null?"Preparando":Math.round(progress.percent)+"%"}</span></div><div className="progress-track"><i style={{width:Math.max(0,Math.min(100,progress.percent??0))+"%"}}/></div><small>{progress.speed||"Aguardando dados"} {progress.eta?"· Restante: "+progress.eta:""}</small></div>}
       <div className="youtube-note"><Youtube size={13}/> Importe somente vídeos que você tenha autorização para baixar e reutilizar.</div></div>}
       {error&&<div className="error modal-error">{error}</div>}
-      <div className="modal-footer"><button className="cancel-button" disabled={busy} onClick={()=>setMediaModal(false)}>Cancelar</button>{mediaTab==="youtube"&&youtubeInfo&&<button className="primary" disabled={busy} onClick={()=>void downloadYoutube()}>{busy?<><LoaderCircle className="spin" size={15}/> Baixando...</>:<><Download size={15}/> Baixar e importar</>}</button>}</div>
+      <div className="modal-footer"><button className="cancel-button" disabled={busy} onClick={()=>setMediaModal(false)}>Cancelar</button>{mediaTab==="youtube"&&youtubeInfo&&<button className="primary" disabled={busy} onClick={()=>void downloadYoutube()}>{busy?<><LoaderCircle className="spin" size={15}/> Baixando...</>:<><Download size={15}/> Baixar e escolher trecho</>}</button>}</div>
     </section></div>}
 
+    {youtubeCache&&activeProject&&<div className="backdrop youtube-trim-backdrop">
+      <section className="youtube-trim-dialog" role="dialog" aria-modal="true" aria-labelledby="youtube-trim-title">
+        <header className="youtube-trim-header">
+          <div><label className="eyebrow muted">EDIÇÃO DO TRECHO</label><h2 id="youtube-trim-title">Escolha o trecho do vídeo</h2><p>{youtubeCache.title}</p></div>
+          <button className="close" type="button" disabled={trimBusy} onClick={()=>setYoutubeCache(null)}><X size={18}/></button>
+        </header>
+        <video ref={trimVideoRef} className="youtube-trim-preview" src={convertFileSrc(youtubeCache.filePath)} controls preload="metadata"
+          onTimeUpdate={event=>{const ms=event.currentTarget.currentTime*1000;if(ms<trimStartMs||ms>trimEndMs)event.currentTarget.pause();}}
+          onLoadedMetadata={event=>{event.currentTarget.currentTime=trimStartMs/1000;}} />
+        <div className="youtube-trim-time"><span>INÍCIO <b>{formatDuration(trimStartMs)}</b></span><span>FIM <b>{formatDuration(trimEndMs)}</b></span><span>DURAÇÃO <b>{formatDuration(Math.max(0,trimEndMs-trimStartMs))}</b></span></div>
+        <div className="youtube-trim-range">
+          <label>Início do trecho <input type="range" min={0} max={Math.max(300,(youtubeCache.durationMs??trimEndMs))} step={100} value={trimStartMs}
+            onChange={event=>{const value=Number(event.target.value);setTrimStartMs(Math.min(value,trimEndMs-300));if(trimVideoRef.current)trimVideoRef.current.currentTime=value/1000;}} /></label>
+          <label>Fim do trecho <input type="range" min={Math.min(trimStartMs+300,youtubeCache.durationMs??trimEndMs)} max={youtubeCache.durationMs??trimEndMs} step={100} value={trimEndMs}
+            onChange={event=>setTrimEndMs(Math.max(trimStartMs+300,Number(event.target.value)))} /></label>
+        </div>
+        <div className="youtube-trim-timeline"><div className="youtube-trim-track"><i style={{left:((trimStartMs/Math.max(1,youtubeCache.durationMs??trimEndMs))*100)+"%",width:((Math.max(0,trimEndMs-trimStartMs)/Math.max(1,youtubeCache.durationMs??trimEndMs))*100)+"%"}}/></div><small>Arraste os controles para definir o início e o fim. O original não será alterado.</small></div>
+        <div className="youtube-cache-note"><Info size={14}/> Original guardado temporariamente. O prazo de 7 dias é renovado quando você tentar baixar este mesmo vídeo novamente.</div>
+        {error&&<div className="error modal-error">{error}</div>}
+        <div className="modal-footer"><button className="cancel-button" disabled={trimBusy} onClick={()=>setYoutubeCache(null)}>Deixar para depois</button><button className="primary" disabled={trimBusy||trimEndMs-trimStartMs<300} onClick={()=>void confirmYoutubeTrim()}>{trimBusy?<><LoaderCircle className="spin" size={15}/> Gerando trecho...</>:<><CheckCircle2 size={15}/> Confirmar e importar trecho</>}</button></div>
+      </section>
+    </div>}
     {groqSettingsOpen&&<div className="backdrop" onMouseDown={e=>{if(e.target===e.currentTarget&&!groqSettingsBusy)setGroqSettingsOpen(false);}}><section className="groq-settings-modal">
       <button type="button" className="close" onClick={()=>!groqSettingsBusy&&setGroqSettingsOpen(false)}><X size={18}/></button>
       <label className="eyebrow muted"><Settings2 size={13}/> INTELIGÊNCIA ARTIFICIAL</label><h2>Configurações da Groq</h2>
