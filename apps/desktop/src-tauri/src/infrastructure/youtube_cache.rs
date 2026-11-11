@@ -15,6 +15,7 @@ pub struct YoutubeCacheEntry {
     pub expires_at: u64,
 }
 
+#[derive(Clone)]
 pub struct YoutubeCache { root: PathBuf }
 
 impl YoutubeCache {
