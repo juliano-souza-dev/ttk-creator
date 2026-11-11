@@ -48,17 +48,27 @@ impl YoutubeCache {
     pub fn prepare(&self, url: &str, max_height: u32) -> Result<YoutubeCacheEntry, String> {
         let _guard = self.lock()?;
         self.cleanup_expired_locked()?;
-        let info = YoutubeDownloader::inspect(url)?;
-        let directory = self.root.join(&info.video_id);
+        let video_id = extract_video_id(url)?;
+        let directory = self.root.join(&video_id);
         fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
         let manifest = directory.join("manifest.json");
         let video = directory.join("original.mp4");
         let now = now_ms();
         if video.is_file() && fs::metadata(&video).map(|m| m.len() > 0).unwrap_or(false) {
-            let entry = entry_from(&info, &video, now);
-            write_manifest(&manifest, &entry)?;
-            return Ok(entry);
+            if let Ok(raw) = fs::read_to_string(&manifest) {
+                if let Ok(mut cached) = serde_json::from_str::<YoutubeCacheEntry>(&raw) {
+                    if cached.video_id == video_id {
+                        cached.file_path = video.to_string_lossy().into_owned();
+                        cached.last_attempt_at = now;
+                        cached.expires_at = now.saturating_add(TTL_MS);
+                        write_manifest(&manifest, &cached)?;
+                        return Ok(cached);
+                    }
+                }
+            }
         }
+        let info = YoutubeDownloader::inspect(url)?;
+        if info.video_id != video_id { return Err("O YouTube retornou um identificador diferente do link informado.".into()); }
 
         // Refresh the lease before starting the download: a failed attempt also
         // grants a fresh seven-day retention window.
@@ -103,6 +113,29 @@ impl YoutubeCache {
         if !file.starts_with(&dir) || !file.is_file() { return Err("Arquivo de cache inválido.".into()); }
         Ok(entry)
     }
+}
+
+
+fn extract_video_id(raw: &str) -> Result<String, String> {
+    let candidate = raw.trim();
+    let value = if candidate.contains("://") { candidate.to_string() } else { format!("https://{candidate}") };
+    let parsed = url::Url::parse(&value).map_err(|_| "Link do YouTube inválido.".to_string())?;
+    let host = parsed.host_str().unwrap_or("").to_ascii_lowercase();
+    let segments: Vec<&str> = parsed.path_segments().map(|parts| parts.collect()).unwrap_or_default();
+    let id = if host == "youtu.be" {
+        segments.first().map(|value| (*value).to_string())
+    } else if ["youtube.com","www.youtube.com","m.youtube.com","music.youtube.com","youtube-nocookie.com","www.youtube-nocookie.com"].contains(&host.as_str()) {
+        if parsed.path() == "/watch" {
+            parsed.query_pairs().find(|(key,_)| key == "v").map(|(_,value)| value.into_owned())
+        } else if segments.len() >= 2 && ["embed","shorts","live","v"].contains(&segments[0]) {
+            segments.get(1).map(|value| (*value).to_string())
+        } else { None }
+    } else { return Err("O link precisa ser de um vídeo do YouTube.".into()); }
+    .ok_or("Não foi possível identificar o vídeo neste link.")?;
+    if id.len()!=11 || !id.chars().all(|c| c.is_ascii_alphanumeric() || c=='_' || c=='-') {
+        return Err("O identificador do vídeo do YouTube é inválido.".into());
+    }
+    Ok(id)
 }
 
 fn entry_from(info: &YoutubeInspection, path: &Path, now: u64) -> YoutubeCacheEntry {
