@@ -88,7 +88,7 @@
 .editor-preview{display:flex;flex-direction:column}
 .preview-live{font:9px 'DM Mono';color:#a98be5;letter-spacing:1px}
 .preview-stage{flex:1;min-height:280px;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,#24202c,#101014);padding:15px;overflow:hidden}
-.preview-stage video,.preview-stage img{max-width:100%;max-height:420px;object-fit:contain;border-radius:5px;background:#09090b}
+.preview-stage .preview-media-frame>video,.preview-stage .preview-media-frame>img{max-width:100%;max-height:420px;object-fit:contain;border-radius:5px;background:#09090b}
 .preview-stage video{width:auto;height:auto;aspect-ratio:9/16}
 .preview-stage img{max-height:390px}
 .preview-placeholder{display:flex;flex-direction:column;align-items:center;gap:9px;color:#9e8cba;text-align:center}
