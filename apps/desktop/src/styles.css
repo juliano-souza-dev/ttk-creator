@@ -652,3 +652,5 @@
 .layer-manager-row button:hover:not(:disabled){color:#fff;border-color:#8d70b8}
 .layer-manager-row button:disabled{opacity:.25;cursor:default}
 .layer-empty{padding:4px;color:#706979;font-size:9px}
+
+.overlay-duration-actions{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px;margin:0 0 9px}.overlay-duration-actions button{min-height:29px;padding:0 8px;border:1px solid #45404e;border-radius:5px;background:#17151c;color:#ddd4e8;font-size:9px;cursor:pointer}.overlay-duration-actions button:hover:not(:disabled){border-color:#a98af0;color:#fff}.overlay-duration-actions button:disabled{opacity:.4;cursor:not-allowed}.overlay-duration-actions button:last-child{margin-left:auto;border-color:#65518c;color:#d9c6ff}
