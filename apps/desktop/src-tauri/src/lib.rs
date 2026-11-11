@@ -39,6 +39,13 @@ pub fn run() {
             let media_storage = MediaStorage::new(app_data_directory.clone());
             let projects = ProjectService::new(repository_port.clone(), media_storage.clone());
             let media = MediaService::new(repository_port.clone(), media_storage.clone());
+            let cleanup_cache = youtube_cache.clone();
+            std::thread::spawn(move || loop {
+                std::thread::sleep(std::time::Duration::from_secs(60 * 60));
+                if let Err(error) = cleanup_cache.cleanup_expired() {
+                    tracing::warn!(%error, "Could not clean expired YouTube cache entries");
+                }
+            });
             tracing::info!("TikTok Media Creator started");
             app.manage(AppState {
                 projects,
