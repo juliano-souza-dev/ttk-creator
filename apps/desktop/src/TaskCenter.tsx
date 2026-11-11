@@ -31,7 +31,8 @@ export default function TaskCenter() {
       if (!event) return;
       setTasks(current => {
         if (event.type === "started") {
-          return [{ id: event.id, kind: event.kind, title: event.title, status: "running", progress: null, message: event.message, logs: [clock() + "  " + event.message], updatedAt: event.timestamp }, ...current].slice(0, 15);
+          const newTask: TaskRecord = { id: event.id, kind: event.kind, title: event.title, status: "running", progress: null, message: event.message, logs: [clock() + "  " + event.message], updatedAt: event.timestamp };
+          return [newTask, ...current].slice(0, 15);
         }
         return current.map(task => task.id !== event.id ? task : {
           ...task,
