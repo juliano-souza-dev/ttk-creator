@@ -6,6 +6,7 @@ import type {
   MediaAsset,
   Project,
   YoutubeInspection,
+  YoutubeCacheEntry,
 } from "../shared/types";
 
 export const isDesktopRuntime =
@@ -55,8 +56,10 @@ export const desktopApi = {
   inspectYoutube: (url: string) =>
     invoke<YoutubeInspection>("inspect_youtube", { url }),
 
-  downloadYoutube: (projectId: string, url: string, maxHeight: number) =>
-    runTrackedTask("download", "Download de vídeo do YouTube", () => invoke<MediaAsset>("download_youtube", { projectId, url, maxHeight })),
+  prepareYoutubeCache: (url: string, maxHeight: number) =>
+    runTrackedTask("download", "Download para cache temporário do YouTube", () => invoke<YoutubeCacheEntry>("prepare_youtube_cache", { url, maxHeight })),
+  trimYoutubeCache: (projectId: string, videoId: string, startMs: number, endMs: number) =>
+    runTrackedTask("export", "Recorte do vídeo do YouTube", () => invoke<MediaAsset>("trim_youtube_cache", { projectId, videoId, startMs: Math.round(startMs), endMs: Math.round(endMs) })),
 
   checkFfmpeg: () => invoke<string>("check_ffmpeg"),
 
