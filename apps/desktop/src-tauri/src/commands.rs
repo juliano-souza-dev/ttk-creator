@@ -160,6 +160,7 @@ pub async fn trim_youtube_cache(
         if end_ms <= start_ms || end_ms - start_ms < 300 {
             return Err("Selecione um trecho de pelo menos 0,3 segundo.".to_string());
         }
+        let _cache_guard = cache.lock()?;
         let entry = cache.validate_entry(&video_id)?;
         if let Some(duration) = entry.duration_ms {
             if end_ms > duration { return Err("O fim do recorte ultrapassa a duração do vídeo.".into()); }
