@@ -134,8 +134,8 @@ function imageOverlayEntranceState(item: ImageOverlay, playheadMs: number) {
   if (animation === "fade") opacity = progress;
   if (animation === "slide-left") transform += " translateX(-" + ((1 - eased) * 100) + "%)";
   if (animation === "slide-right") transform += " translateX(" + ((1 - eased) * 100) + "%)";
-  if (animation === "slide-up") transform += " translateY(-" + ((1 - eased) * 100) + "%)";
-  if (animation === "slide-down") transform += " translateY(" + ((1 - eased) * 100) + "%)";
+  if (animation === "slide-up") transform += " translateY(" + ((1 - eased) * 100) + "%)";
+  if (animation === "slide-down") transform += " translateY(-" + ((1 - eased) * 100) + "%)";
   return { transform, opacity };
 }
 
