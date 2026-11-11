@@ -666,12 +666,13 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
   function moveOverlayLayer(id:string,direction:-1|1){setImageOverlays(current=>{const index=current.findIndex(item=>item.id===id);const next=index+direction;if(index<0||next<0||next>=current.length)return current;const copy=[...current];[copy[index],copy[next]]=[copy[next],copy[index]];return copy;});}
   function moveMotionLayer(id:string,direction:-1|1){setMotion(current=>{const index=current.findIndex(item=>item.id===id);const next=index+direction;if(index<0||next<0||next>=current.length)return current;const copy=[...current];[copy[index],copy[next]]=[copy[next],copy[index]];return copy;});}
   function beginOverlayTimelineTrim(event:ReactPointerEvent<HTMLSpanElement>,item:ImageOverlay,edge:"start"|"end"){
+    if(item.locked)return;
     event.preventDefault();event.stopPropagation();event.currentTarget.closest("button")?.setPointerCapture(event.pointerId);overlayTimelineDidMoveRef.current=false;
     overlayTimelineDragRef.current={id:item.id,edge,startX:event.clientX,lastX:event.clientX,startMs:item.startMs,endMs:item.endMs,memberKeys:[item.id]};
     setSelectedOverlayId(item.id);setSelectedMotionId(null);setSelectedId(null);
   }
   function beginOverlayTimelineMove(event:ReactPointerEvent<HTMLButtonElement>,item:ImageOverlay){
-    if((event.target as HTMLElement).closest(".image-overlay-trim-edge"))return;
+    if(item.locked||(event.target as HTMLElement).closest(".image-overlay-trim-edge"))return;
     event.preventDefault();event.stopPropagation();event.currentTarget.setPointerCapture(event.pointerId);overlayTimelineDidMoveRef.current=false;
     overlayTimelineDragRef.current={id:item.id,edge:"move",startX:event.clientX,lastX:event.clientX,startMs:item.startMs,endMs:item.endMs,memberKeys:[item.id]};
     setSelectedOverlayId(item.id);setSelectedMotionId(null);setSelectedId(null);
