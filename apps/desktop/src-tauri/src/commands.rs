@@ -677,8 +677,8 @@ pub async fn export_timeline(
                 _ => format!("{x:.2}"),
             };
             let animated_y = match overlay.entrance_animation.as_str() {
-                "slide-up" => format!("{y:.2}-({slide_progress})*{height}"),
-                "slide-down" => format!("{y:.2}+(1-({slide_progress}))*{height}"),
+                "slide-up" => format!("{y:.2}+(1-({slide_progress}))*{height}"),
+                "slide-down" => format!("{y:.2}-({slide_progress})*{height}"),
                 _ => format!("{y:.2}"),
             };
             filter_parts.push(format!("[{previous}][{source}]overlay=x='{animated_x}':y='{animated_y}':format=auto:eof_action=pass:shortest=0:enable='gte(t,{start:.6})*lt(t,{end:.6})'[{next}]"));
