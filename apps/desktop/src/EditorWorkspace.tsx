@@ -647,7 +647,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
   async function addImageOverlay(){try{const selected=await open({multiple:false,filters:[{name:"Imagens",extensions:["png","jpg","jpeg","webp","gif"]}]});if(!selected||Array.isArray(selected))return;const imported=await desktopApi.importMediaFiles(projectId,[selected]);const asset=imported.find(item=>item.kind==="image");if(!asset)throw new Error("A mídia selecionada não é uma imagem.");const url=convertFileSrc(await desktopApi.getAssetPath(projectId,asset.id));setMediaUrls(current=>({...current,[asset.id]:url}));const overlay:ImageOverlay={id:crypto.randomUUID(),assetId:asset.id,startMs:playheadMs,endMs:playheadMs+3000,x:50,y:50,width:420,height:420,soundId:"",soundVolume:80};setImageOverlays(current=>[...current,overlay]);setSelectedOverlayId(overlay.id);setSelectedMotionId(null);setSelectedId(null);stopPlayback();}catch(error){setExportMessage("Não foi possível adicionar a imagem: "+String(error));}}
   function updateOverlay(id:string,patch:Partial<ImageOverlay>){setImageOverlays(current=>current.map(item=>item.id===id?{...item,...patch}:item));}
   function beginOverlayTimelineTrim(event:ReactPointerEvent<HTMLSpanElement>,item:ImageOverlay,edge:"start"|"end"){
-    event.preventDefault();event.stopPropagation();event.currentTarget.setPointerCapture(event.pointerId);
+    event.preventDefault();event.stopPropagation();event.currentTarget.closest("button")?.setPointerCapture(event.pointerId);
     overlayTimelineDragRef.current={id:item.id,edge,startX:event.clientX,lastX:event.clientX,startMs:item.startMs,endMs:item.endMs,memberKeys:[item.id]};
     setSelectedOverlayId(item.id);setSelectedMotionId(null);setSelectedId(null);
   }
