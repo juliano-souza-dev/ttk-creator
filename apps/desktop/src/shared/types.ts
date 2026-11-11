@@ -45,3 +45,12 @@ export type DownloadProgress = {
   eta?: string | null;
   status: string;
 };
+
+export type YoutubeCacheEntry = {
+  videoId: string;
+  title: string;
+  durationMs?: number | null;
+  filePath: string;
+  lastAttemptAt: number;
+  expiresAt: number;
+};
