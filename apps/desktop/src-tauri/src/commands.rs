@@ -288,8 +288,6 @@ fn ensure_ffmpeg_capabilities(
     ffmpeg_path: &std::path::Path,
     required_filters: &[&str],
 ) -> Result<(), String> {
-    use std::process::Command;
-
     let output = crate::process::hidden_command(ffmpeg_path)
         .args(["-hide_banner", "-filters"])
         .output()
