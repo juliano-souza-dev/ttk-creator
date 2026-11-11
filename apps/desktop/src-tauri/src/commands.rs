@@ -670,7 +670,7 @@ pub async fn export_timeline(
             let next=format!("image_overlay_mix{position}");
             let x=(overlay.x.clamp(0.0,100.0)/100.0)*1080.0-width as f64/2.0;
             let y=(overlay.y.clamp(0.0,100.0)/100.0)*1920.0-height as f64/2.0;
-            let slide_progress = format!("min(1\\,max(0\\,(t-{start:.6})/{entrance_duration:.3}))");
+            let slide_progress = format!("min(1,max(0,(t-{start:.6})/{entrance_duration:.3}))");
             let animated_x = match overlay.entrance_animation.as_str() {
                 "slide-left" => format!("{x:.2}-({slide_progress})*{width}"),
                 "slide-right" => format!("{x:.2}+(1-({slide_progress}))*{width}"),
