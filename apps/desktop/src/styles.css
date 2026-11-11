@@ -634,3 +634,21 @@
 .caption-translate-actions .secondary-action{justify-content:center;min-height:31px;padding:6px;font-size:9px}
 .caption-translate-actions .is-error{color:#f0a6a6}
 .caption-translate-actions .is-success{color:#9dd9b5}
+
+
+/* Layer-based overlay manager */
+.layer-panel-heading{flex:0 0 48px!important;min-height:48px!important}
+.layer-panel-heading b{display:flex;align-items:center;gap:7px}
+.layer-manager{max-height:240px;flex:0 0 auto;overflow:auto;padding:8px 9px;border-bottom:1px solid #302b37;background:#111116}
+.layer-manager-group{display:grid;gap:4px;margin-bottom:10px}
+.layer-manager-group:last-child{margin-bottom:0}
+.layer-manager-group> b{padding:3px 4px;color:#9b91a8;font:600 9px 'Space Grotesk';text-transform:uppercase;letter-spacing:.7px}
+.layer-manager-row{min-width:0;display:flex;align-items:center;gap:5px;padding:5px 4px;border:1px solid transparent;border-radius:5px;color:#cfc7d8;cursor:pointer}
+.layer-manager-row:hover{background:#211d29}
+.layer-manager-row.selected{border-color:#69538a;background:#292234}
+.layer-manager-row>svg{flex:0 0 14px;color:#a78bd5}
+.layer-manager-row>span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9px}
+.layer-manager-row button{width:21px;height:22px;flex:0 0 21px;display:grid;place-items:center;border:1px solid #393342;border-radius:4px;background:#211e27;color:#aaa0b7;font-size:11px;cursor:pointer}
+.layer-manager-row button:hover:not(:disabled){color:#fff;border-color:#8d70b8}
+.layer-manager-row button:disabled{opacity:.25;cursor:default}
+.layer-empty{padding:4px;color:#706979;font-size:9px}
