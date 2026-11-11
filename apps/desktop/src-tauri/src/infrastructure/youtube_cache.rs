@@ -1,4 +1,4 @@
-use std::{fs, path::{Path, PathBuf}, process::Stdio, time::{SystemTime, UNIX_EPOCH}};
+use std::{fs, path::{Path, PathBuf}, process::Stdio, sync::{Arc, Mutex, MutexGuard}, time::{SystemTime, UNIX_EPOCH}};
 use serde::{Deserialize, Serialize};
 use crate::{domain::models::YoutubeInspection, infrastructure::youtube_downloader::YoutubeDownloader};
 
@@ -16,12 +16,21 @@ pub struct YoutubeCacheEntry {
 }
 
 #[derive(Clone)]
-pub struct YoutubeCache { root: PathBuf }
+pub struct YoutubeCache { root: PathBuf, operation_lock: Arc<Mutex<()>> }
 
 impl YoutubeCache {
-    pub fn new(root: PathBuf) -> Self { Self { root } }
+    pub fn new(root: PathBuf) -> Self { Self { root, operation_lock: Arc::new(Mutex::new(())) } }
+
+    pub fn lock(&self) -> Result<MutexGuard<'_, ()>, String> {
+        self.operation_lock.lock().map_err(|_| "O cache do YouTube está indisponível.".to_string())
+    }
 
     pub fn cleanup_expired(&self) -> Result<(), String> {
+        let _guard = self.lock()?;
+        self.cleanup_expired_locked()
+    }
+
+    fn cleanup_expired_locked(&self) -> Result<(), String> {
         fs::create_dir_all(&self.root).map_err(|e| e.to_string())?;
         let now = now_ms();
         for item in fs::read_dir(&self.root).map_err(|e| e.to_string())? {
@@ -37,7 +46,8 @@ impl YoutubeCache {
     }
 
     pub fn prepare(&self, url: &str, max_height: u32) -> Result<YoutubeCacheEntry, String> {
-        self.cleanup_expired()?;
+        let _guard = self.lock()?;
+        self.cleanup_expired_locked()?;
         let info = YoutubeDownloader::inspect(url)?;
         let directory = self.root.join(&info.video_id);
         fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
