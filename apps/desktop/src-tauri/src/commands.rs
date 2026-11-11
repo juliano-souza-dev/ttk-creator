@@ -187,6 +187,10 @@ pub struct ExportMotion {
 
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ExportImageOverlay { asset_id:String, start_ms:u64, end_ms:u64, x:f64, y:f64, width:u32, height:u32 }
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ExportSoundEffect {
     sound_id: String,
     timeline_start_ms: u64,
@@ -200,6 +204,8 @@ pub struct ExportRequest {
     destination: String,
     clips: Vec<ExportClip>,
     motion: Vec<ExportMotion>,
+    #[serde(default)]
+    image_overlays: Vec<ExportImageOverlay>,
     #[serde(default)]
     sound_effects: Vec<ExportSoundEffect>,
 }
@@ -432,6 +438,7 @@ pub async fn export_timeline(
         let mut visual_inputs: Vec<(usize, &ExportClip)> = Vec::new();
         let mut audio_inputs: Vec<(usize, &ExportClip)> = Vec::new();
         let mut sound_inputs: Vec<(usize, &ExportSoundEffect)> = Vec::new();
+        let mut overlay_inputs: Vec<(usize, &ExportImageOverlay)> = Vec::new();
         let mut icon_temp_files: Vec<PathBuf> = Vec::new();
         let mut icon_inputs: Vec<(usize, usize, &ExportMotion)> = Vec::new();
         let mut total_ms = 0u64;
@@ -504,6 +511,23 @@ pub async fn export_timeline(
             sound_inputs.push((input_index, sound));
         }
 
+        for overlay in &request.image_overlays {
+            if overlay.end_ms <= overlay.start_ms { continue; }
+            let asset=assets.iter().find(|asset|asset.id==overlay.asset_id).ok_or_else(||format!("Imagem sobreposta {} não encontrada na biblioteca.",overlay.asset_id))?;
+            if asset.kind!="image" { return Err("A camada sobreposta precisa ser uma imagem.".into()); }
+            let relative=PathBuf::from(&asset.relative_path);
+            if relative.components().any(|part|!matches!(part,std::path::Component::Normal(_))){return Err("Caminho de imagem sobreposta inválido.".into());}
+            let media_dir=storage.project_media_directory(&request.project_id)?;
+            let project_dir=media_dir.parent().ok_or("Diretório do projeto inválido.")?.canonicalize().map_err(|error|error.to_string())?;
+            let file_path=project_dir.join(relative).canonicalize().map_err(|error|format!("Imagem sobreposta não encontrada: {error}"))?;
+            if !file_path.starts_with(&project_dir)||!file_path.is_file(){return Err("A imagem sobreposta não pertence a este projeto.".into());}
+            let duration=(overlay.end_ms-overlay.start_ms) as f64/1000.0;
+            args.extend(["-loop".into(),"1".into(),"-framerate".into(),"30".into(),"-t".into(),format!("{duration:.3}"),"-i".into(),file_path.to_string_lossy().into_owned()]);
+            let input_index=visual_inputs.len()+audio_inputs.len()+sound_inputs.len()+overlay_inputs.len();
+            overlay_inputs.push((input_index,overlay));
+            total_ms=total_ms.max(overlay.end_ms);
+        }
+
         for (motion_index, item) in request.motion.iter().enumerate() {
             let Some(data_url) = item.lucide_icon_png.as_deref() else { continue; };
             let encoded = data_url.strip_prefix("data:image/png;base64,")
@@ -516,7 +540,7 @@ pub async fn export_timeline(
             }
             let icon_path = std::env::temp_dir().join(format!("framelab-icon-{}.png", uuid::Uuid::new_v4()));
             std::fs::write(&icon_path, &bytes).map_err(|error| format!("Não foi possível preparar o ícone: {error}"))?;
-            let input_index = visual_inputs.len() + audio_inputs.len() + sound_inputs.len() + icon_inputs.len();
+            let input_index = visual_inputs.len() + audio_inputs.len() + sound_inputs.len() + overlay_inputs.len() + icon_inputs.len();
             let duration = item.end_ms.saturating_sub(item.start_ms).max(1) as f64 / 1000.0;
             args.extend(["-loop".into(), "1".into(), "-framerate".into(), "30".into(), "-t".into(), format!("{duration:.3}"), "-i".into(), icon_path.to_string_lossy().into_owned()]);
             icon_temp_files.push(icon_path);
@@ -546,6 +570,21 @@ pub async fn export_timeline(
             let end = (clip.timeline_start_ms + clip.source_end_ms - clip.source_start_ms) as f64 / 1000.0;
             filter_parts.push(format!("[{previous}][{label}]overlay=0:0:eof_action=pass:shortest=0:enable='gte(t,{start:.6})*lt(t,{end:.6})'[{next}]"));
             previous = next;
+        }
+
+        for (position,(input_index,overlay)) in overlay_inputs.iter().enumerate() {
+            let label=format!("image_overlay{position}");
+            let start=overlay.start_ms as f64/1000.0;
+            let end=overlay.end_ms as f64/1000.0;
+            let width=overlay.width.clamp(1,1080);
+            let height=overlay.height.clamp(1,1920);
+            let source=format!("image_overlay_source{position}");
+            filter_parts.push(format!("[{input_index}:v]scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=0x00000000,format=rgba,setpts=PTS-STARTPTS+{start:.6}/TB[{source}]"));
+            let next=format!("image_overlay_mix{position}");
+            let x=(overlay.x.clamp(0.0,100.0)/100.0)*1080.0-width as f64/2.0;
+            let y=(overlay.y.clamp(0.0,100.0)/100.0)*1920.0-height as f64/2.0;
+            filter_parts.push(format!("[{previous}][{source}]overlay=x={x:.2}:y={y:.2}:format=auto:eof_action=pass:shortest=0:enable='gte(t,{start:.6})*lt(t,{end:.6})'[{next}]"));
+            previous=next;
         }
 
         for (index, item) in request.motion.iter().enumerate() {
