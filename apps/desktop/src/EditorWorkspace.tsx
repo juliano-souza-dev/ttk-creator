@@ -702,8 +702,8 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
       setImageOverlays(current=>current.map(item=>{if(item.id!==drag.id)return item;const safeDelta=Math.max(-item.startMs,delta);return {...item,startMs:item.startMs+safeDelta,endMs:item.endMs+safeDelta};}));
     }else{
       const delta=(event.clientX-drag.startX)/rect.width*scale;if(Math.abs(event.clientX-drag.startX)>2)overlayTimelineDidMoveRef.current=true;
-      if(drag.edge==="start")updateOverlay(drag.id,{startMs:Math.max(0,Math.min(drag.endMs-300,drag.startMs+delta))});
-      else updateOverlay(drag.id,{endMs:Math.max(drag.startMs+300,drag.endMs+delta)});
+      if(drag.edge==="start")updateOverlay(drag.id,{startMs:Math.max(0,Math.min(drag.endMs-100,drag.startMs+delta))});
+      else updateOverlay(drag.id,{endMs:Math.max(drag.startMs+100,drag.endMs+delta)});
     }
   }
   function endOverlayTimelineDrag(event:ReactPointerEvent<HTMLElement>){
