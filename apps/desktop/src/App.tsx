@@ -10,6 +10,7 @@ import { validateSceneSpec, type SceneSpec } from "./shared/scene-spec";
 import { Clapperboard, LayoutGrid, Film, GraduationCap, Settings2, Plus, Search, FolderOpen, FolderPlus, Clock3, Video, Sparkles, Play, X, ArrowUpRight, Upload, Youtube, CheckCircle2, LoaderCircle, ShieldCheck, Link2, Download, Undo2, Redo2, ArrowLeft, FileJson, Mic, Captions, Info } from "lucide-react"
 
 const formatDuration = (n?:number|null) => !n ? "Duração não informada" : Math.floor(n/60000)+":"+String(Math.floor(n/1000)%60).padStart(2,"0");
+const formatTimecode = (n:number) => Math.floor(n/60000)+":"+String(Math.floor(n/1000)%60).padStart(2,"0")+"."+String(Math.floor(n%1000)).padStart(3,"0");
 
 export default function App() {
   const [projects,setProjects] = useState<Project[]>([]);
@@ -415,7 +416,7 @@ export default function App() {
         <video ref={trimVideoRef} className="youtube-trim-preview" src={convertFileSrc(youtubeCache.filePath)} controls preload="metadata"
           onTimeUpdate={event=>{const ms=event.currentTarget.currentTime*1000;if(ms<trimStartMs||ms>trimEndMs)event.currentTarget.pause();}}
           onLoadedMetadata={event=>{event.currentTarget.currentTime=trimStartMs/1000;}} />
-        <div className="youtube-trim-time"><span>INÍCIO <b>{formatDuration(trimStartMs)}</b></span><span>FIM <b>{formatDuration(trimEndMs)}</b></span><span>DURAÇÃO <b>{formatDuration(Math.max(0,trimEndMs-trimStartMs))}</b></span></div>
+        <div className="youtube-trim-time"><span>INÍCIO <b>{formatTimecode(trimStartMs)}</b></span><span>FIM <b>{formatTimecode(trimEndMs)}</b></span><span>DURAÇÃO <b>{formatTimecode(Math.max(0,trimEndMs-trimStartMs))}</b></span></div>
         <div className="youtube-trim-range">
           <label>Início do trecho <input type="range" min={0} max={Math.max(300,(youtubeCache.durationMs??trimEndMs))} step={100} value={trimStartMs}
             onChange={event=>{const value=Number(event.target.value);setTrimStartMs(Math.min(value,trimEndMs-300));if(trimVideoRef.current)trimVideoRef.current.currentTime=value/1000;}} /></label>
