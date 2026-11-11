@@ -596,3 +596,24 @@
 .image-overlay-trim-edge.left{left:0;border-radius:5px 0 0 5px}
 .image-overlay-trim-edge.right{right:0;border-radius:0 5px 5px 0}
 
+
+
+/* YouTube source-cache clip selection workspace */
+.youtube-trim-backdrop{z-index:150;overflow:auto;align-items:center;padding:24px}
+.youtube-trim-dialog{width:min(980px,100%);max-height:calc(100vh - 48px);overflow:auto;padding:24px;border:1px solid #493d59;border-radius:14px;background:linear-gradient(145deg,#211d29,#15151b 76%);box-shadow:0 24px 90px #000b}
+.youtube-trim-header{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:17px}
+.youtube-trim-header h2{margin:6px 0;font:600 23px 'Space Grotesk';color:#f1edf6}
+.youtube-trim-header p{margin:0;color:#a49cac;font-size:11px}
+.youtube-trim-preview{display:block;width:100%;max-height:min(52vh,570px);aspect-ratio:16/9;object-fit:contain;border:1px solid #393342;border-radius:9px;background:#08080b}
+.youtube-trim-time{display:flex;justify-content:space-between;gap:12px;margin:15px 0;color:#8f8999;font:9px 'DM Mono',monospace}
+.youtube-trim-time span{display:grid;gap:5px}.youtube-trim-time b{color:#e8def6;font-size:12px}
+.youtube-trim-range{display:grid;gap:13px;padding:14px;border:1px solid #393342;border-radius:9px;background:#1b1821}
+.youtube-trim-range label{display:grid;gap:8px;color:#c5bdcf;font-size:10px}
+.youtube-trim-range input{width:100%;accent-color:#b99af5;cursor:pointer}
+.youtube-trim-timeline{display:grid;gap:8px;margin-top:14px}
+.youtube-trim-track{position:relative;height:24px;overflow:hidden;border:1px solid #393342;border-radius:6px;background:repeating-linear-gradient(90deg,#292431 0,#292431 1px,#1b1821 1px,#1b1821 12.5%)}
+.youtube-trim-track i{position:absolute;top:0;bottom:0;min-width:2px;border:1px solid #80d9c4;background:#3b9b83aa;box-shadow:0 0 0 1px #80d9c455}
+.youtube-trim-timeline>small{color:#827b8b;font-size:9px}
+.youtube-cache-note{display:flex;align-items:flex-start;gap:8px;margin-top:15px;padding:11px;border:1px solid #4a3d60;border-radius:7px;background:#211b2b;color:#c7b6e4;font-size:9px;line-height:1.5}
+.youtube-cache-note svg{flex:none}
+@media(max-width:650px){.youtube-trim-dialog{padding:16px}.youtube-trim-header h2{font-size:19px}.youtube-trim-time{flex-wrap:wrap}.youtube-trim-time span{min-width:28%}}
