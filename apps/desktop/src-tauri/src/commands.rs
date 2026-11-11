@@ -260,7 +260,16 @@ pub struct ExportMotion {
 
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ExportImageOverlay { asset_id:String, start_ms:u64, end_ms:u64, x:f64, y:f64, width:u32, height:u32 }
+pub struct ExportImageOverlay {
+    asset_id:String, start_ms:u64, end_ms:u64, x:f64, y:f64, width:u32, height:u32,
+    #[serde(default = "default_overlay_animation")]
+    entrance_animation: String,
+    #[serde(default = "default_overlay_animation_duration")]
+    entrance_duration_ms: u64,
+}
+
+fn default_overlay_animation() -> String { "none".into() }
+fn default_overlay_animation_duration() -> u64 { 600 }
 
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -652,11 +661,27 @@ pub async fn export_timeline(
             let width=overlay.width.clamp(1,1080);
             let height=overlay.height.clamp(1,1920);
             let source=format!("image_overlay_source{position}");
-            filter_parts.push(format!("[{input_index}:v]scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=0x00000000,format=rgba,setpts=PTS-STARTPTS+{start:.6}/TB[{source}]"));
+            let entrance_duration = (overlay.entrance_duration_ms.clamp(100, 3000) as f64 / 1000.0).min(end - start);
+            let entrance_filter = match overlay.entrance_animation.as_str() {
+                "fade" => format!(",fade=t=in:st=0:d={entrance_duration:.3}:alpha=1"),
+                _ => String::new(),
+            };
+            filter_parts.push(format!("[{input_index}:v]scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=0x00000000,format=rgba{entrance_filter},setpts=PTS-STARTPTS+{start:.6}/TB[{source}]"));
             let next=format!("image_overlay_mix{position}");
             let x=(overlay.x.clamp(0.0,100.0)/100.0)*1080.0-width as f64/2.0;
             let y=(overlay.y.clamp(0.0,100.0)/100.0)*1920.0-height as f64/2.0;
-            filter_parts.push(format!("[{previous}][{source}]overlay=x={x:.2}:y={y:.2}:format=auto:eof_action=pass:shortest=0:enable='gte(t,{start:.6})*lt(t,{end:.6})'[{next}]"));
+            let slide_progress = format!("min(1\\,max(0\\,(t-{start:.6})/{entrance_duration:.3}))");
+            let animated_x = match overlay.entrance_animation.as_str() {
+                "slide-left" => format!("{x:.2}-({slide_progress})*{width}"),
+                "slide-right" => format!("{x:.2}+(1-({slide_progress}))*{width}"),
+                _ => format!("{x:.2}"),
+            };
+            let animated_y = match overlay.entrance_animation.as_str() {
+                "slide-up" => format!("{y:.2}-({slide_progress})*{height}"),
+                "slide-down" => format!("{y:.2}+(1-({slide_progress}))*{height}"),
+                _ => format!("{y:.2}"),
+            };
+            filter_parts.push(format!("[{previous}][{source}]overlay=x='{animated_x}':y='{animated_y}':format=auto:eof_action=pass:shortest=0:enable='gte(t,{start:.6})*lt(t,{end:.6})'[{next}]"));
             previous=next;
         }
 
