@@ -46,6 +46,7 @@ export default function App() {
   const [groqSettingsBusy,setGroqSettingsBusy] = useState(false);
   const [groqSettingsMessage,setGroqSettingsMessage] = useState("");
   const [transcriptionAssetId,setTranscriptionAssetId] = useState("");
+  const [transcriptionContext,setTranscriptionContext] = useState<{clipId:string;timelineStartMs:number;sourceStartMs:number;sourceEndMs:number}|null>(null);
   const [transcriptionMode,setTranscriptionMode] = useState<"auto"|"cloud"|"local">("auto");
   const [transcriptionLanguage,setTranscriptionLanguage] = useState("");
   const [transcriptionModel,setTranscriptionModel] = useState("small");
@@ -313,8 +314,9 @@ export default function App() {
     setTranscriptionBusy(true); setTranscriptionMessage(""); setTranscriptionProgress(null); setError("");
     try {
       const result=await desktopApi.transcribeMedia(activeProject.id,transcriptionAssetId,transcriptionMode,transcriptionLanguage,transcriptionModel);
-      window.dispatchEvent(new CustomEvent("framelab:transcription-ready",{detail:{projectId:activeProject.id,result}}));
-      setTranscriptionMessage(result.cues.length+" legendas criadas com "+(result.engine==="groq"?"Groq Whisper":"Faster-Whisper local")+". Revise-as na timeline.");
+      window.dispatchEvent(new CustomEvent("framelab:transcription-ready",{detail:{projectId:activeProject.id,result,context:transcriptionContext}}));
+      setTranscriptionContext(null);
+      setTranscriptionMessage(result.cues.length+" legendas criadas com "+(result.engine==="groq"?"Groq Whisper":"Faster-Whisper local")+". Elas foram adicionadas à faixa exclusiva de transcrição.");
       setTranscriptionProgress({projectId:activeProject.id,stage:"completed",percent:100,completedChunks:1,totalChunks:1,message:"Transcrição concluída"});
     } catch(error) {
       setTranscriptionMessage("Falha na transcrição: "+(error instanceof Error?error.message:String(error)));
@@ -372,7 +374,7 @@ export default function App() {
         </> : activeProject ? <>
         {error&&!mediaModal&&<div className="error editor-error">{error}</div>}
         {notice&&<div className="notice"><CheckCircle2 size={15}/>{notice}</div>}
-        <EditorWorkspace projectId={activeProject.id} assets={assets} onAddMedia={()=>{setMediaTab("local");setMediaModal(true);}} onOpenTranscription={()=>setTranscriptionOpen(true)}/>
+        <EditorWorkspace projectId={activeProject.id} assets={assets} onAddMedia={()=>{setMediaTab("local");setMediaModal(true);}} onOpenTranscription={(assetId,context)=>{if(assetId)setTranscriptionAssetId(assetId);setTranscriptionContext(context??null);setTranscriptionOpen(true);}}/>
         </> : null}
         <footer>FRAME LAB · FEITO PARA IDEIAS EM MOVIMENTO <span>EARLY ACCESS · 0.2.0</span></footer>
       </div>
@@ -382,7 +384,7 @@ export default function App() {
       <section className="transcription-dialog" role="dialog" aria-modal="true" aria-labelledby="transcription-title">
         <div className="transcription-dialog-top"><div className="transcription-heading"><div><label className="eyebrow muted">RECONHECIMENTO DE FALA</label><h3 id="transcription-title">Gerar legendas automaticamente</h3><p>Configure a transcrição e envie as falas para a timeline como legendas editáveis.</p></div><span className="transcription-chip"><Mic size={13}/> WHISPER</span></div><button className="close" type="button" title="Fechar" disabled={transcriptionBusy} onClick={()=>setTranscriptionOpen(false)}><X size={18}/></button></div>
         <div className="transcription-controls">
-          <label>Arquivo de mídia<select value={transcriptionAssetId} onChange={event=>setTranscriptionAssetId(event.target.value)}><option value="">Selecione um vídeo ou áudio</option>{assets.filter(asset=>asset.kind==="video"||asset.kind==="audio").map(asset=><option key={asset.id} value={asset.id}>{asset.name}</option>)}</select></label>
+          <label>Arquivo de mídia<select value={transcriptionAssetId} onChange={event=>{setTranscriptionAssetId(event.target.value);setTranscriptionContext(null);}}><option value="">Selecione um vídeo ou áudio</option>{assets.filter(asset=>asset.kind==="video"||asset.kind==="audio").map(asset=><option key={asset.id} value={asset.id}>{asset.name}</option>)}</select></label>
           <label>Processamento<select value={transcriptionMode} onChange={event=>setTranscriptionMode(event.target.value as "auto"|"cloud"|"local")}><option value="auto">Automático (Groq + fallback local)</option><option value="cloud">Somente Groq na nuvem</option><option value="local">Somente local (privado)</option></select></label>
           <label>Idioma<select value={transcriptionLanguage} onChange={event=>setTranscriptionLanguage(event.target.value)}><option value="">Detectar automaticamente</option><option value="pt">Português</option><option value="en">Inglês</option><option value="es">Espanhol</option><option value="fr">Francês</option></select></label>
           <label>Modelo local<select value={transcriptionModel} onChange={event=>setTranscriptionModel(event.target.value)}><option value="tiny">Tiny · mais rápido</option><option value="base">Base · leve</option><option value="small">Small · equilibrado</option><option value="medium">Medium · mais preciso</option><option value="large-v3">Large v3 · maior qualidade</option></select></label>
