@@ -475,6 +475,12 @@ fn wrap_text_for_export(value: &str, font_size: u32) -> String {
     }).collect::<Vec<_>>().join("\n")
 }
 
+fn ffmpeg_escape_expression(value: &str) -> String {
+    // Filtergraph commas must be escaped even inside expression-valued options;
+    // otherwise FFmpeg treats function arguments as new filters.
+    value.replace(',', "\\,")
+}
+
 fn ffmpeg_escape_text(value: &str) -> String {
     value
         .replace('\\', "\\\\")
@@ -755,7 +761,10 @@ pub async fn export_timeline(
                 _ => ("1".to_string(), base_x.clone(), "1".to_string()),
             };
             let next = format!("text{index}");
-            filter_parts.push(format!("[{previous}]drawtext=fontfile='{font_file}':text='{}':fontcolor={color}{caption_box}:fontsize='max(1,{}*({scale}))':alpha='{alpha}':x='{x}':y='{anchor_y}-text_h/2':enable='between(t,{start:.3},{end:.3})'[{next}]", ffmpeg_escape_text(&wrap_text_for_export(&item.text, item.font_size)), item.font_size.clamp(18, 180)));
+            let scale_expr = ffmpeg_escape_expression(&scale);
+            let alpha_expr = ffmpeg_escape_expression(&alpha);
+            let x_expr = ffmpeg_escape_expression(&x);
+            filter_parts.push(format!("[{previous}]drawtext=fontfile='{font_file}':text='{}':fontcolor={color}{caption_box}:fontsize='max(1\\,{}*({scale_expr}))':alpha='{alpha_expr}':x='{x_expr}':y='{anchor_y}-text_h/2':enable='between(t\\,{start:.3}\\,{end:.3})'[{next}]", ffmpeg_escape_text(&wrap_text_for_export(&item.text, item.font_size)), item.font_size.clamp(18, 180)));
             previous = next;
         }
         for (icon_position, (input_index, motion_index, item)) in icon_inputs.iter().enumerate() {
