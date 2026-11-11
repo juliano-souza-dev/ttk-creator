@@ -175,6 +175,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
   const [selectedOverlayId,setSelectedOverlayId]=useState<string|null>(null);
   const overlayDrag=useRef<{id:string;mode:"move"|"resize";startX:number;startY:number;x:number;y:number;width:number;height:number;ratio:number}|null>(null);
   const overlayTimelineDragRef=useRef<MotionTrimDrag|null>(null);
+  const overlayTimelineDidMoveRef=useRef(false);
 
   useEffect(() => {
     const onTranscript = (event: Event) => {
@@ -647,13 +648,13 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
   async function addImageOverlay(){try{const selected=await open({multiple:false,filters:[{name:"Imagens",extensions:["png","jpg","jpeg","webp","gif"]}]});if(!selected||Array.isArray(selected))return;const imported=await desktopApi.importMediaFiles(projectId,[selected]);const asset=imported.find(item=>item.kind==="image");if(!asset)throw new Error("A mídia selecionada não é uma imagem.");const url=convertFileSrc(await desktopApi.getAssetPath(projectId,asset.id));setMediaUrls(current=>({...current,[asset.id]:url}));const overlay:ImageOverlay={id:crypto.randomUUID(),assetId:asset.id,startMs:playheadMs,endMs:playheadMs+3000,x:50,y:50,width:420,height:420,soundId:"",soundVolume:80};setImageOverlays(current=>[...current,overlay]);setSelectedOverlayId(overlay.id);setSelectedMotionId(null);setSelectedId(null);stopPlayback();}catch(error){setExportMessage("Não foi possível adicionar a imagem: "+String(error));}}
   function updateOverlay(id:string,patch:Partial<ImageOverlay>){setImageOverlays(current=>current.map(item=>item.id===id?{...item,...patch}:item));}
   function beginOverlayTimelineTrim(event:ReactPointerEvent<HTMLSpanElement>,item:ImageOverlay,edge:"start"|"end"){
-    event.preventDefault();event.stopPropagation();event.currentTarget.closest("button")?.setPointerCapture(event.pointerId);
+    event.preventDefault();event.stopPropagation();event.currentTarget.closest("button")?.setPointerCapture(event.pointerId);overlayTimelineDidMoveRef.current=false;
     overlayTimelineDragRef.current={id:item.id,edge,startX:event.clientX,lastX:event.clientX,startMs:item.startMs,endMs:item.endMs,memberKeys:[item.id]};
     setSelectedOverlayId(item.id);setSelectedMotionId(null);setSelectedId(null);
   }
   function beginOverlayTimelineMove(event:ReactPointerEvent<HTMLButtonElement>,item:ImageOverlay){
     if((event.target as HTMLElement).closest(".image-overlay-trim-edge"))return;
-    event.preventDefault();event.stopPropagation();event.currentTarget.setPointerCapture(event.pointerId);
+    event.preventDefault();event.stopPropagation();event.currentTarget.setPointerCapture(event.pointerId);overlayTimelineDidMoveRef.current=false;
     overlayTimelineDragRef.current={id:item.id,edge:"move",startX:event.clientX,lastX:event.clientX,startMs:item.startMs,endMs:item.endMs,memberKeys:[item.id]};
     setSelectedOverlayId(item.id);setSelectedMotionId(null);setSelectedId(null);
   }
@@ -661,10 +662,11 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
     const drag=overlayTimelineDragRef.current;if(!drag||!event.currentTarget.hasPointerCapture(event.pointerId))return;
     const rect=event.currentTarget.closest(".timeline-canvas")?.getBoundingClientRect();if(!rect?.width)return;
     if(drag.edge==="move"){
+      const pixelDelta=Math.abs(event.clientX-drag.startX);if(pixelDelta>2)overlayTimelineDidMoveRef.current=true;
       const delta=(event.clientX-drag.lastX)/rect.width*scale;drag.lastX=event.clientX;
-      setImageOverlays(current=>current.map(item=>item.id===drag.id?{...item,startMs:Math.max(0,item.startMs+delta),endMs:Math.max(300,item.endMs+delta)}:item));
+      setImageOverlays(current=>current.map(item=>{if(item.id!==drag.id)return item;const safeDelta=Math.max(-item.startMs,delta);return {...item,startMs:item.startMs+safeDelta,endMs:item.endMs+safeDelta};}));
     }else{
-      const delta=(event.clientX-drag.startX)/rect.width*scale;
+      const delta=(event.clientX-drag.startX)/rect.width*scale;if(Math.abs(event.clientX-drag.startX)>2)overlayTimelineDidMoveRef.current=true;
       if(drag.edge==="start")updateOverlay(drag.id,{startMs:Math.max(0,Math.min(drag.endMs-300,drag.startMs+delta))});
       else updateOverlay(drag.id,{endMs:Math.max(drag.startMs+300,drag.endMs+delta)});
     }
@@ -1340,7 +1342,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
           {!audioClips.length&&<span className="track-hint">Arraste um áudio para cá. Ele tocará junto com o vídeo</span>}<div className="timeline-cursor" style={{left:playheadMs/scale*100+"%"}}/>
         </div></div>
         <div className="motion-track-row timeline-motion-row image-overlay-track-row"><div className="track-label">IMAGENS LIVRES</div><div className="track-clips timeline-canvas motion-timeline image-overlay-track" style={{width:Math.max(100,timelineZoom)+"%"}} onClick={event=>{if((event.target as HTMLElement).closest(".image-overlay-timeline"))return;const rect=event.currentTarget.getBoundingClientRect();if(!rect.width)return;const atMs=Math.max(0,Math.min(scale,((event.clientX-rect.left)/rect.width)*scale));setTimelineInsertAtMs(atMs);setPlayheadMs(atMs);setPreviewTick(value=>value+1);stopPlayback();}}>
-          {imageOverlays.map(item=><button key={item.id} type="button" className={"motion-timeline-clip image-overlay-timeline"+(selectedOverlayId===item.id?" selected":"")} style={{left:item.startMs/scale*100+"%",width:Math.max(3,(item.endMs-item.startMs)/scale*100)+"%",touchAction:"none"}} onPointerDown={event=>beginOverlayTimelineMove(event,item)} onPointerMove={moveOverlayOnTimeline} onPointerUp={endOverlayTimelineDrag} onPointerCancel={endOverlayTimelineDrag} onClick={()=>{setSelectedOverlayId(item.id);setSelectedMotionId(null);setSelectedId(null);seekTo(item.startMs);}}><span className="image-overlay-trim-edge left" onPointerDown={event=>beginOverlayTimelineTrim(event,item,"start")} onPointerMove={moveOverlayOnTimeline} onPointerUp={endOverlayTimelineDrag} onPointerCancel={endOverlayTimelineDrag}/><b>▧ {assets.find(asset=>asset.id===item.assetId)?.name||"Imagem livre"}</b><small>{timeLabel(item.endMs-item.startMs)}</small><span className="image-overlay-trim-edge right" onPointerDown={event=>beginOverlayTimelineTrim(event,item,"end")} onPointerMove={moveOverlayOnTimeline} onPointerUp={endOverlayTimelineDrag} onPointerCancel={endOverlayTimelineDrag}/></button>)}
+          {imageOverlays.map(item=><button key={item.id} type="button" className={"motion-timeline-clip image-overlay-timeline"+(selectedOverlayId===item.id?" selected":"")} style={{left:item.startMs/scale*100+"%",width:Math.max(3,(item.endMs-item.startMs)/scale*100)+"%",touchAction:"none"}} onPointerDown={event=>beginOverlayTimelineMove(event,item)} onPointerMove={moveOverlayOnTimeline} onPointerUp={endOverlayTimelineDrag} onPointerCancel={endOverlayTimelineDrag} onClick={()=>{if(overlayTimelineDidMoveRef.current){overlayTimelineDidMoveRef.current=false;return;}setSelectedOverlayId(item.id);setSelectedMotionId(null);setSelectedId(null);seekTo(item.startMs);}}><span className="image-overlay-trim-edge left" onPointerDown={event=>beginOverlayTimelineTrim(event,item,"start")} onPointerMove={moveOverlayOnTimeline} onPointerUp={endOverlayTimelineDrag} onPointerCancel={endOverlayTimelineDrag}/><b>▧ {assets.find(asset=>asset.id===item.assetId)?.name||"Imagem livre"}</b><small>{timeLabel(item.endMs-item.startMs)}</small><span className="image-overlay-trim-edge right" onPointerDown={event=>beginOverlayTimelineTrim(event,item,"end")} onPointerMove={moveOverlayOnTimeline} onPointerUp={endOverlayTimelineDrag} onPointerCancel={endOverlayTimelineDrag}/></button>)}
           {!imageOverlays.length&&<span className="track-hint">Adicione imagens livres para organizá-las nesta faixa</span>}<div className="timeline-cursor" style={{left:playheadMs/scale*100+"%"}}/>
         </div></div>
         <div className="motion-track-row timeline-motion-row"><div className="track-label">COMPOSIÇÕES</div><div className="track-clips timeline-canvas motion-timeline" style={{width:Math.max(100,timelineZoom)+"%"}} onClick={event=>{if((event.target as HTMLElement).closest(".motion-timeline-clip"))return;const rect=event.currentTarget.getBoundingClientRect();if(!rect.width)return;const atMs=Math.max(0,Math.min(scale,((event.clientX-rect.left)/rect.width)*scale));setTimelineInsertAtMs(atMs);setPlayheadMs(atMs);setPreviewTick(value=>value+1);stopPlayback();}} onDragOver={event=>event.preventDefault()} onDrop={event=>{event.preventDefault();const id=event.dataTransfer.getData("text/motion-graphic-id");if(!id)return;const rect=event.currentTarget.getBoundingClientRect();updateMotion(id,{startMs:Math.max(0,(event.clientX-rect.left)/rect.width*scale)});}}>
