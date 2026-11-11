@@ -25,7 +25,7 @@ type TimelineClip = {
 };
 type TimelineGroup = { id: string; name: string; members: string[] };
 type ImageOverlay = { id:string; assetId:string; startMs:number; endMs:number; x:number; y:number; width:number; height:number; soundId?:string; soundVolume:number };
-type Props = { projectId: string; assets: MediaAsset[]; onAddMedia: () => void; onOpenTranscription?: () => void };
+type Props = { projectId: string; assets: MediaAsset[]; onAddMedia: () => void; onOpenTranscription?: (assetId?: string, context?: { clipId: string; timelineStartMs: number; sourceStartMs: number; sourceEndMs: number }) => void };
 type TrimDrag = { clipId: string; edge: "start" | "end"; startX: number; sourceStartMs: number; sourceEndMs: number; timelineStartMs: number; scaleMs: number };
 type ClipMoveDrag = { clipId: string; startX: number; lastX: number; timelineStartMs: number; memberKeys: string[] };
 type MotionTrimDrag = { id: string; edge: "start" | "end" | "move"; startX: number; lastX: number; startMs: number; endMs: number; memberKeys: string[] };
@@ -179,23 +179,37 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
 
   useEffect(() => {
     const onTranscript = (event: Event) => {
-      const detail = (event as CustomEvent<{ projectId: string; result: TranscriptResult }>).detail;
+      const detail = (event as CustomEvent<{ projectId: string; result: TranscriptResult; context?: { clipId: string; timelineStartMs: number; sourceStartMs: number; sourceEndMs: number } }>).detail;
       if (!detail || detail.projectId !== projectId) return;
-      const created: MotionGraphic[] = detail.result.cues.map(cue => ({
+      const context = detail.context;
+      const selectedCues = detail.result.cues.filter(cue => !context || (cue.endMs > context.sourceStartMs && cue.startMs < context.sourceEndMs));
+      const created: MotionGraphic[] = selectedCues.map(cue => {
+        const sourceStart = context ? Math.max(cue.startMs, context.sourceStartMs) : cue.startMs;
+        const sourceEnd = context ? Math.min(cue.endMs, context.sourceEndMs) : cue.endMs;
+        const timelineStart = context ? context.timelineStartMs + sourceStart - context.sourceStartMs : sourceStart;
+        const timelineEnd = timelineStart + Math.max(300, sourceEnd - sourceStart);
+        const words = cue.words.filter(word => word.endMs > sourceStart && word.startMs < sourceEnd).map(word => ({
+          text: word.text,
+          startMs: timelineStart + Math.max(word.startMs, sourceStart) - sourceStart,
+          endMs: timelineStart + Math.min(word.endMs, sourceEnd) - sourceStart,
+        }));
+        return {
         id: cue.id,
         isCaption: true,
-        captionMode: cue.words.length ? "karaoke" : "source",
+        captionMode: words.length ? "karaoke" : "source",
         captionEnglish: cue.text,
+        captionSourceLanguage: detail.result.language || "auto",
+        captionTranslationLanguage: "",
         captionTranslation: "",
-        captionWords: cue.words.map(word => ({ text: word.text, startMs: word.startMs, endMs: word.endMs })),
+        captionWords: words,
         text: cue.text,
         icon: "",
         fontFamily: "Arial",
         fontWeight: 900,
         textAlign: "center",
-        startMs: cue.startMs,
-        endMs: Math.max(cue.startMs + 300, cue.endMs),
-        durationMs: Math.max(300, cue.endMs - cue.startMs),
+        startMs: timelineStart,
+        endMs: timelineEnd,
+        durationMs: timelineEnd - timelineStart,
         preset: "pop",
         color: "#ffffff",
         accent: "#65d6c0",
@@ -205,12 +219,13 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
         sound: "none",
         soundId: "",
         soundVolume: 80,
-      }));
+      };
+      });
       setMotion(current => [...current, ...created]);
       setSelectedMotionId(created[0]?.id ?? null);
       if (created.length) setPlayheadMs(created[0].startMs);
       setActiveTool("text");
-      setSceneSpecMessage("Transcrição adicionada: " + created.length + " legendas editáveis. Revise o texto e os tempos antes de exportar.");
+      setSceneSpecMessage("Transcrição adicionada à faixa exclusiva: " + created.length + " legendas. Revise o texto e os tempos antes de exportar.");
     };
     window.addEventListener("framelab:transcription-ready", onTranscript);
     return () => window.removeEventListener("framelab:transcription-ready", onTranscript);
@@ -221,6 +236,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
   const [soundBusy, setSoundBusy] = useState(false);
   const [soundMessage, setSoundMessage] = useState("");
   const [translationBusy, setTranslationBusy] = useState(false);
+  const [singleCaptionTranslationBusy, setSingleCaptionTranslationBusy] = useState(false);
   const [translationProgress, setTranslationProgress] = useState({ done: 0, total: 0 });
   const [translationMessage, setTranslationMessage] = useState("");
   const [translationPhase, setTranslationPhase] = useState("Aguardando comando");
@@ -685,6 +701,36 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
   }
   function updateMotion(id: string, patch: Partial<MotionGraphic>) { setMotion(current => current.map(item => { if (item.id !== id) return item; const nextStart = patch.startMs !== undefined ? Math.max(0, patch.startMs) : item.startMs; let nextEnd = patch.endMs !== undefined ? patch.endMs : item.endMs; if (patch.durationMs !== undefined && patch.endMs === undefined) nextEnd = nextStart + Math.max(300, patch.durationMs); nextEnd = Math.max(nextStart + 300, nextEnd); return { ...item, ...patch, startMs: nextStart, endMs: nextEnd, durationMs: nextEnd - nextStart }; })); }
   function removeMotion(id: string) { setMotion(current => current.filter(item => item.id !== id)); if (selectedMotionId === id) setSelectedMotionId(null); }
+
+  async function translateSelectedCaption(targetLanguage: "English" | "Português brasileiro") {
+    if (!selectedMotion?.isCaption || singleCaptionTranslationBusy || !isDesktopRuntime) return;
+    const sourceText = (selectedMotion.captionEnglish || selectedMotion.text || "").trim();
+    if (!sourceText) return;
+    setSingleCaptionTranslationBusy(true);
+    setTranslationMessage("");
+    try {
+      const settings = await desktopApi.getGroqSettings();
+      if (!settings.configured) throw new Error("Configure sua chave Groq nas configurações antes de traduzir.");
+      const result = await desktopApi.translateGroqChunk(settings.model, targetLanguage, [{
+        id: selectedMotion.id,
+        text: sourceText,
+      }]);
+      const translated = result.find(item => item.id === selectedMotion.id)?.translation;
+      if (!translated) throw new Error("A tradução não foi retornada para esta legenda.");
+      updateMotion(selectedMotion.id, {
+        captionTranslation: translated,
+        captionTranslationLanguage: targetLanguage === "English" ? "en" : "pt-BR",
+        captionMode: selectedMotion.captionWords?.length ? "karaoke" : "bilingual",
+      });
+      setTranslationPhase("Concluído");
+      setTranslationMessage("Legenda traduzida para " + targetLanguage + ".");
+    } catch (error) {
+      setTranslationPhase("Falha identificada");
+      setTranslationMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSingleCaptionTranslationBusy(false);
+    }
+  }
 
   function applySceneTemplate(templateId: string) {
     try {
@@ -1167,7 +1213,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
       <button className={activeTool === "text" ? "active" : ""} onClick={() => setActiveTool("text")}><Type size={19}/><small>Texto</small></button>
       <button className={activeTool === "effects" ? "active" : ""} onClick={() => setActiveTool("effects")}><WandSparkles size={19}/><small>Efeitos</small></button>
       <button className={activeTool === "templates" ? "active" : ""} onClick={() => setActiveTool("templates")}><PanelsTopLeft size={19}/><small>Modelos</small></button>
-      <button className="transcription-tool" onClick={() => onOpenTranscription?.()} title="Gerar legendas automaticamente"><Captions size={19}/><small>Transcrever</small></button>
+      <button className="transcription-tool" onClick={() => onOpenTranscription?.(selectedAsset && (selectedAsset.kind === "audio" || selectedAsset.kind === "video") ? selectedAsset.id : undefined, selectedClip && selectedAsset && (selectedAsset.kind === "audio" || selectedAsset.kind === "video") ? { clipId: selectedClip.id, timelineStartMs: selectedClip.timelineStartMs, sourceStartMs: selectedClip.sourceStartMs, sourceEndMs: selectedClip.sourceEndMs } : undefined)} title="Gerar legendas automaticamente"><Captions size={19}/><small>Transcrever</small></button>
     </aside>
     <aside className="editor-content-panel">
       {activeTool === "media" && <>
@@ -1263,6 +1309,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
         <div className="editor-panel-head"><div><b>Propriedades</b><small>Texto, tipografia e animação</small></div></div>
         <div className="properties-scroll">
           <details open className="property-section"><summary>Texto</summary>
+            {selectedMotion.isCaption && <div className="caption-translate-actions"><b>Traduzir legenda</b><small>O idioma de origem é detectado automaticamente.</small><div><button type="button" className="secondary-action" disabled={singleCaptionTranslationBusy} onClick={()=>void translateSelectedCaption("English")}>{singleCaptionTranslationBusy?<LoaderCircle className="spin" size={13}/>:<Languages size={13}/>} Para inglês</button><button type="button" className="secondary-action" disabled={singleCaptionTranslationBusy} onClick={()=>void translateSelectedCaption("Português brasileiro")}>{singleCaptionTranslationBusy?<LoaderCircle className="spin" size={13}/>:<Languages size={13}/>} Para PT-BR</button></div>{translationMessage&&!translationBusy&&<small className={translationPhase==="Falha identificada"?"is-error":"is-success"}>{translationMessage}</small>}</div>}
             <label className="motion-caption-toggle"><input type="checkbox" checked={!!selectedMotion.isCaption} onChange={event => updateMotion(selectedMotion.id, { isCaption: event.target.checked })}/> Exibir como legenda (com fundo)</label><small className="property-hint">Adiciona um fundo escuro semitransparente para destacar o texto sobre qualquer vídeo.</small>{selectedMotion.isCaption && <label className="property-control">Modo da legenda<select value={selectedMotion.captionMode || (selectedMotion.captionTranslation ? "bilingual" : "source")} onChange={event => updateMotion(selectedMotion.id, { captionMode: event.target.value as MotionGraphic["captionMode"] })}><option value="source">Original</option><option value="bilingual" disabled={!selectedMotion.captionTranslation}>Original + tradução</option><option value="karaoke" disabled={!selectedMotion.captionWords?.length}>Karaoke por palavra</option></select></label>}<label>{selectedMotion.isCaption ? "Texto original" : "Conteúdo"}<textarea className="motion-textarea" rows={6} value={selectedMotion.isCaption ? (selectedMotion.captionEnglish || selectedMotion.text) : selectedMotion.text} onChange={event => updateMotion(selectedMotion.id, selectedMotion.isCaption ? { text: event.target.value, captionEnglish: event.target.value } : { text: event.target.value })} maxLength={1200} placeholder={"Digite sua frase. Use Enter para criar uma nova linha."}/></label>{selectedMotion.isCaption && <label>Tradução<textarea className="motion-textarea" rows={3} value={selectedMotion.captionTranslation || ""} onChange={event => updateMotion(selectedMotion.id, { captionTranslation: event.target.value })} maxLength={1200} placeholder="Tradução em português"/></label>}<small className="property-hint">Use Enter para quebrar a linha. O texto será distribuído dentro da área segura do vídeo.</small>
             <div className="lucide-library">
               <div className="lucide-library-heading"><b>Biblioteca Lucide SVG</b><small>Ícone vetorial ancorado ao texto</small></div>
@@ -1305,6 +1352,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
         <div className="properties-scroll">
           {selectedClip && selectedAsset ? <>
             <div className="trim-heading"><b><Scissors size={14}/> Ajustes do clipe</b><span>{timeLabel(selectedDuration)}</span></div>
+            {(selectedAsset.kind === "audio" || selectedAsset.kind === "video") && <button className="primary transcription-clip-action" type="button" onClick={() => onOpenTranscription?.(selectedAsset.id, { clipId: selectedClip.id, timelineStartMs: selectedClip.timelineStartMs, sourceStartMs: selectedClip.sourceStartMs, sourceEndMs: selectedClip.sourceEndMs })}><Captions size={14}/> Transcrever este clipe</button>}
             <label className="property-control">Início do arquivo <strong>{timeLabel(selectedClip.sourceStartMs)}</strong><input type="range" min={0} max={Math.max(1000, selectedSourceDuration - 250)} step={100} value={selectedClip.sourceStartMs} onChange={event => updateClip(selectedClip.id, { sourceStartMs: Math.min(Number(event.target.value), selectedClip.sourceEndMs - 250) })}/><input className="numeric-time-input" type="number" min="0" max={Math.max(0, selectedClip.sourceEndMs-250)} step="0.1" value={(selectedClip.sourceStartMs/1000).toFixed(1)} aria-label="Início do arquivo em segundos" onChange={event=>{const value=Number(event.target.value);if(event.target.value!==""&&Number.isFinite(value))updateClip(selectedClip.id,{sourceStartMs:Math.max(0,Math.min(value*1000,selectedClip.sourceEndMs-250))});}}/></label>
             <label className="property-control">Fim do arquivo <strong>{timeLabel(selectedClip.sourceEndMs)}</strong><input type="range" min={250} max={Math.max(250, selectedSourceDuration)} step={100} value={Math.min(selectedClip.sourceEndMs, selectedSourceDuration)} onChange={event => updateClip(selectedClip.id, { sourceEndMs: Math.max(Number(event.target.value), selectedClip.sourceStartMs + 250) })}/><input className="numeric-time-input" type="number" min={(selectedClip.sourceStartMs+250)/1000} max={selectedSourceDuration/1000} step="0.1" value={(selectedClip.sourceEndMs/1000).toFixed(1)} aria-label="Fim do arquivo em segundos" onChange={event=>{const value=Number(event.target.value);if(event.target.value!==""&&Number.isFinite(value))updateClip(selectedClip.id,{sourceEndMs:Math.max(selectedClip.sourceStartMs+250,Math.min(value*1000,selectedSourceDuration))});}}/></label>
             <div className="clip-order-controls"><span>Ordem de exibição</span><div><button className="secondary-action" onClick={() => moveVisualClip(selectedClip.id, -1)} disabled={visualClips.slice().sort((a,b)=>a.timelineStartMs-b.timelineStartMs)[0]?.id === selectedClip.id}><ChevronLeft size={14}/> Antes</button><button className="secondary-action" onClick={() => moveVisualClip(selectedClip.id, 1)} disabled={visualClips.slice().sort((a,b)=>a.timelineStartMs-b.timelineStartMs)[visualClips.length - 1]?.id === selectedClip.id}>Depois <ChevronRight size={14}/></button></div></div>
@@ -1345,8 +1393,12 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
           {imageOverlays.map(item=><button key={item.id} type="button" className={"motion-timeline-clip image-overlay-timeline"+(selectedOverlayId===item.id?" selected":"")} style={{left:item.startMs/scale*100+"%",width:Math.max(3,(item.endMs-item.startMs)/scale*100)+"%",touchAction:"none"}} onPointerDown={event=>beginOverlayTimelineMove(event,item)} onPointerMove={moveOverlayOnTimeline} onPointerUp={endOverlayTimelineDrag} onPointerCancel={endOverlayTimelineDrag} onClick={()=>{if(overlayTimelineDidMoveRef.current){overlayTimelineDidMoveRef.current=false;return;}setSelectedOverlayId(item.id);setSelectedMotionId(null);setSelectedId(null);seekTo(item.startMs);}}><span className="image-overlay-trim-edge left" onPointerDown={event=>beginOverlayTimelineTrim(event,item,"start")} onPointerMove={moveOverlayOnTimeline} onPointerUp={endOverlayTimelineDrag} onPointerCancel={endOverlayTimelineDrag}/><b>▧ {assets.find(asset=>asset.id===item.assetId)?.name||"Imagem livre"}</b><small>{timeLabel(item.endMs-item.startMs)}</small><span className="image-overlay-trim-edge right" onPointerDown={event=>beginOverlayTimelineTrim(event,item,"end")} onPointerMove={moveOverlayOnTimeline} onPointerUp={endOverlayTimelineDrag} onPointerCancel={endOverlayTimelineDrag}/></button>)}
           {!imageOverlays.length&&<span className="track-hint">Adicione imagens livres para organizá-las nesta faixa</span>}<div className="timeline-cursor" style={{left:playheadMs/scale*100+"%"}}/>
         </div></div>
+        <div className="motion-track-row timeline-motion-row transcript-track-row"><div className="track-label">TRANSCRIÇÃO</div><div className="track-clips timeline-canvas motion-timeline transcript-timeline" style={{width:Math.max(100,timelineZoom)+"%"}} onClick={event=>{if((event.target as HTMLElement).closest(".motion-timeline-clip"))return;const rect=event.currentTarget.getBoundingClientRect();if(!rect.width)return;const atMs=Math.max(0,Math.min(scale,((event.clientX-rect.left)/rect.width)*scale));setTimelineInsertAtMs(atMs);setPlayheadMs(atMs);setPreviewTick(value=>value+1);stopPlayback();}} onDragOver={event=>event.preventDefault()} onDrop={event=>{event.preventDefault();const id=event.dataTransfer.getData("text/motion-graphic-id");if(!id)return;const rect=event.currentTarget.getBoundingClientRect();updateMotion(id,{startMs:Math.max(0,(event.clientX-rect.left)/rect.width*scale)});}}>
+          {motion.filter(item=>item.isCaption).map(item=><button key={item.id} type="button" className={"motion-timeline-clip transcript-timeline-clip"+(selectedMotionId===item.id?" selected":"")} style={{left:item.startMs/scale*100+"%",width:Math.max(3,(item.endMs-item.startMs)/scale*100)+"%",touchAction:"none"}} onPointerDown={event=>beginMotionMove(event,item)} onPointerMove={moveMotionOnTimeline} onPointerUp={endMotionTrim} onPointerCancel={endMotionTrim} onClick={()=>{setSelectedMotionId(item.id);setSelectedId(null);seekTo(item.startMs);setActiveTool("text");}}><span className="motion-trim-edge left" onPointerDown={event=>beginMotionTrim(event,item,"start")} onPointerMove={moveMotionOnTimeline} onPointerUp={endMotionTrim} onPointerCancel={endMotionTrim}/><b>{item.captionEnglish||item.text}</b><small>{timeLabel(item.startMs)} · {item.captionTranslation?"TRADUZIDA":"ORIGINAL"}</small><span className="motion-trim-edge right" onPointerDown={event=>beginMotionTrim(event,item,"end")} onPointerMove={moveMotionOnTimeline} onPointerUp={endMotionTrim} onPointerCancel={endMotionTrim}/></button>)}
+          {!motion.some(item=>item.isCaption)&&<span className="track-hint">As legendas transcritas aparecerão nesta faixa exclusiva</span>}<div className="timeline-cursor" style={{left:playheadMs/scale*100+"%"}}/>
+        </div></div>
         <div className="motion-track-row timeline-motion-row"><div className="track-label">COMPOSIÇÕES</div><div className="track-clips timeline-canvas motion-timeline" style={{width:Math.max(100,timelineZoom)+"%"}} onClick={event=>{if((event.target as HTMLElement).closest(".motion-timeline-clip"))return;const rect=event.currentTarget.getBoundingClientRect();if(!rect.width)return;const atMs=Math.max(0,Math.min(scale,((event.clientX-rect.left)/rect.width)*scale));setTimelineInsertAtMs(atMs);setPlayheadMs(atMs);setPreviewTick(value=>value+1);stopPlayback();}} onDragOver={event=>event.preventDefault()} onDrop={event=>{event.preventDefault();const id=event.dataTransfer.getData("text/motion-graphic-id");if(!id)return;const rect=event.currentTarget.getBoundingClientRect();updateMotion(id,{startMs:Math.max(0,(event.clientX-rect.left)/rect.width*scale)});}}>
-          {motion.map(item=><button key={item.id} className={"motion-timeline-clip"+(selectedMotionId===item.id?" selected":"")+(groups.some(group=>group.members.includes(memberKeyForMotion(item.id)))?" grouped":"")+(selectedMembers.includes(memberKeyForMotion(item.id))?" multi-selected":"")} style={{left:item.startMs/scale*100+"%",width:Math.max(3,(item.endMs-item.startMs)/scale*100)+"%",touchAction:"none"}} onPointerDown={event=>beginMotionMove(event,item)} onPointerMove={moveMotionOnTimeline} onPointerUp={endMotionTrim} onPointerCancel={endMotionTrim} onClick={()=>{setSelectedMotionId(item.id);setSelectedId(null);seekTo(item.startMs);}}><span className="motion-trim-edge left" onPointerDown={event=>beginMotionTrim(event,item,"start")} onPointerMove={moveMotionOnTimeline} onPointerUp={endMotionTrim} onPointerCancel={endMotionTrim}/><b>{item.icon ? item.icon + " " : ""}{item.text}</b><small>{item.preset}</small><span className="motion-trim-edge right" onPointerDown={event=>beginMotionTrim(event,item,"end")} onPointerMove={moveMotionOnTimeline} onPointerUp={endMotionTrim} onPointerCancel={endMotionTrim}/></button>)}
+          {motion.filter(item=>!item.isCaption).map(item=><button key={item.id} className={"motion-timeline-clip"+(selectedMotionId===item.id?" selected":"")+(groups.some(group=>group.members.includes(memberKeyForMotion(item.id)))?" grouped":"")+(selectedMembers.includes(memberKeyForMotion(item.id))?" multi-selected":"")} style={{left:item.startMs/scale*100+"%",width:Math.max(3,(item.endMs-item.startMs)/scale*100)+"%",touchAction:"none"}} onPointerDown={event=>beginMotionMove(event,item)} onPointerMove={moveMotionOnTimeline} onPointerUp={endMotionTrim} onPointerCancel={endMotionTrim} onClick={()=>{setSelectedMotionId(item.id);setSelectedId(null);seekTo(item.startMs);}}><span className="motion-trim-edge left" onPointerDown={event=>beginMotionTrim(event,item,"start")} onPointerMove={moveMotionOnTimeline} onPointerUp={endMotionTrim} onPointerCancel={endMotionTrim}/><b>{item.icon ? item.icon + " " : ""}{item.text}</b><small>{item.preset}</small><span className="motion-trim-edge right" onPointerDown={event=>beginMotionTrim(event,item,"end")} onPointerMove={moveMotionOnTimeline} onPointerUp={endMotionTrim} onPointerCancel={endMotionTrim}/></button>)}
           <div className="timeline-cursor" style={{left:playheadMs/scale*100+"%"}}/>
         </div></div>
       </div>
