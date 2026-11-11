@@ -12,7 +12,7 @@ use std::{path::PathBuf, sync::{Arc, Mutex}};
 use tauri::Manager;
 
 use application::services::{MediaService, ProjectService};
-use infrastructure::{media_storage::MediaStorage, sqlite_project_repository::SqliteProjectRepository};
+use infrastructure::{media_storage::MediaStorage, sqlite_project_repository::SqliteProjectRepository, youtube_cache::YoutubeCache};
 use state::AppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -26,6 +26,8 @@ pub fn run() {
             let log_guard = logging::initialize(&app_data_directory.join("logs"))
                 .map_err(std::io::Error::other)?;
             let projects_directory = app_data_directory.join("projects");
+            let youtube_cache = YoutubeCache::new(app_data_directory.join("youtube-cache"));
+            youtube_cache.cleanup_expired().map_err(std::io::Error::other)?;
             let sound_library_directory = app_data_directory.join("sound-library");
             std::fs::create_dir_all(&sound_library_directory)?;
             let database_path: PathBuf = app_data_directory.join("tiktok-media-creator.sqlite3");
@@ -42,6 +44,7 @@ pub fn run() {
                 projects,
                 media,
                 media_storage,
+                youtube_cache,
                 sound_library_directory,
                 _log_guard: Mutex::new(Some(log_guard)),
             });
@@ -56,6 +59,8 @@ pub fn run() {
             commands::import_media_files,
             commands::inspect_youtube,
             commands::download_youtube,
+            commands::prepare_youtube_cache,
+            commands::trim_youtube_cache,
             commands::check_ffmpeg,
             commands::list_global_sounds,
             commands::import_global_sound,
