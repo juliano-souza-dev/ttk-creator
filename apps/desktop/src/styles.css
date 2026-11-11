@@ -617,3 +617,20 @@
 .youtube-cache-note{display:flex;align-items:flex-start;gap:8px;margin-top:15px;padding:11px;border:1px solid #4a3d60;border-radius:7px;background:#211b2b;color:#c7b6e4;font-size:9px;line-height:1.5}
 .youtube-cache-note svg{flex:none}
 @media(max-width:650px){.youtube-trim-dialog{padding:16px}.youtube-trim-header h2{font-size:19px}.youtube-trim-time{flex-wrap:wrap}.youtube-trim-time span{min-width:28%}}
+
+
+/* Dedicated transcript lane and contextual subtitle translation */
+.timeline-lanes .transcript-track-row{border-top-color:#34453f}
+.timeline-lanes .transcript-track-row .track-label{color:#a8d8c7;background:#17231f}
+.timeline-lanes .transcript-timeline{background-color:#17211e!important}
+.timeline-lanes .transcript-timeline-clip{border-color:#4b9c83;background:linear-gradient(120deg,#286b58,#1d433b)}
+.timeline-lanes .transcript-timeline-clip.selected{outline-color:#a1ead2}
+.timeline-lanes .transcript-timeline-clip small{color:#b9e9d8}
+.transcription-clip-action{display:flex;align-items:center;justify-content:center;gap:7px;width:100%;min-height:34px;margin:2px 0 10px;font-size:10px}
+.caption-translate-actions{display:grid;gap:8px;margin:0 0 12px;padding:11px;border:1px solid #3d594e;border-radius:7px;background:#18241f}
+.caption-translate-actions>b{color:#c9ebdc;font:600 11px 'Space Grotesk'}
+.caption-translate-actions>small{color:#9eafa6;font-size:9px;line-height:1.45}
+.caption-translate-actions>div{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.caption-translate-actions .secondary-action{justify-content:center;min-height:31px;padding:6px;font-size:9px}
+.caption-translate-actions .is-error{color:#f0a6a6}
+.caption-translate-actions .is-success{color:#9dd9b5}
