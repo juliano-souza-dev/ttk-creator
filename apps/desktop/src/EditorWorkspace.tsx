@@ -840,6 +840,15 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
   }
   useEffect(() => {
     if (!playing) return;
+    for (const item of imageOverlays) {
+      if (item.soundId && soundUrls[item.soundId] && playheadMs >= item.startMs && playheadMs < item.startMs + 100 && lastMotionSounds.current[item.id] !== item.startMs) {
+        lastMotionSounds.current[item.id] = item.startMs;
+        const player = new Audio(soundUrls[item.soundId]);
+        player.volume = Math.max(0, Math.min(1, item.soundVolume / 100));
+        motionSoundPlayers.current[item.id] = player;
+        void player.play().catch(() => setLoadError("Não foi possível reproduzir o efeito sonoro da imagem."));
+      }
+    }
     for (const item of motion) {
       if (item.soundId && soundUrls[item.soundId] && playheadMs >= item.startMs && playheadMs < item.startMs + 100 && lastMotionSounds.current[item.id] !== item.startMs) {
         lastMotionSounds.current[item.id] = item.startMs;
@@ -849,7 +858,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
         void player.play().catch(() => setLoadError("Não foi possível reproduzir o efeito sonoro."));
       }
     }
-  }, [playheadMs, playing, motion, soundUrls]);
+  }, [playheadMs, playing, motion, imageOverlays, soundUrls]);
   function updateClip(id: string, patch: Partial<TimelineClip>) {
     setClips(current => current.map(clip => clip.id === id ? { ...clip, ...patch } : clip));
   }
