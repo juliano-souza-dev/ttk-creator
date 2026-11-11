@@ -24,6 +24,7 @@ type TimelineClip = {
   transitionType?: "fade-black" | "fade-white" | "flash";
 };
 type TimelineGroup = { id: string; name: string; members: string[] };
+type ImageOverlay = { id:string; assetId:string; startMs:number; endMs:number; x:number; y:number; width:number; height:number; soundId?:string; soundVolume:number };
 type Props = { projectId: string; assets: MediaAsset[]; onAddMedia: () => void; onOpenTranscription?: () => void };
 type TrimDrag = { clipId: string; edge: "start" | "end"; startX: number; sourceStartMs: number; sourceEndMs: number; timelineStartMs: number; scaleMs: number };
 type ClipMoveDrag = { clipId: string; startX: number; lastX: number; timelineStartMs: number; memberKeys: string[] };
@@ -169,6 +170,10 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const motionKey = "ttk-creator:motion:" + projectId;
   const [motion, setMotion] = useState<MotionGraphic[]>([]);
+  const overlayKey = `ttk-creator:image-overlays:${projectId}`;
+  const [imageOverlays,setImageOverlays]=useState<ImageOverlay[]>([]);
+  const [selectedOverlayId,setSelectedOverlayId]=useState<string|null>(null);
+  const overlayDrag=useRef<{id:string;mode:"move"|"resize";startX:number;startY:number;x:number;y:number;width:number;height:number;ratio:number}|null>(null);
 
   useEffect(() => {
     const onTranscript = (event: Event) => {
@@ -320,6 +325,8 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
     catch { setMotion([]); }
   }, [motionKey]);
   useEffect(() => { if (loadedStorageKey === storageKey) window.localStorage.setItem(motionKey, JSON.stringify(motion)); }, [motionKey, motion, loadedStorageKey, storageKey]);
+  useEffect(()=>{try{const raw=localStorage.getItem(overlayKey);const parsed=raw?JSON.parse(raw):[];setImageOverlays(Array.isArray(parsed)?parsed:[]);}catch{setImageOverlays([]);}},[overlayKey]);
+  useEffect(()=>{if(loadedStorageKey===storageKey)localStorage.setItem(overlayKey,JSON.stringify(imageOverlays));},[overlayKey,imageOverlays,loadedStorageKey,storageKey]);
   const lastSessionSaveAt = useRef(0);
   useEffect(() => {
     if (loadedStorageKey !== storageKey) return;
@@ -471,7 +478,9 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
     return () => { cancelled = true; };
   }, [assets, projectId, mediaUrls]);
 
-  const totalDuration = Math.max(clips.reduce((max, clip) => Math.max(max, clipEnd(clip)), 0), motion.reduce((max, item) => Math.max(max, item.endMs), 0));
+  const totalDuration = Math.max(clips.reduce((max, clip) => Math.max(max, clipEnd(clip)), 0), motion.reduce((max, item) => Math.max(max, item.endMs), 0), imageOverlays.reduce((max,item)=>Math.max(max,item.endMs),0));
+  const selectedOverlay=imageOverlays.find(item=>item.id===selectedOverlayId)??null;
+  const activeOverlays=imageOverlays.filter(item=>playheadMs>=item.startMs&&playheadMs<item.endMs);
   const selectedMotion = motion.find(item => item.id === selectedMotionId) ?? null;
   const activeMotion = motion.filter(item => playheadMs >= item.startMs && playheadMs < item.endMs);
   const selectedClip = clips.find(clip => clip.id === selectedId) ?? clips[0] ?? null;
@@ -619,10 +628,11 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
       });
       await desktopApi.exportTimeline({
         projectId,
+        imageOverlays: imageOverlays.map(item=>({assetId:item.assetId,startMs:item.startMs,endMs:item.endMs,x:item.x,y:item.y,width:item.width,height:item.height,soundId:item.soundId||"",soundVolume:item.soundVolume})),
         destination,
         clips: exportClips,
         motion: await Promise.all(motion.map(async item => ({startMs:item.startMs,endMs:item.endMs,durationMs:item.durationMs,preset:item.preset,x:item.x,y:item.y,text:item.isCaption ? (item.captionMode === "source" ? (item.captionEnglish || item.text) : [item.captionEnglish || item.text, item.captionTranslation].filter(Boolean).join("\n")) : (item.icon ? item.icon + " " : "") + item.text,color:item.color,fontSize:item.fontSize,fontFamily:item.fontFamily || "Arial",fontWeight:item.fontWeight || 900,textAlign:item.textAlign || "center",isCaption:!!item.isCaption,lucideIconPng:item.lucideIconName && lucideIconLibrary[item.lucideIconName as LucideIconName] ? await renderLucideIconPng(item.lucideIconName as LucideIconName,item.lucideIconColor || item.accent,Math.max(24,Math.min(512,Math.round(item.lucideIconSize ?? item.fontSize)))) : undefined,lucideIconAnchor:item.lucideIconAnchor || "left",lucideIconSize:Math.max(24,Math.min(512,Math.round(item.lucideIconSize ?? item.fontSize))),...getLucideIconExportOffset(item,Math.max(24,Math.min(512,Math.round(item.lucideIconSize ?? item.fontSize))))}))),
-        soundEffects: motion.filter(item => !!item.soundId).map(item => ({ soundId: item.soundId!, timelineStartMs: item.startMs, volume: item.soundVolume ?? 80 })),
+        soundEffects: [...motion.filter(item => !!item.soundId).map(item => ({ soundId: item.soundId!, timelineStartMs: item.startMs, volume: item.soundVolume ?? 80 })), ...imageOverlays.filter(item=>!!item.soundId).map(item=>({soundId:item.soundId!,timelineStartMs:item.startMs,volume:item.soundVolume}))],
       });
       setExportProgress(100);
     } catch (error) {
@@ -633,6 +643,12 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
     }
   }
 
+  async function addImageOverlay(){try{const selected=await open({multiple:false,filters:[{name:"Imagens",extensions:["png","jpg","jpeg","webp","gif"]}]});if(!selected||Array.isArray(selected))return;const imported=await desktopApi.importMediaFiles(projectId,[selected]);const asset=imported.find(item=>item.kind==="image");if(!asset)throw new Error("A mídia selecionada não é uma imagem.");const url=convertFileSrc(await desktopApi.getAssetPath(projectId,asset.id));setMediaUrls(current=>({...current,[asset.id]:url}));const overlay:ImageOverlay={id:crypto.randomUUID(),assetId:asset.id,startMs:playheadMs,endMs:playheadMs+3000,x:50,y:50,width:420,height:420,soundId:"",soundVolume:80};setImageOverlays(current=>[...current,overlay]);setSelectedOverlayId(overlay.id);setSelectedMotionId(null);setSelectedId(null);stopPlayback();}catch(error){setExportMessage("Não foi possível adicionar a imagem: "+String(error));}}
+  function updateOverlay(id:string,patch:Partial<ImageOverlay>){setImageOverlays(current=>current.map(item=>item.id===id?{...item,...patch}:item));}
+  function removeOverlay(id:string){setImageOverlays(current=>current.filter(item=>item.id!==id));setSelectedOverlayId(null);}
+  function overlayPointerDown(event:ReactPointerEvent<HTMLDivElement>,item:ImageOverlay,mode:"move"|"resize"){event.preventDefault();event.stopPropagation();event.currentTarget.setPointerCapture(event.pointerId);overlayDrag.current={id:item.id,mode,startX:event.clientX,startY:event.clientY,x:item.x,y:item.y,width:item.width,height:item.height,ratio:item.width/Math.max(1,item.height)};setSelectedOverlayId(item.id);setSelectedMotionId(null);setSelectedId(null);}
+  function overlayPointerMove(event:ReactPointerEvent<HTMLDivElement>){const drag=overlayDrag.current;if(!drag||!event.currentTarget.hasPointerCapture(event.pointerId))return;const rect=previewFrameRef.current?.getBoundingClientRect();if(!rect)return;if(drag.mode==="move"){updateOverlay(drag.id,{x:Math.max(0,Math.min(100,drag.x+(event.clientX-drag.startX)/rect.width*100)),y:Math.max(0,Math.min(100,drag.y+(event.clientY-drag.startY)/rect.height*100)});}else{const dx=(event.clientX-drag.startX)/rect.width*1080;const dy=(event.clientY-drag.startY)/rect.height*1920;const delta=Math.abs(dx)>Math.abs(dy*drag.ratio)?dx:dy*drag.ratio;const width=Math.max(60,Math.min(1080,drag.width+delta));updateOverlay(drag.id,{width,height:width/drag.ratio});}}
+  function overlayPointerUp(event:ReactPointerEvent<HTMLDivElement>){overlayDrag.current=null;if(event.currentTarget.hasPointerCapture(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId);}
   function addMotion(preset: MotionGraphic["preset"]) {
     const item: MotionGraphic = { id: crypto.randomUUID(), text: preset === "typewriter" ? "YOUR WORD" : "WATCH", icon: "", fontFamily: "Arial", fontWeight: 900, textAlign: "center", startMs: playheadMs, endMs: playheadMs + 3000, durationMs: 3000, preset, color: "#ffffff", accent: "#65d6c0", fontSize: 64, x: 50, y: 50, sound: "none", soundId: "", soundVolume: 80 };
     setMotion(current => [...current, item]); setSelectedMotionId(item.id); stopPlayback();
@@ -1184,6 +1200,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
           previewAsset.kind === "video" ? <video key={previewAsset.id} ref={videoRef} src={previewUrl} muted={!!previewClip?.muted} controls={!playing} style={{ opacity: previewOpacity, transition: "opacity 40ms linear" }} onError={() => setLoadError("Formato não suportado pelo preview do sistema.")}/> :
           previewAsset.kind === "audio" ? <div className="audio-preview"><AudioLines size={48}/><b>{previewAsset.name}</b><span>Áudio na timeline</span></div> :
           <img src={previewUrl} alt={previewAsset.name} style={{ opacity: previewOpacity, transform: cameraTransform, transition: "opacity 40ms linear" }}/>} {transitionWhiteOpacity > 0 && <div className="transition-preview-white" style={{opacity:transitionWhiteOpacity}}/>}
+        {activeOverlays.map(item=>{const url=mediaUrls[item.assetId];if(!url)return null;return <div key={item.id} className={"image-overlay-preview"+(selectedOverlayId===item.id?" selected":"")} style={{left:item.x+"%",top:item.y+"%",width:item.width*previewScale,height:item.height*previewScale}} onPointerDown={event=>overlayPointerDown(event,item,"move")} onPointerMove={overlayPointerMove} onPointerUp={overlayPointerUp} onPointerCancel={overlayPointerUp}><img src={url} alt="Imagem sobreposta" draggable={false}/>{selectedOverlayId===item.id&&<span className="image-overlay-handle" onPointerDown={event=>{event.stopPropagation();overlayPointerDown(event as unknown as ReactPointerEvent<HTMLDivElement>,item,"resize");}}/>}</div>;})}
         {activeMotion.map(item => {
           const animation = motionPreviewState(item, playheadMs);
           return <div key={item.id} className={"motion-overlay motion-" + item.preset + (selectedMotionId === item.id ? " motion-selected" : "")} style={{ "--motion-color": item.color, "--motion-accent": item.accent, "--motion-size": (item.fontSize * previewScale) + "px", "--motion-x": item.x + "%", "--motion-y": item.y + "%" , transform: item.textAlign === "left" ? "translate(0,-50%)" : item.textAlign === "right" ? "translate(-100%,-50%)" : "translate(-50%,-50%)" } as CSSProperties}>
@@ -1203,7 +1220,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
       {exporting && <div className="export-progress" role="status" aria-label={`Exportando vídeo: ${Math.floor(exportProgress)}%`}><div className="export-progress-track"><div className="export-progress-fill" style={{ width: `${exportProgress}%` }}/></div><span>{Math.floor(exportProgress)}%</span></div>}{exportMessage && <div className="export-status export-error" role="alert">{exportMessage}</div>}
     </section>
     <aside className="editor-properties">
-      {selectedMotion ? <>
+      {selectedOverlay ? <><div className="editor-panel-head"><div><b>Imagem sobreposta</b><small>Camada independente</small></div></div><div className="properties-scroll"><div className="property-section"><b>Dimensões proporcionais</b><label>Largura <strong>{Math.round(selectedOverlay.width)} px</strong><input type="range" min="60" max="1080" value={selectedOverlay.width} onChange={event=>{const width=Number(event.target.value);updateOverlay(selectedOverlay.id,{width,height:width/(selectedOverlay.width/Math.max(1,selectedOverlay.height))});}}/></label><small>Arraste a alça no canto inferior direito para redimensionar diretamente no preview.</small></div><div className="property-section"><b>Tempo</b><label>Início (s)<input type="number" min="0" step="0.1" value={(selectedOverlay.startMs/1000).toFixed(1)} onChange={event=>updateOverlay(selectedOverlay.id,{startMs:Math.max(0,Number(event.target.value)*1000)})}/></label><label>Saída (s)<input type="number" min={(selectedOverlay.startMs+300)/1000} step="0.1" value={(selectedOverlay.endMs/1000).toFixed(1)} onChange={event=>updateOverlay(selectedOverlay.id,{endMs:Math.max(selectedOverlay.startMs+300,Number(event.target.value)*1000)})}/></label></div><div className="property-section"><b>Efeito sonoro da imagem</b><label>Som<select value={selectedOverlay.soundId||""} onChange={event=>updateOverlay(selectedOverlay.id,{soundId:event.target.value})}><option value="">Sem efeito sonoro</option>{globalSounds.map(sound=><option key={sound.id} value={sound.id}>{sound.name}</option>)}</select></label><label>Volume <strong>{selectedOverlay.soundVolume}%</strong><input type="range" min="0" max="100" value={selectedOverlay.soundVolume} onChange={event=>updateOverlay(selectedOverlay.id,{soundVolume:Number(event.target.value)})}/></label></div><div className="property-section"><b>Posição</b><label>Horizontal (%)<input type="range" min="0" max="100" value={selectedOverlay.x} onChange={event=>updateOverlay(selectedOverlay.id,{x:Number(event.target.value)})}/></label><label>Vertical (%)<input type="range" min="0" max="100" value={selectedOverlay.y} onChange={event=>updateOverlay(selectedOverlay.id,{y:Number(event.target.value)})}/></label></div><button className="danger-action property-delete" onClick={()=>removeOverlay(selectedOverlay.id)}>Excluir imagem</button></div></> : selectedMotion ? <>
         <div className="editor-panel-head"><div><b>Propriedades</b><small>Texto, tipografia e animação</small></div></div>
         <div className="properties-scroll">
           <details open className="property-section"><summary>Texto</summary>
@@ -1265,7 +1282,8 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
       <div className="timeline-toolbar">
         <div className="timeline-toolbar-actions">
           <small className="timeline-group-hint">Clique para posicionar a mídia · Ctrl + clique para agrupar</small>
-          <button className="secondary-action" onClick={createGroup} disabled={selectedMembers.length < 2}><Copy size={13}/> Agrupar ({selectedMembers.length})</button>
+          <button className="secondary-action" onClick={()=>void addImageOverlay()}><Image size={13}/> Imagem sobreposta</button>
+          <button className="secondary-action" onClick={createGroup> disabled={selectedMembers.length < 2}><Copy size={13}/> Agrupar ({selectedMembers.length})</button>
           <button className="secondary-action" onClick={ungroupSelection} disabled={!groups.some(group => group.members.some(member => selectedMembers.includes(member)))}>Desagrupar</button>
           <button className="secondary-action" onClick={splitAtPlayhead} disabled={!clips.some(clip => playheadMs > clip.timelineStartMs + 250 && playheadMs < clipEnd(clip) - 250)} title="Divide o clipe selecionado ou o clipe sob o cursor, seja vídeo ou áudio"><Scissors size={13}/> Dividir no cursor</button>
           <button className="secondary-action" onClick={() => selectedClip && duplicateClip(selectedClip)} disabled={!selectedClip}><Copy size={13}/> Duplicar</button>
@@ -1285,7 +1303,8 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
           {!audioClips.length&&<span className="track-hint">Arraste um áudio para cá. Ele tocará junto com o vídeo</span>}<div className="timeline-cursor" style={{left:playheadMs/scale*100+"%"}}/>
         </div></div>
         <div className="motion-track-row timeline-motion-row"><div className="track-label">COMPOSIÇÕES</div><div className="track-clips timeline-canvas motion-timeline" style={{width:Math.max(100,timelineZoom)+"%"}} onClick={event=>{if((event.target as HTMLElement).closest(".motion-timeline-clip"))return;const rect=event.currentTarget.getBoundingClientRect();if(!rect.width)return;const atMs=Math.max(0,Math.min(scale,((event.clientX-rect.left)/rect.width)*scale));setTimelineInsertAtMs(atMs);setPlayheadMs(atMs);setPreviewTick(value=>value+1);stopPlayback();}} onDragOver={event=>event.preventDefault()} onDrop={event=>{event.preventDefault();const id=event.dataTransfer.getData("text/motion-graphic-id");if(!id)return;const rect=event.currentTarget.getBoundingClientRect();updateMotion(id,{startMs:Math.max(0,(event.clientX-rect.left)/rect.width*scale)});}}>
-          {motion.map(item=><button key={item.id} className={"motion-timeline-clip"+(selectedMotionId===item.id?" selected":"")+(groups.some(group=>group.members.includes(memberKeyForMotion(item.id)))?" grouped":"")+(selectedMembers.includes(memberKeyForMotion(item.id))?" multi-selected":"")} style={{left:item.startMs/scale*100+"%",width:Math.max(3,(item.endMs-item.startMs)/scale*100)+"%",touchAction:"none"}} onPointerDown={event=>beginMotionMove(event,item)} onPointerMove={moveMotionOnTimeline} onPointerUp={endMotionTrim} onPointerCancel={endMotionTrim} onClick={()=>{setSelectedMotionId(item.id);setSelectedId(null);seekTo(item.startMs);}}><span className="motion-trim-edge left" onPointerDown={event=>beginMotionTrim(event,item,"start")} onPointerMove={moveMotionOnTimeline} onPointerUp={endMotionTrim} onPointerCancel={endMotionTrim}/><b>{item.icon ? item.icon + " " : ""}{item.text}</b><small>{item.preset}</small><span className="motion-trim-edge right" onPointerDown={event=>beginMotionTrim(event,item,"end")} onPointerMove={moveMotionOnTimeline} onPointerUp={endMotionTrim} onPointerCancel={endMotionTrim}/></button>)}
+          {imageOverlays.map(item=><button key={item.id} className={"motion-timeline-clip image-overlay-timeline"+(selectedOverlayId===item.id?" selected":"")} style={{left:item.startMs/scale*100+"%",width:Math.max(3,(item.endMs-item.startMs)/scale*100)+"%"}} onClick={()=>{setSelectedOverlayId(item.id);setSelectedMotionId(null);setSelectedId(null);seekTo(item.startMs);}}><b>▧ Imagem sobreposta</b><small>{timeLabel(item.endMs-item.startMs)}</small></button>)}
+          {motion.map(item=><button key={item.id> className={"motion-timeline-clip"+(selectedMotionId===item.id?" selected":"")+(groups.some(group=>group.members.includes(memberKeyForMotion(item.id)))?" grouped":"")+(selectedMembers.includes(memberKeyForMotion(item.id))?" multi-selected":"")} style={{left:item.startMs/scale*100+"%",width:Math.max(3,(item.endMs-item.startMs)/scale*100)+"%",touchAction:"none"}} onPointerDown={event=>beginMotionMove(event,item)} onPointerMove={moveMotionOnTimeline} onPointerUp={endMotionTrim} onPointerCancel={endMotionTrim} onClick={()=>{setSelectedMotionId(item.id);setSelectedId(null);seekTo(item.startMs);}}><span className="motion-trim-edge left" onPointerDown={event=>beginMotionTrim(event,item,"start")} onPointerMove={moveMotionOnTimeline} onPointerUp={endMotionTrim} onPointerCancel={endMotionTrim}/><b>{item.icon ? item.icon + " " : ""}{item.text}</b><small>{item.preset}</small><span className="motion-trim-edge right" onPointerDown={event=>beginMotionTrim(event,item,"end")} onPointerMove={moveMotionOnTimeline} onPointerUp={endMotionTrim} onPointerCancel={endMotionTrim}/></button>)}
           <div className="timeline-cursor" style={{left:playheadMs/scale*100+"%"}}/>
         </div></div>
       </div>
