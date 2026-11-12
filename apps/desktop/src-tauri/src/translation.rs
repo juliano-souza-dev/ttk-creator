@@ -112,11 +112,11 @@ fn read_settings(app: &AppHandle) -> Result<GroqSettings, String> {
     let mut settings = if path.exists() {
         serde_json::from_slice::<GroqSettings>(&std::fs::read(path).map_err(|e| e.to_string())?).unwrap_or_default()
     } else { GroqSettings::default() };
-    settings.configured = api_key(app).is_ok();
+    settings.configured = resolve_api_key(app).is_ok();
     Ok(settings)
 }
 
-pub(crate) fn api_key(app: &AppHandle) -> Result<String, String> {
+pub(crate) fn resolve_api_key(app: &AppHandle) -> Result<String, String> {
     if let Some(entry) = shared_provider_entry(app)? {
         return entry.get_password()
             .map_err(|error| format!("A credencial Groq não foi encontrada no Shared Runtime. Cadastre-a uma única vez pelo Shared Runtime Manager. Detalhe: {error}"));
@@ -136,7 +136,7 @@ pub fn save_groq_settings(app: AppHandle, api_key: String, model: String, max_ch
     if !api_key.trim().is_empty() && (api_key.trim().len() < 20 || !api_key.trim().starts_with("gsk_")) {
         return Err("Informe uma chave Groq válida (ela normalmente começa com gsk_).".into());
     }
-    if api_key.trim().is_empty() && api_key(&app).is_err() {
+    if api_key.trim().is_empty() && resolve_api_key(&app).is_err() {
         return Err("A chave Groq não está disponível no Shared Runtime. Cadastre-a no Gerenciador Global de APIs.".into());
     }
     let model = model.trim();
