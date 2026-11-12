@@ -220,6 +220,16 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
     setCaptions(nextCaptions);
     setMotionOrder(next.map(item => item.id));
   }, [textLayers, captions, motion]);
+  function appendTextLayers(items: MotionGraphic[]) {
+    if (!items.length) return;
+    setTextLayers(current => [...current, ...items]);
+    setMotionOrder(current => [...current, ...items.map(item => item.id)]);
+  }
+  function appendCaptions(items: MotionGraphic[]) {
+    if (!items.length) return;
+    setCaptions(current => [...current, ...items]);
+    setMotionOrder(current => [...current, ...items.map(item => item.id)]);
+  }
   const overlayKey = `ttk-creator:image-overlays:${projectId}`;
   const [imageOverlays,setImageOverlays]=useState<ImageOverlay[]>([]);
   const [selectedOverlayId,setSelectedOverlayId]=useState<string|null>(null);
@@ -276,7 +286,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
         soundVolume: 80,
       };
       });
-      setCaptions(current => [...current, ...created]);
+      appendCaptions(created);
       setSelectedMotionId(created[0]?.id ?? null);
       if (created.length) setPlayheadMs(created[0].startMs);
       setActiveTool("captions");
@@ -790,7 +800,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
   function overlayPointerUp(event:ReactPointerEvent<HTMLDivElement>){overlayDrag.current=null;if(event.currentTarget.hasPointerCapture(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId);}
   function addMotion(preset: MotionGraphic["preset"]) {
     const item: MotionGraphic = { id: crypto.randomUUID(), text: preset === "typewriter" ? "YOUR WORD" : "WATCH", icon: "", fontFamily: "Arial", fontWeight: 900, textAlign: "center", startMs: playheadMs, endMs: playheadMs + 3000, durationMs: 3000, preset, typewriterDurationMs: 1500, color: "#ffffff", accent: "#65d6c0", fontSize: 64, x: 50, y: 50, sound: "none", soundId: "", soundVolume: 80 };
-    setTextLayers(current => [...current, item]); setSelectedMotionId(item.id); stopPlayback();
+    appendTextLayers([item]); setSelectedMotionId(item.id); stopPlayback();
   }
   function updateMotion(id: string, patch: Partial<MotionGraphic>) {
     const applyPatch = (current: MotionGraphic[]) => current.map(item => {
@@ -1017,7 +1027,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
           };
         }),
       );
-      setTextLayers(current => [...current, ...created]);
+      appendTextLayers(created);
       setSelectedMotionId(created[0]?.id ?? null);
       setActiveTool("text");
       const hasPendingMetadata = parsed.scenes.some(scene => !!scene.audio || !!scene.character || !!scene.captions?.enabled);
