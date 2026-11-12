@@ -744,9 +744,17 @@ pub async fn export_timeline(
             let duration_ms = if item.duration_ms > 0 { item.duration_ms.min(item.end_ms.saturating_sub(item.start_ms)) } else { item.end_ms.saturating_sub(item.start_ms) };
             let duration = (duration_ms.max(1) as f64) / 1000.0;
             let writing_duration = (if item.typewriter_duration_ms > 0 { item.typewriter_duration_ms.min(duration_ms) } else { 1500.min(duration_ms.max(100)) }.max(100) as f64) / 1000.0;
-            let caption_box = if item.is_caption { format!(":box=1:boxcolor=black@0.76:boxborderw={}:boxw=972:text_align=MC", (item.font_size.clamp(18, 180) / 3).max(6)) } else { String::new() };
-            // Captions occupy the full 90% safe width (x=54..1026 at 1080p).
-            let caption_x = if item.is_caption { "54".to_string() } else { base_x.clone() };
+            // Use only long-supported drawtext options. `boxw` and `text_align`
+            // are unavailable in some bundled FFmpeg builds (notably older Windows
+            // builds), so center the text with the x expression and let drawtext
+            // size its background box to the wrapped text.
+            let caption_box = if item.is_caption {
+                format!(":box=1:boxcolor=black@0.76:boxborderw={}", (item.font_size.clamp(18, 180) / 3).max(6))
+            } else {
+                String::new()
+            };
+            // Keep caption text centered inside the 90% safe width (x=54..1026).
+            let caption_x = if item.is_caption { "54+(972-text_w)/2".to_string() } else { base_x.clone() };
 
             // Karaoke captions are exported as a stable full-text base plus timed
             // accent overlays for each transcribed word. The word timestamps are
