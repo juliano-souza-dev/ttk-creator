@@ -412,10 +412,16 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
       const storedText = textRaw ? JSON.parse(textRaw) : [];
       const storedCaptions = captionsRaw ? JSON.parse(captionsRaw) : [];
       const legacy = legacyRaw ? JSON.parse(legacyRaw) : [];
+      const separated = [...(Array.isArray(storedText) ? storedText : []), ...(Array.isArray(storedCaptions) ? storedCaptions : [])];
+      // The first split release could create empty separated stores while the old
+      // combined store still contained the user's layers. Recover that data once,
+      // then remove the legacy key so deleted layers are never resurrected.
+      const migrateLegacy = orderRaw === null && Array.isArray(legacy) && legacy.length > 0;
       const source = hasSeparatedData
-        ? [...(Array.isArray(storedText) ? storedText : []), ...(Array.isArray(storedCaptions) ? storedCaptions : [])]
+        ? (migrateLegacy ? [...legacy, ...separated] : separated)
         : (Array.isArray(legacy) ? legacy : []);
-      const normalized = source.map((item: MotionGraphic) => {
+      const uniqueSource = [...new Map(source.filter((item: MotionGraphic) => !!item?.id).map((item: MotionGraphic) => [item.id, item])).values()];
+      const normalized = uniqueSource.map((item: MotionGraphic) => {
         const startMs = Math.max(0, Number(item.startMs) || 0);
         const legacyDuration = Math.max(300, Number(item.durationMs) || 1800);
         const endMs = Number.isFinite(item.endMs) ? Math.max(startMs + 300, Number(item.endMs)) : startMs + legacyDuration;
@@ -427,6 +433,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
       setCaptions(normalized.filter(item => !!item.isCaption));
       const savedOrder = orderRaw ? JSON.parse(orderRaw) : null;
       setMotionOrder(Array.isArray(savedOrder) ? savedOrder.filter((id: unknown) => typeof id === "string") : normalized.map(item => item.id));
+      if (migrateLegacy) window.localStorage.removeItem(motionKey);
     } catch {
       setTextLayers([]);
       setCaptions([]);
