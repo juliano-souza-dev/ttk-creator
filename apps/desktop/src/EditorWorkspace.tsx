@@ -17,6 +17,7 @@ import { parseSuperJsonCues, sceneSpecToMotionGraphics } from "./features/motion
 import { lucideIconLibrary, lucideIconNames, lucideIconPickerNames, renderLucideIconPng } from "./features/motion-graphics/icon-library";
 import type { LucideIconName } from "./features/motion-graphics/icon-library";
 import { captionStyleFrom, duplicateCaption, mergeCaptions, splitCaption } from "./features/motion-graphics/caption-editing";
+import { transcriptToCaptions } from "./features/motion-graphics/transcript-import";
 export { supportedLucideIconNames } from "./features/motion-graphics/icon-library";
 
 import { AudioLines, Film, Plus, Play, Pause, Trash2, Scissors, Copy, SkipBack, SkipForward, Volume2, VolumeX, Music2, Type, WandSparkles, MousePointer2, ChevronLeft, ChevronRight, Download, LoaderCircle, PanelsTopLeft, FileJson, Upload, Eye, Camera, BookOpen, Headphones, Lightbulb, Clock3, MessageCircle, CheckCircle2, Globe2, Heart, Star, Zap, Target, Search, Image, Music, Mic, Video, PlayCircle, AlertCircle, ArrowRight, CircleHelp, Sparkles, Trophy, Rocket, Smile, ThumbsUp, Bookmark, MapPin, Coffee, Sun, Moon, Cloud, Flame, ShieldCheck, Languages, GraduationCap, Pencil, Bell, CalendarDays, RotateCcw, Maximize, Minimize, Captions, Clapperboard, MicOff, Presentation, Monitor, Smartphone, Home, Menu, X, XCircle, Check, Award, Medal, Flag, Info, AlertTriangle, Timer, Brain, Puzzle, Calculator, Hash, BarChart3, PieChart, Palette, Shapes, Share2, Settings, User, Users, Minus, Layers, List, Map as MapIcon } from "lucide-react";
@@ -80,50 +81,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
     const onTranscript = (event: Event) => {
       const detail = (event as CustomEvent<{ projectId: string; result: TranscriptResult; context?: { clipId: string; timelineStartMs: number; sourceStartMs: number; sourceEndMs: number } }>).detail;
       if (!detail || detail.projectId !== projectId) return;
-      const context = detail.context;
-      const selectedCues = detail.result.cues.filter(cue => !context || (cue.endMs > context.sourceStartMs && cue.startMs < context.sourceEndMs));
-      const created: MotionGraphic[] = selectedCues.map(cue => {
-        const sourceStart = context ? Math.max(cue.startMs, context.sourceStartMs) : cue.startMs;
-        const sourceEnd = context ? Math.min(cue.endMs, context.sourceEndMs) : cue.endMs;
-        const timelineStart = context ? context.timelineStartMs + sourceStart - context.sourceStartMs : sourceStart;
-        const timelineEnd = timelineStart + Math.max(300, sourceEnd - sourceStart);
-        const words = cue.words.filter(word => word.endMs > sourceStart && word.startMs < sourceEnd).map(word => ({
-          text: word.text,
-          startMs: timelineStart + Math.max(word.startMs, sourceStart) - sourceStart,
-          endMs: timelineStart + Math.min(word.endMs, sourceEnd) - sourceStart,
-        }));
-        return {
-        id: crypto.randomUUID(),
-        isCaption: true,
-        captionMode: words.length ? "karaoke" : "source",
-        captionEnglish: cue.text,
-        captionSourceLanguage: detail.result.language || "auto",
-        captionTranslationLanguage: "",
-        captionTranslation: "",
-        captionWords: words,
-        captionBackgroundColor: "#000000",
-        captionBackgroundOpacity: 0.76,
-        captionWidth: 90,
-                captionPaddingEm: 0.32,
-        text: cue.text,
-        icon: "",
-        fontFamily: "Arial",
-        fontWeight: 900,
-        textAlign: "center",
-        startMs: timelineStart,
-        endMs: timelineEnd,
-        durationMs: timelineEnd - timelineStart,
-        preset: "pop",
-        color: "#ffffff",
-        accent: "#65d6c0",
-        fontSize: 48,
-        x: 50,
-        y: 82,
-        sound: "none",
-        soundId: "",
-        soundVolume: 80,
-      };
-      });
+      const created = transcriptToCaptions(detail.result, detail.context); 
       appendCaptions(created);
       setSelectedMotionId(created[0]?.id ?? null);
       if (created.length) setPlayheadMs(created[0].startMs);
