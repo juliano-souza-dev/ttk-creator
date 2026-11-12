@@ -75,6 +75,7 @@ export const desktopApi = {
           sourceStartMs: Math.max(0, Math.round(clip.sourceStartMs)),
           sourceEndMs: Math.max(0, Math.round(clip.sourceEndMs)),
           timelineStartMs: Math.max(0, Math.round(clip.timelineStartMs)),
+          transitionMs: Math.max(0, Math.round(clip.transitionMs ?? 500)),
         })),
         soundEffects: (request.soundEffects ?? []).map((item) => ({ ...item, timelineStartMs: Math.max(0, Math.round(item.timelineStartMs)), volume: Math.max(0, Math.min(100, item.volume)) })),
         motion: request.motion.map((item) => ({
@@ -82,6 +83,13 @@ export const desktopApi = {
           startMs: Math.max(0, Math.round(item.startMs)),
           endMs: Math.max(0, Math.round(item.endMs)),
           durationMs: Math.max(1, Math.round(item.durationMs ?? (item.endMs - item.startMs))),
+          typewriterDurationMs: Math.max(1, Math.round(item.typewriterDurationMs ?? 1500)),
+          // Word-level karaoke timestamps are u64 fields in the Rust command.
+          captionWords: (item.captionWords ?? []).map((word: { text: string; startMs: number; endMs: number }) => ({
+            ...word,
+            startMs: Math.max(0, Math.round(word.startMs)),
+            endMs: Math.max(0, Math.round(word.endMs)),
+          })),
           fontSize: Math.max(1, Math.round(item.fontSize)),
         })),
       },
