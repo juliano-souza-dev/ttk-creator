@@ -59,13 +59,19 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
     () => mergeMotionLayers(textLayers, captions, motionOrder),
     [textLayers, captions, motionOrder],
   );
+  // Pointer-driven edits can fire several times before React commits a render.
+  // Keep the latest merged snapshot synchronously so consecutive moves never
+  // rebuild the collections from a stale render and drop a caption.
+  const motionRef = useRef<MotionGraphic[]>(motion);
+  motionRef.current = motion;
   const setMotion = useCallback((updater: MotionGraphic[] | ((current: MotionGraphic[]) => MotionGraphic[])) => {
-    const next = typeof updater === "function" ? updater(motion) : updater;
+    const next = typeof updater === "function" ? updater(motionRef.current) : updater;
+    motionRef.current = next;
     const separated = splitMotionLayers(next);
     setTextLayers(separated.textLayers);
     setCaptions(separated.captions);
     setMotionOrder(next.map(item => item.id));
-  }, [textLayers, captions, motion]);
+  }, []);
   function appendTextLayers(items: MotionGraphic[]) {
     if (!items.length) return;
     setTextLayers(current => [...current, ...items]);
@@ -128,6 +134,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
   const trimDragRef = useRef<TrimDrag | null>(null);
   const clipMoveDragRef = useRef<ClipMoveDrag | null>(null);
   const motionTrimDragRef = useRef<MotionTrimDrag | null>(null);
+  const motionTimelineDidMoveRef = useRef(false);
 
   // The editor preview is a scaled 1080x1920 render canvas. Font sizes therefore
   // use the exact same pixel values as FFmpeg, scaled only for the editor viewport.
@@ -283,11 +290,16 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
     translationMessage, setTranslationMessage, translationPhase, setTranslationPhase, translateCaptions,
     translateSelectedCaption, requestStopAfterCurrentBatch
   } = useCaptionTranslation({ captions, setCaptions, selectedCaption: selectedMotion, updateMotion });
-  const activeMotion = motion.filter(item => item.visible!==false && playheadMs >= item.startMs && playheadMs < item.endMs);
+  const activeMotion = motion.filter(item => !item.isCaption && item.visible!==false && playheadMs >= item.startMs && playheadMs < item.endMs);
+  const activeCaptions = captions.filter(item => item.visible!==false && playheadMs >= item.startMs && playheadMs < item.endMs);
   // Keep the selected layer visible while editing, even when its timing is adjusted.
-  if (!playing && selectedMotion && selectedMotion.visible !== false && !activeMotion.some(item => item.id === selectedMotion.id)) {
-    activeMotion.push(selectedMotion);
+  if (!playing && selectedMotion && selectedMotion.visible !== false) {
+    if (selectedMotion.isCaption && !activeCaptions.some(item => item.id === selectedMotion.id)) activeCaptions.push(selectedMotion);
+    if (!selectedMotion.isCaption && !activeMotion.some(item => item.id === selectedMotion.id)) activeMotion.push(selectedMotion);
   }
+  // Captions are rendered from their own source collection, not from the merged
+  // text/caption view. This keeps preview rendering independent from layer ordering.
+  const previewMotion = [...activeMotion, ...activeCaptions];
   // Do not silently fall back to the first clip: that leaves stale video controls
   // visible after the user clears the selection or selects a different layer type.
   const selectedClip = selectedId ? clips.find(clip => clip.id === selectedId) ?? null : null;
@@ -767,11 +779,16 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
     if (item.locked || (event.target as HTMLElement).closest(".motion-trim-edge")) return;
     event.preventDefault(); event.stopPropagation();
     event.currentTarget.setPointerCapture(event.pointerId);
+    motionTimelineDidMoveRef.current = false;
     const key = memberKeyForMotion(item.id);
-    if (event.ctrlKey || event.metaKey || event.shiftKey) { toggleMemberSelection(key); setSelectedMotionId(item.id); setSelectedId(null); return; }
+    if (event.ctrlKey || event.metaKey || event.shiftKey) { toggleMemberSelection(key); setSelectedMotionId(item.id); setSelectedId(null); setSelectedOverlayId(null); setActiveTool(item.isCaption ? "captions" : "text"); return; }
     const memberKeys = groupMembersFor(groups, key);
     motionTrimDragRef.current = { id: item.id, edge: "move", startX: event.clientX, lastX: event.clientX, startMs: item.startMs, endMs: item.endMs, memberKeys, didMove: false };
-    selectMotionItem(item); setSelectedMembers(memberKeys);
+    setSelectedMotionId(item.id);
+    setSelectedId(null);
+    setSelectedOverlayId(null);
+    setActiveTool(item.isCaption ? "captions" : "text");
+    setSelectedMembers(memberKeys);
   }
   function moveMotionOnTimeline(event: ReactPointerEvent<HTMLElement>) {
     const drag = motionTrimDragRef.current;
@@ -779,6 +796,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
     if (!drag.didMove) {
       if (Math.abs(event.clientX - drag.startX) < 4) return;
       drag.didMove = true;
+      motionTimelineDidMoveRef.current = true;
       if (drag.edge === "move") { drag.lastX = event.clientX; return; }
     }
     const rect = event.currentTarget.closest(".timeline-canvas")?.getBoundingClientRect();
@@ -799,6 +817,14 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
   }
   function endMotionTrim(event: ReactPointerEvent<HTMLElement>) {
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    const drag = motionTrimDragRef.current;
+    if (drag?.didMove) {
+      motionTimelineDidMoveRef.current = true;
+      if (drag.edge === "move") {
+        const moved = motionRef.current.find(item => item.id === drag.id);
+        if (moved) setPlayheadMs(moved.startMs);
+      }
+    }
     motionTrimDragRef.current = null;
   }
 
@@ -1022,7 +1048,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
           previewAsset.kind === "audio" ? <div className="audio-preview"><AudioLines size={48}/><b>{previewAsset.name}</b><span>Áudio na timeline</span></div> :
           <img src={previewUrl} alt={previewAsset.name} style={{ opacity: previewOpacity, transform: cameraTransform, transition: "opacity 40ms linear" }}/>} {transitionWhiteOpacity > 0 && <div className="transition-preview-white" style={{opacity:transitionWhiteOpacity}}/>}
         {activeOverlays.map(item=>{const url=mediaUrls[item.assetId];if(!url)return null;const entrance=imageOverlayEntranceState(item,playheadMs);return <div key={item.id} className={"image-overlay-preview"+(selectedOverlayId===item.id?" selected":"")} style={{left:item.x+"%",top:item.y+"%",width:item.width*previewScale,height:item.height*previewScale,transform:entrance.transform,opacity:entrance.opacity}} onPointerDown={event=>overlayPointerDown(event,item,(event.target as HTMLElement).closest(".image-overlay-handle")?"resize":"move")} onPointerMove={overlayPointerMove} onPointerUp={overlayPointerUp} onPointerCancel={overlayPointerUp} onClick={event=>{event.stopPropagation();setSelectedOverlayId(item.id);setSelectedMotionId(null);setSelectedId(null);}}><img src={url} alt="Imagem sobreposta" draggable={false}/>{selectedOverlayId===item.id&&<span className="image-overlay-handle"/>}</div>;})}
-        {activeMotion.map(item => {
+        {previewMotion.map(item => {
           const animation = selectedMotion?.id === item.id && !playing ? motionPreviewState(item, item.endMs) : motionPreviewState(item, playheadMs);
           return <div key={item.id} className={"motion-overlay motion-" + item.preset + (item.isCaption ? " caption-overlay" : "") + (selectedMotionId === item.id ? " motion-selected" : "")} style={{ "--motion-color": item.color, "--motion-accent": item.accent, "--motion-size": (item.fontSize * previewScale) + "px", "--motion-x": item.isCaption ? ((100 - (item.captionWidth ?? 90)) / 2) + "%" : item.x + "%", "--motion-y": item.y + "%" , width: item.isCaption ? (item.captionWidth ?? 90) + "%" : undefined, transform: item.isCaption ? "translateY(-50%)" : item.textAlign === "left" ? "translate(0,-50%)" : item.textAlign === "right" ? "translate(-100%,-50%)" : "translate(-50%,-50%)" } as CSSProperties}>
             <span className={"motion-content-group anchor-" + (item.lucideIconAnchor || "left")} style={{ display: item.isCaption ? "block" : "inline-flex", alignItems: "center", justifyContent: "center", gap: Math.max(4, (item.lucideIconSize ?? item.fontSize) * previewScale * 0.22), flexDirection: item.lucideIconAnchor === "top" ? "column" : item.lucideIconAnchor === "bottom" ? "column-reverse" : item.lucideIconAnchor === "right" ? "row-reverse" : "row", transform: animation.transform, opacity: animation.opacity, willChange: "transform,opacity" }} onPointerDown={event => { if(item.locked)return; selectMotionItem(item); event.preventDefault(); event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={event => { if (!event.currentTarget.hasPointerCapture(event.pointerId)) return; const rect = event.currentTarget.closest(".preview-media-frame")?.getBoundingClientRect(); if (!rect) return; updateMotion(item.id, item.isCaption ? { y: Math.max(0, Math.min(100, ((event.clientY - rect.top) / rect.height) * 100)) } : { x: Math.max(0, Math.min(100, ((event.clientX - rect.left) / rect.width) * 100)), y: Math.max(0, Math.min(100, ((event.clientY - rect.top) / rect.height) * 100)) }); }} onPointerUp={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); }} onClick={event=>{event.stopPropagation();selectMotionItem(item);}}>
@@ -1206,11 +1232,11 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
           {!imageOverlays.some(item=>item.visible!==false)&&<span className="track-hint">{imageOverlays.length?"Todas as imagens estão ocultas. Reative-as no painel Camadas.":"Adicione imagens livres para organizá-las nesta faixa"}</span>}<div className="timeline-cursor" style={{left:playheadMs/scale*100+"%"}}/>
         </div></div>
         <div className="motion-track-row timeline-motion-row transcript-track-row"><div className="track-label">LEGENDAS</div><div className="track-clips timeline-canvas motion-timeline transcript-timeline" style={{width:Math.max(100,timelineZoom)+"%"}} onClick={event=>{if((event.target as HTMLElement).closest(".motion-timeline-clip"))return;const rect=event.currentTarget.getBoundingClientRect();if(!rect.width)return;const atMs=Math.max(0,Math.min(scale,((event.clientX-rect.left)/rect.width)*scale));setTimelineInsertAtMs(atMs);setPlayheadMs(atMs);setPreviewTick(value=>value+1);stopPlayback();}} onDragOver={event=>event.preventDefault()} onDrop={event=>{event.preventDefault();const id=event.dataTransfer.getData("text/motion-graphic-id");if(!id)return;const rect=event.currentTarget.getBoundingClientRect();updateMotion(id,{startMs:Math.max(0,(event.clientX-rect.left)/rect.width*scale)});}}>
-          {captions.filter(item=>item.visible!==false).map(item=><button key={item.id} type="button" className={"motion-timeline-clip transcript-timeline-clip"+(selectedMotionId===item.id?" selected":"")} style={{left:item.startMs/scale*100+"%",width:Math.max(3,(item.endMs-item.startMs)/scale*100)+"%",touchAction:"none"}} onPointerDown={event=>beginMotionMove(event,item)} onPointerMove={moveMotionOnTimeline} onPointerUp={event=>{endMotionTrim(event);selectMotionItem(item);}} onPointerCancel={endMotionTrim} onClick={event=>{event.stopPropagation();selectMotionItem(item);}}><span className="motion-trim-edge left" onPointerDown={event=>beginMotionTrim(event,item,"start")} onPointerMove={moveMotionOnTimeline} onPointerUp={endMotionTrim} onPointerCancel={endMotionTrim}/><b>{item.captionEnglish||item.text}</b><small>{timeLabel(item.startMs)} · {item.captionTranslation?"TRADUZIDA":"ORIGINAL"}</small><span className="motion-trim-edge right" onPointerDown={event=>beginMotionTrim(event,item,"end")} onPointerMove={moveMotionOnTimeline} onPointerUp={endMotionTrim} onPointerCancel={endMotionTrim}/></button>)}
+          {captions.filter(item=>item.visible!==false).map(item=><button key={item.id} type="button" className={"motion-timeline-clip transcript-timeline-clip"+(selectedMotionId===item.id?" selected":"")} style={{left:item.startMs/scale*100+"%",width:Math.max(3,(item.endMs-item.startMs)/scale*100)+"%",touchAction:"none"}} onPointerDown={event=>beginMotionMove(event,item)} onPointerMove={moveMotionOnTimeline} onPointerUp={endMotionTrim} onPointerCancel={endMotionTrim} onClick={event=>{event.stopPropagation();if(motionTimelineDidMoveRef.current){motionTimelineDidMoveRef.current=false;return;}selectMotionItem(item);}}><span className="motion-trim-edge left" onPointerDown={event=>beginMotionTrim(event,item,"start")} onPointerMove={moveMotionOnTimeline} onPointerUp={endMotionTrim} onPointerCancel={endMotionTrim}/><b>{item.captionEnglish||item.text}</b><small>{timeLabel(item.startMs)} · {item.captionTranslation?"TRADUZIDA":"ORIGINAL"}</small><span className="motion-trim-edge right" onPointerDown={event=>beginMotionTrim(event,item,"end")} onPointerMove={moveMotionOnTimeline} onPointerUp={endMotionTrim} onPointerCancel={endMotionTrim}/></button>)}
           {!captions.some(item=>item.visible!==false)&&<span className="track-hint">{captions.length?"Todas as legendas estão ocultas. Reative-as no painel Camadas.":"As legendas transcritas aparecerão nesta faixa exclusiva"}</span>}<div className="timeline-cursor" style={{left:playheadMs/scale*100+"%"}}/>
         </div></div>
         <div className="motion-track-row timeline-motion-row"><div className="track-label">COMPOSIÇÕES</div><div className="track-clips timeline-canvas motion-timeline" style={{width:Math.max(100,timelineZoom)+"%"}} onClick={event=>{if((event.target as HTMLElement).closest(".motion-timeline-clip"))return;const rect=event.currentTarget.getBoundingClientRect();if(!rect.width)return;const atMs=Math.max(0,Math.min(scale,((event.clientX-rect.left)/rect.width)*scale));setTimelineInsertAtMs(atMs);setPlayheadMs(atMs);setPreviewTick(value=>value+1);stopPlayback();}} onDragOver={event=>event.preventDefault()} onDrop={event=>{event.preventDefault();const id=event.dataTransfer.getData("text/motion-graphic-id");if(!id)return;const rect=event.currentTarget.getBoundingClientRect();updateMotion(id,{startMs:Math.max(0,(event.clientX-rect.left)/rect.width*scale)});}}>
-          {textLayers.filter(item=>item.visible!==false).map(item=><button key={item.id} className={"motion-timeline-clip"+(selectedMotionId===item.id?" selected":"")+(groups.some(group=>group.members.includes(memberKeyForMotion(item.id)))?" grouped":"")+(selectedMembers.includes(memberKeyForMotion(item.id))?" multi-selected":"")} style={{left:item.startMs/scale*100+"%",width:Math.max(3,(item.endMs-item.startMs)/scale*100)+"%",touchAction:"none"}} onPointerDown={event=>beginMotionMove(event,item)} onPointerMove={moveMotionOnTimeline} onPointerUp={endMotionTrim} onPointerCancel={endMotionTrim} onClick={()=>selectMotionItem(item)}><span className="motion-trim-edge left" onPointerDown={event=>beginMotionTrim(event,item,"start")} onPointerMove={moveMotionOnTimeline} onPointerUp={endMotionTrim} onPointerCancel={endMotionTrim}/><b>{item.icon ? item.icon + " " : ""}{item.text}</b><small>{item.preset}</small><span className="motion-trim-edge right" onPointerDown={event=>beginMotionTrim(event,item,"end")} onPointerMove={moveMotionOnTimeline} onPointerUp={endMotionTrim} onPointerCancel={endMotionTrim}/></button>)}
+          {textLayers.filter(item=>item.visible!==false).map(item=><button key={item.id} className={"motion-timeline-clip"+(selectedMotionId===item.id?" selected":"")+(groups.some(group=>group.members.includes(memberKeyForMotion(item.id)))?" grouped":"")+(selectedMembers.includes(memberKeyForMotion(item.id))?" multi-selected":"")} style={{left:item.startMs/scale*100+"%",width:Math.max(3,(item.endMs-item.startMs)/scale*100)+"%",touchAction:"none"}} onPointerDown={event=>beginMotionMove(event,item)} onPointerMove={moveMotionOnTimeline} onPointerUp={endMotionTrim} onPointerCancel={endMotionTrim} onClick={()=>{if(motionTimelineDidMoveRef.current){motionTimelineDidMoveRef.current=false;return;}selectMotionItem(item);}}><span className="motion-trim-edge left" onPointerDown={event=>beginMotionTrim(event,item,"start")} onPointerMove={moveMotionOnTimeline} onPointerUp={endMotionTrim} onPointerCancel={endMotionTrim}/><b>{item.icon ? item.icon + " " : ""}{item.text}</b><small>{item.preset}</small><span className="motion-trim-edge right" onPointerDown={event=>beginMotionTrim(event,item,"end")} onPointerMove={moveMotionOnTimeline} onPointerUp={endMotionTrim} onPointerCancel={endMotionTrim}/></button>)}
           <div className="timeline-cursor" style={{left:playheadMs/scale*100+"%"}}/>
         </div></div>
       </div>
