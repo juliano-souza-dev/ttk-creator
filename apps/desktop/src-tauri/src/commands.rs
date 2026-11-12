@@ -226,6 +226,14 @@ pub struct ExportClip {
 
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct ExportCaptionWord {
+    text: String,
+    start_ms: u64,
+    end_ms: u64,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ExportMotion {
     text: String,
     start_ms: u64,
@@ -248,6 +256,10 @@ pub struct ExportMotion {
     typewriter_duration_ms: u64,
     #[serde(default)]
     is_caption: bool,
+    #[serde(default)]
+    caption_words: Vec<ExportCaptionWord>,
+    #[serde(default)]
+    caption_accent: String,
     #[serde(default)]
     lucide_icon_png: Option<String>,
     #[serde(default)]
@@ -441,32 +453,46 @@ pub async fn check_ffmpeg() -> Result<String, String> {
     }).await.map_err(|error| format!("A verificação do FFmpeg foi interrompida: {error}"))?
 }
 
+fn estimate_text_width(value: &str, font_size: u32) -> f64 {
+    value.chars().map(|character| {
+        let factor = match character {
+            'i' | 'l' | 'I' | '!' | '.' | ',' | ':' | ';' | '\'' | '|' => 0.28,
+            'f' | 't' | 'r' | '(' | ')' | '[' | ']' => 0.36,
+            'm' | 'w' | 'M' | 'W' | '@' | '%' => 0.88,
+            ' ' => 0.30,
+            c if c.is_ascii_uppercase() => 0.66,
+            c if c.is_ascii_digit() => 0.56,
+            _ => 0.54,
+        };
+        factor * font_size.max(1) as f64
+    }).sum()
+}
+
 fn wrap_text_for_export(value: &str, font_size: u32) -> String {
-    // drawtext does not automatically wrap at a maximum width. Estimate a
-    // conservative character count so exported lines stay inside 90% of 1080px.
-    // Normalize Windows/macOS line endings without collapsing intentional blank lines.
+    // Keep subtitle text inside the central 90% safe width (54..1026 px at 1080p).
+    // Estimate glyph widths rather than relying on a character count, which clips
+    // wide words and wastes space on narrow glyphs.
     let normalized = value.replace("\r\n", "\n").replace('\r', "\n");
-    let max_chars = ((972.0 / (font_size.max(1) as f64 * 0.65)).floor() as usize).max(8);
+    let max_width = 972.0_f64;
     normalized.split('\n').map(|line| {
         let mut lines = Vec::new();
         let mut current = String::new();
         for word in line.split_whitespace() {
-            if current.is_empty() {
-                current.push_str(word);
-            } else if current.chars().count() + 1 + word.chars().count() <= max_chars {
-                current.push(' ');
-                current.push_str(word);
+            let candidate = if current.is_empty() { word.to_string() } else { format!("{current} {word}") };
+            if current.is_empty() || estimate_text_width(&candidate, font_size) <= max_width {
+                current = candidate;
             } else {
                 lines.push(std::mem::take(&mut current));
-                if word.chars().count() <= max_chars {
+                if estimate_text_width(word, font_size) <= max_width {
                     current.push_str(word);
                 } else {
                     let mut chunk = String::new();
                     for character in word.chars() {
-                        chunk.push(character);
-                        if chunk.chars().count() >= max_chars {
+                        let candidate = format!("{chunk}{character}");
+                        if !chunk.is_empty() && estimate_text_width(&candidate, font_size) > max_width {
                             lines.push(std::mem::take(&mut chunk));
                         }
+                        chunk.push(character);
                     }
                     current = chunk;
                 }
