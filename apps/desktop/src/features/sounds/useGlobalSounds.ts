@@ -39,7 +39,7 @@ export function useGlobalSounds({ setMotion }: Options) {
     if (!isDesktopRuntime || soundBusy) return;
     const selected = await open({ multiple: false, filters: [{ name: "Áudio", extensions: ["mp3", "wav", "ogg", "m4a", "aac", "flac"] }] });
     if (!selected || Array.isArray(selected)) return;
-    const fallbackName = selected.split(/[\\\\/]/).pop()?.replace(/\\.[^.]+$/, "") || "Novo efeito";
+    const fallbackName = selected.split(/[\\/]).pop()?.replace(/\.[^.]+$/, "") || "Novo efeito";
     const name = newSoundName.trim() || fallbackName;
     setSoundBusy(true);
     setSoundMessage("");
