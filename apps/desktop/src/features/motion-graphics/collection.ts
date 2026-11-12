@@ -7,11 +7,25 @@ export function mergeMotionLayers(
   order: string[],
 ): MotionGraphic[] {
   const byId = new Map([...textLayers, ...captions].map(item => [item.id, item]));
-  const ordered = order.map(id => byId.get(id)).filter((item): item is MotionGraphic => !!item);
-  const known = new Set(ordered.map(item => item.id));
-  return [...ordered, ...textLayers, ...captions].filter((item, index, all) =>
-    !known.has(item.id) && all.findIndex(candidate => candidate.id === item.id) === index
-  );
+  const result: MotionGraphic[] = [];
+  const included = new Set<string>();
+
+  // First honor the explicit layer order, ignoring stale and duplicate IDs.
+  for (const id of order) {
+    const item = byId.get(id);
+    if (!item || included.has(id)) continue;
+    result.push(item);
+    included.add(id);
+  }
+
+  // Then append any item missing from the order list instead of dropping it.
+  for (const item of [...textLayers, ...captions]) {
+    if (included.has(item.id)) continue;
+    result.push(item);
+    included.add(item.id);
+  }
+
+  return result;
 }
 
 /** Separates the rendering view back into its independently persisted collections. */
