@@ -2,11 +2,16 @@ import type { MediaAsset } from "../../shared/types";
 
 type TimelineClip = {
   id: string;
-  assetId: string;
-  sourceEndMs: number;
-  sourceDurationMs?: number;
-  timelineStartMs: number;
-  volume: number;
+
+type TimelineGroup = { id: string; name: string; members: string[] };
+
+type ImageOverlay = { id:string; assetId:string; startMs:number; endMs:number; x:number; y:number; width:number; height:number; soundId?:string; soundVolume:number; visible?:boolean; locked?:boolean; entranceAnimation?: "none" | "fade" | "slide-left" | "slide-right" | "slide-up" | "slide-down"; entranceDurationMs?:number };
+
+type TrimDrag = { clipId: string; edge: "start" | "end"; startX: number; sourceStartMs: number; sourceEndMs: number; timelineStartMs: number; scaleMs: number; didMove?: boolean };
+
+type ClipMoveDrag = { clipId: string; startX: number; lastX: number; timelineStartMs: number; memberKeys: string[]; didMove?: boolean };
+
+type MotionTrimDrag = { id: string; edge: "start" | "end" | "move"; startX: number; lastX: number; startMs: number; endMs: number; memberKeys: string[]; didMove?: boolean };
 
 const defaultDuration = (asset: MediaAsset) => asset.durationMs && asset.durationMs > 0 ? asset.durationMs : asset.kind === "image" ? 5000 : 30000;
 const clipDuration = (clip: TimelineClip) => Math.max(0, clip.sourceEndMs - clip.sourceStartMs);
