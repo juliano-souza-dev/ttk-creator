@@ -228,16 +228,23 @@ fn run_python(args: &[&str]) -> Result<std::process::Output, String> {
 }
 
 fn run_local_python(audio: &Path, model: &str, language: Option<&str>) -> Result<TranscriptResult, String> {
-    const SCRIPT: &str = r#"import json,sys
+    const SCRIPT: &str = r#"import contextlib,json,sys
 from faster_whisper import WhisperModel
+
+def clean_unicode(value):
+    return "".join("\\uFFFD" if 0xD800 <= ord(ch) <= 0xDFFF else ch for ch in value)
+
 model_name, audio_path, language = sys.argv[1], sys.argv[2], sys.argv[3]
-model = WhisperModel(model_name, device="auto", compute_type="auto")
-segments, info = model.transcribe(audio_path, language=(language or None), word_timestamps=True, vad_filter=True)
 out=[]
-for s in segments:
-    words=[{"text":w.word,"startMs":round(w.start*1000),"endMs":round(w.end*1000)} for w in (s.words or [])]
-    out.append({"id":"","text":s.text.strip(),"startMs":round(s.start*1000),"endMs":round(s.end*1000),"words":words})
-print(json.dumps({"language":info.language,"cues":out},ensure_ascii=False))
+with contextlib.redirect_stdout(sys.stderr):
+    model = WhisperModel(model_name, device="auto", compute_type="auto")
+    segments, info = model.transcribe(audio_path, language=(language or None), word_timestamps=True, vad_filter=True)
+    for s in segments:
+        words=[{"text":clean_unicode(w.word),"startMs":round(w.start*1000),"endMs":round(w.end*1000)} for w in (s.words or [])]
+        out.append({"id":"","text":clean_unicode(s.text.strip()),"startMs":round(s.start*1000),"endMs":round(s.end*1000),"words":words})
+payload=json.dumps({"language":clean_unicode(info.language or ""),"cues":out},ensure_ascii=True,separators=(",",":"))
+sys.stdout.buffer.write(payload.encode("ascii"))
+sys.stdout.buffer.flush()
 "#;
     let lang = language.unwrap_or("");
     let audio_arg = audio.to_string_lossy().into_owned();
