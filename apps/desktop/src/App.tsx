@@ -50,7 +50,7 @@ export default function App() {
   const {
     transcriptionAssetId, setTranscriptionAssetId, setTranscriptionContext,
     transcriptionMode, setTranscriptionMode, transcriptionLanguage, setTranscriptionLanguage,
-    transcriptionModel, setTranscriptionModel, transcriptionBusy, transcriptionProgress,
+    transcriptionModel, setTranscriptionModel, transcriptionBusy, transcriptionProgress, setTranscriptionProgress,
     localAsrInstalled, localAsrChecking, localAsrInstalling, transcriptionMessage,
     transcriptionOpen, setTranscriptionOpen, installLocalTranscription, transcribeSelectedMedia
   } = useTranscription(activeProject, assets);
