@@ -420,7 +420,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
       const source = hasSeparatedData
         ? (migrateLegacy ? [...legacy, ...separated] : separated)
         : (Array.isArray(legacy) ? legacy : []);
-      const uniqueSource = [...new Map(source.filter((item: MotionGraphic) => !!item?.id).map((item: MotionGraphic) => [item.id, item])).values()];
+      const uniqueSource = [...new Map(source.filter((item: MotionGraphic) => !!item?.id).map((item: MotionGraphic) => [item.id, item] as const)).values()];
       const normalized = uniqueSource.map((item: MotionGraphic) => {
         const startMs = Math.max(0, Number(item.startMs) || 0);
         const legacyDuration = Math.max(300, Number(item.durationMs) || 1800);
