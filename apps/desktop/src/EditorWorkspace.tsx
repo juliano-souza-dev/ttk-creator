@@ -7,17 +7,14 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import { desktopApi, isDesktopRuntime } from "./services/desktop-api";
 import type { GlobalSound, TranscriptResult } from "./services/desktop-api";
 import type { MediaAsset } from "./shared/types";
+import { defaultDuration, clipDuration, clipEnd, timeLabel, captionBackgroundRgba, imageOverlayEntranceState } from "./features/timeline/model";
+import type { TimelineClip, TimelineGroup, ImageOverlay, TrimDrag, ClipMoveDrag, MotionTrimDrag } from "./features/timeline/model";
+import { motionPreviewState } from "./features/motion-graphics/model";
+import type { CaptionWord, MotionGraphic } from "./features/motion-graphics/model";
 import { AudioLines, Film, Plus, Play, Pause, Trash2, Scissors, Copy, SkipBack, SkipForward, Volume2, VolumeX, Music2, Type, WandSparkles, MousePointer2, ChevronLeft, ChevronRight, Download, LoaderCircle, PanelsTopLeft, FileJson, Upload, Eye, Camera, BookOpen, Headphones, Lightbulb, Clock3, MessageCircle, CheckCircle2, Globe2, Heart, Star, Zap, Target, Search, Image, Music, Mic, Video, PlayCircle, AlertCircle, ArrowRight, CircleHelp, Sparkles, Trophy, Rocket, Smile, ThumbsUp, Bookmark, MapPin, Coffee, Sun, Moon, Cloud, Flame, ShieldCheck, Languages, GraduationCap, Pencil, Bell, CalendarDays, RotateCcw, Maximize, Minimize, Captions, Clapperboard, MicOff, Presentation, Monitor, Smartphone, Home, Menu, X, XCircle, Check, Award, Medal, Flag, Info, AlertTriangle, Timer, Brain, Puzzle, Calculator, Hash, BarChart3, PieChart, Palette, Shapes, Share2, Settings, User, Users, Minus, Layers, List, Map as MapIcon } from "lucide-react";
 import { SCENE_TEMPLATES, buildTemplateScene, createSceneSpecFromMotion, validateSceneSpec } from "./shared/scene-spec";
 
-type TimelineClip = {
-  id: string;
-  assetId: string;
   sourceStartMs: number;
-  sourceEndMs: number;
-  sourceDurationMs?: number;
-  timelineStartMs: number;
-  volume: number;
   muted?: boolean;
   cameraMotion?: "none" | "zoom-in" | "zoom-out" | "pan-left" | "pan-right" | "pan-up" | "pan-down";
   transitionMs?: number;
@@ -29,8 +26,6 @@ type Props = { projectId: string; assets: MediaAsset[]; onAddMedia: () => void; 
 type TrimDrag = { clipId: string; edge: "start" | "end"; startX: number; sourceStartMs: number; sourceEndMs: number; timelineStartMs: number; scaleMs: number; didMove?: boolean };
 type ClipMoveDrag = { clipId: string; startX: number; lastX: number; timelineStartMs: number; memberKeys: string[]; didMove?: boolean };
 type MotionTrimDrag = { id: string; edge: "start" | "end" | "move"; startX: number; lastX: number; startMs: number; endMs: number; memberKeys: string[]; didMove?: boolean };
-type CaptionWord = { text: string; startMs: number; endMs: number; translation?: string };
-type MotionGraphic = { id: string; visible?: boolean; locked?: boolean; isCaption?: boolean; captionSourceLanguage?: string; captionTranslationLanguage?: string; captionMode?: "source" | "bilingual" | "karaoke"; captionEnglish?: string; captionTranslation?: string; captionWords?: CaptionWord[]; captionBackgroundColor?: string; captionBackgroundOpacity?: number; captionWidth?: number; captionPaddingEm?: number; text: string; icon?: string; lucideIconName?: string; lucideIconAnchor?: "left" | "right" | "top" | "bottom"; lucideIconSize?: number; lucideIconColor?: string; elements?: Array<{ type: string; content: string }>; fontFamily?: string; fontWeight?: number; textAlign?: "left" | "center" | "right"; startMs: number; endMs: number; durationMs: number; preset: "pop" | "slide" | "zoom" | "typewriter" | "impact" | "composition"; typewriterDurationMs?: number; color: string; accent: string; fontSize: number; x: number; y: number; sound: "pop" | "whoosh" | "impact" | "click" | "none"; soundId?: string; soundVolume?: number };
 const motionPresets = [{id:"pop",label:"Pop Impact",sound:"pop"},{id:"slide",label:"Slide + Whoosh",sound:"whoosh"},{id:"zoom",label:"Zoom + Impact",sound:"impact"},{id:"typewriter",label:"Typewriter",sound:"click"},{id:"impact",label:"Big Impact",sound:"impact"}] as const;
 const lucideIconLibrary = {
   // Nomes legados preservados para não quebrar projetos já salvos.
@@ -116,76 +111,16 @@ async function renderLucideIconPng(name: LucideIconName, color: string, size: nu
   } finally { URL.revokeObjectURL(source); }
 }
 
-const defaultDuration = (asset: MediaAsset) => asset.durationMs && asset.durationMs > 0 ? asset.durationMs : asset.kind === "image" ? 5000 : 30000;
-const clipDuration = (clip: TimelineClip) => Math.max(0, clip.sourceEndMs - clip.sourceStartMs);
-const clipEnd = (clip: TimelineClip) => clip.timelineStartMs + clipDuration(clip);
-const timeLabel = (ms: number) => {
-  const total = Math.max(0, Math.floor(ms / 1000));
-  return String(Math.floor(total / 60)).padStart(2, "0") + ":" + String(total % 60).padStart(2, "0");
-};
 
-function captionBackgroundRgba(color: string | undefined, opacity: number | undefined) {
-  const safeOpacity = Math.max(0, Math.min(1, opacity ?? 0.76));
-  const match = /^#?([0-9a-f]{6})$/i.exec(color || "000000");
-  if (!match) return `rgba(0,0,0,${safeOpacity})`;
-  const value = Number.parseInt(match[1], 16);
-  return `rgba(${(value >> 16) & 255},${(value >> 8) & 255},${value & 255},${safeOpacity})`;
-}
 
-function imageOverlayEntranceState(item: ImageOverlay, playheadMs: number) {
-  const animation = item.entranceAnimation || "none";
-  const duration = Math.max(100, Math.min(3000, item.entranceDurationMs ?? 600));
-  const progress = Math.max(0, Math.min(1, (playheadMs - item.startMs) / duration));
-  const eased = 1 - Math.pow(1 - progress, 3);
-  let transform = "translate(-50%,-50%)";
-  let opacity = 1;
-  if (animation === "fade") opacity = progress;
-  if (animation === "slide-left") transform += " translateX(-" + ((1 - eased) * 100) + "%)";
-  if (animation === "slide-right") transform += " translateX(" + ((1 - eased) * 100) + "%)";
-  if (animation === "slide-up") transform += " translateY(" + ((1 - eased) * 100) + "%)";
-  if (animation === "slide-down") transform += " translateY(-" + ((1 - eased) * 100) + "%)";
-  return { transform, opacity };
-}
 
-function motionPreviewState(item: MotionGraphic, playheadMs: number) {
-  if (item.isCaption) return { text: item.captionEnglish || item.text, transform: "none", opacity: 1 };
-  const duration = Math.max(1, item.durationMs || item.endMs - item.startMs);
-  const progress = Math.max(0, Math.min(1, (playheadMs - item.startMs) / duration));
-  const writingDuration = Math.max(100, Math.min(duration, item.typewriterDurationMs ?? 1500));
-  const writingProgress = Math.max(0, Math.min(1, (playheadMs - item.startMs) / writingDuration));
-  const eased = 1 - Math.pow(1 - progress, 3);
-  let transform = "none";
-  let opacity = 1;
-  let text = (item.icon ? item.icon + " " : "") + item.text;
 
-  switch (item.preset) {
-    case "typewriter": {
-      const characters = Array.from(text);
-      const visible = characters.length ? Math.min(characters.length, Math.floor(writingProgress * characters.length) + 1) : 0;
-      text = characters.slice(0, visible).join("");
-      break;
-    }
-    case "pop":
-      transform = `scale(${0.35 + 0.65 * eased})`;
-      break;
-    case "slide":
-      transform = `translateX(${(1 - eased) * 100}%)`;
-      break;
-    case "zoom":
-      transform = `scale(${2.4 - 1.4 * eased})`;
-      opacity = Math.min(1, progress * 4);
-      break;
-    case "impact": {
-      const scale = progress < 0.65
-        ? 3 - 2.12 * (progress / 0.65)
-        : 0.88 + 0.12 * ((progress - 0.65) / 0.35);
-      transform = `scale(${scale})`;
-      opacity = Math.min(1, progress * 4);
-      break;
-    }
-  }
-  return { text, transform, opacity };
-}
+
+
+
+
+
+
 
 export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenTranscription }: Props) {
   const storageKey = `ttk-creator:timeline:${projectId}`;
