@@ -29,9 +29,9 @@ export const desktopApi = {
   installLocalAsr: () => runTrackedTask("installation", "Instalação do suporte de transcrição local", () => invoke<string>("install_local_asr")),
   saveGroqSettings: (settings: { maxChunkChars: number; maxCuesPerChunk: number; delayMs: number; targetLanguage: string }) =>
     invoke<GroqSettings>("save_groq_settings", settings),
-  testGroqConnection: (model: string) => invoke<string>("test_groq_connection", { model }),
-  translateGroqChunk: (model: string, targetLanguage: string, cues: TranslationCue[]) =>
-    invoke<CueTranslation[]>("translate_groq_chunk", { model, targetLanguage, cues }),
+  testGroqConnection: () => invoke<string>("test_groq_connection"),
+  translateGroqChunk: (targetLanguage: string, cues: TranslationCue[]) =>
+    invoke<CueTranslation[]>("translate_groq_chunk", { targetLanguage, cues }),
   listGlobalSounds: () => invoke<GlobalSound[]>("list_global_sounds"),
   importGlobalSound: (sourcePath: string, name: string) => invoke<GlobalSound>("import_global_sound", { sourcePath, name }),
   getGlobalSoundPath: (soundId: string) => invoke<string>("get_global_sound_path", { soundId }),
