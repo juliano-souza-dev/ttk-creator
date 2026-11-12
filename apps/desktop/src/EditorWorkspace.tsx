@@ -1,5 +1,32 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, CSSProperties, DragEvent, PointerEvent as ReactPointerEvent } from "react";
+import { convertFileSrc } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { open, save } from "@tauri-apps/plugin-dialog";
+import { desktopApi, isDesktopRuntime } from "./services/desktop-api";
+import type { GlobalSound, TranscriptResult } from "./services/desktop-api";
+import type { MediaAsset } from "./shared/types";
+import { defaultDuration, clipDuration, clipEnd, timeLabel, captionBackgroundRgba, imageOverlayEntranceState } from "./features/timeline/model";
+import type { TimelineClip, TimelineGroup, ImageOverlay, TrimDrag, ClipMoveDrag, MotionTrimDrag } from "./features/timeline/model";
+import { motionPreviewState } from "./features/motion-graphics/model";
+import type { CaptionWord, MotionGraphic } from "./features/motion-graphics/model";
+import { getLucideIconExportOffset } from "./features/motion-graphics/icon-layout";
+import { mergeMotionLayers, splitMotionLayers } from "./features/motion-graphics/collection";
+import { parseSuperJsonCues } from "./features/motion-graphics/super-json-import";
+import { sceneSpecToMotionGraphics } from "./features/motion-graphics/super-json-import";
+import { lucideIconLibrary, lucideIconNames, lucideIconPickerNames, renderLucideIconPng } from "./features/motion-graphics/icon-library";
+import type { LucideIconName } from "./features/motion-graphics/icon-library";
+import { AudioLines, Film, Plus, Play, Pause, Trash2, Scissors, Copy, SkipBack, SkipForward, Volume2, VolumeX, Music2, Type, WandSparkles, MousePointer2, ChevronLeft, ChevronRight, Download, LoaderCircle, PanelsTopLeft, FileJson, Upload, Eye, Camera, BookOpen, Headphones, Lightbulb, Clock3, MessageCircle, CheckCircle2, Globe2, Heart, Star, Zap, Target, Search, Image, Music, Mic, Video, PlayCircle, AlertCircle, ArrowRight, CircleHelp, Sparkles, Trophy, Rocket, Smile, ThumbsUp, Bookmark, MapPin, Coffee, Sun, Moon, Cloud, Flame, ShieldCheck, Languages, GraduationCap, Pencil, Bell, CalendarDays, RotateCcw, Maximize, Minimize, Captions, Clapperboard, MicOff, Presentation, Monitor, Smartphone, Home, Menu, X, XCircle, Check, Award, Medal, Flag, Info, AlertTriangle, Timer, Brain, Puzzle, Calculator, Hash, BarChart3, PieChart, Palette, Shapes, Share2, Settings, User, Users, Minus, Layers, List, Map as MapIcon } from "lucide-react";
+import { SCENE_TEMPLATES, buildTemplateScene, createSceneSpecFromMotion, validateSceneSpec } from "./shared/scene-spec";
+
+type Props = { projectId: string; assets: MediaAsset[]; onAddMedia: () => void; onOpenTranscription?: (assetId?: string, context?: { clipId: string; timelineStartMs: number; sourceStartMs: number; sourceEndMs: number }) => void };
+const motionPresets = [{id:"pop",label:"Pop Impact",sound:"pop"},{id:"slide",label:"Slide + Whoosh",sound:"whoosh"},{id:"zoom",label:"Zoom + Impact",sound:"impact"},{id:"typewriter",label:"Typewriter",sound:"click"},{id:"impact",label:"Big Impact",sound:"impact"}] as const;
+
+type LucideIconName = keyof typeof lucideIconLibrary;
+const lucideIconNames = Object.keys(lucideIconLibrary) as LucideIconName[];
+export const supportedLucideIconNames: string[] = lucideIconNames;
+port { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ChangeEvent, CSSProperties, DragEvent, PointerEvent as ReactPointerEvent } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -63,21 +90,7 @@ const lucideIconPickerNames = [
 ] as LucideIconName[];
 
 
-async function renderLucideIconPng(name: LucideIconName, color: string, size: number): Promise<string> {
-  const IconView = lucideIconLibrary[name];
-  const svg = renderToStaticMarkup(<IconView xmlns="http://www.w3.org/2000/svg" width={size} height={size} color={color || "#ffffff"} strokeWidth={2.2} />);
-  const image = new window.Image();
-  const source = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }));
-  try {
-    await new Promise<void>((resolve, reject) => { image.onload = () => resolve(); image.onerror = () => reject(new Error("Não foi possível rasterizar o ícone " + name + ".")); image.src = source; });
-    const canvas = document.createElement("canvas");
-    canvas.width = size; canvas.height = size;
-    const context = canvas.getContext("2d");
-    if (!context) throw new Error("Não foi possível preparar a imagem do ícone.");
-    context.drawImage(image, 0, 0, size, size);
-    return canvas.toDataURL("image/png");
-  } finally { URL.revokeObjectURL(source); }
-}
+
 
 
 
