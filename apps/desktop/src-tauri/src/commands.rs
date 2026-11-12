@@ -269,8 +269,6 @@ pub struct ExportMotion {
     #[serde(default)]
     caption_padding_em: f64,
     #[serde(default)]
-    caption_border_radius_em: f64,
-    #[serde(default)]
     lucide_icon_png: Option<String>,
     #[serde(default)]
     lucide_icon_anchor: String,
