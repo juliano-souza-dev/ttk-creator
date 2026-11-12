@@ -20,8 +20,6 @@ pub(super) fn wrap_text_for_export(value: &str, font_size: u32) -> String {
 }
 
 pub(super) fn wrap_text_for_export_width(value: &str, font_size: u32, max_width: f64) -> String {
-    // Estimate glyph widths rather than relying on a character count, which clips
-    // wide words and wastes space on narrow glyphs.
     let normalized = value.replace("\r\n", "\n").replace('\r', "\n");
     normalized.split('\n').map(|line| {
         let mut lines = Vec::new();
@@ -51,7 +49,6 @@ pub(super) fn wrap_text_for_export_width(value: &str, font_size: u32, max_width:
         if lines.is_empty() { String::new() } else { lines.join("\n") }
     }).collect::<Vec<_>>().join("\n")
 }
-
 
 pub(super) fn ass_color(color: &str, alpha: u8) -> String {
     let raw = color.trim().trim_start_matches('#');
@@ -112,20 +109,14 @@ pub(super) fn ass_caption_script(item: &ExportMotion) -> String {
         for (word_index, word) in sorted {
             let start = word.start_ms.max(item.start_ms).max(cursor);
             let end = word.end_ms.min(item.end_ms);
-            if start > cursor {
-                intervals.push((cursor, start, None));
-            }
+            if start > cursor { intervals.push((cursor, start, None)); }
             if end > start {
                 intervals.push((start, end, Some(word_index)));
                 cursor = end;
             }
         }
-        if cursor < item.end_ms {
-            intervals.push((cursor, item.end_ms, None));
-        }
-        if intervals.is_empty() && item.end_ms > item.start_ms {
-            intervals.push((item.start_ms, item.end_ms, None));
-        }
+        if cursor < item.end_ms { intervals.push((cursor, item.end_ms, None)); }
+        if intervals.is_empty() && item.end_ms > item.start_ms { intervals.push((item.start_ms, item.end_ms, None)); }
     }
     let mut script = String::from(
         "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n[V4+ Styles]\nFormat: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding\n"
@@ -190,11 +181,7 @@ pub(super) fn caption_background_geometry(item: &ExportMotion) -> Option<(f64, f
     let max_text_width = (width - font_size as f64 * 1.1).max(font_size as f64);
     let source = if item.caption_words.is_empty() {
         item.text.split('\n').next().unwrap_or(&item.text)
-    } else {
-        // Reconstruct the spoken line from the word timings, matching the karaoke text.
-        // The subtitle renderer uses the same word sequence.
-        ""
-    };
+    } else { "" };
     let source_owned = if item.caption_words.is_empty() { source.to_string() } else {
         item.caption_words.iter().map(|word| word.text.as_str()).collect::<Vec<_>>().join(" ")
     };
@@ -210,15 +197,11 @@ pub(super) fn caption_background_geometry(item: &ExportMotion) -> Option<(f64, f
     let raw_color = item.caption_background_color.trim().trim_start_matches('#');
     let color = if raw_color.len() == 6 && u32::from_str_radix(raw_color, 16).is_ok() {
         format!("0x{raw_color}@{opacity:.3}")
-    } else {
-        format!("black@{opacity:.3}")
-    };
+    } else { format!("black@{opacity:.3}") };
     Some((x, y, width, height.min(1920.0), color))
 }
 
 pub(super) fn ffmpeg_escape_expression(value: &str) -> String {
-    // Filtergraph commas must be escaped even inside expression-valued options;
-    // otherwise FFmpeg treats function arguments as new filters.
     value.replace(',', "\\,")
 }
 
@@ -231,10 +214,5 @@ pub(super) fn ffmpeg_escape_text(value: &str) -> String {
         .replace(',', "\\,")
         .replace('[', "\\[")
         .replace(']', "\\]")
-        // Keep real line-feed characters. drawtext renders them as separate
-        // lines; converting them to the two-character sequence \\n loses layout.
         .replace('\r', "")
 }
-
-#[derive(Clone, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
