@@ -96,7 +96,7 @@ export function buildSceneSpecProjectData(
   const clips = spec.scenes.flatMap(scene => {
     const source = scene.audio?.source?.trim();
     if (!source) return [];
-    const fileName = source.split(/[\\\\/]/).pop();
+    const fileName = source.split(/[\\/]/).pop();
     const asset = importedAssets.find(item => item.originalName === fileName || item.name === fileName);
     if (!asset || asset.kind !== "audio") return [];
     const duration = Math.max(1000, asset.durationMs ?? scene.durationMs);
