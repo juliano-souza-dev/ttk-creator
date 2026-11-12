@@ -654,3 +654,7 @@
 .layer-empty{padding:4px;color:#706979;font-size:9px}
 
 .overlay-duration-actions{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px;margin:0 0 9px}.overlay-duration-actions button{min-height:29px;padding:0 8px;border:1px solid #45404e;border-radius:5px;background:#17151c;color:#ddd4e8;font-size:9px;cursor:pointer}.overlay-duration-actions button:hover:not(:disabled){border-color:#a98af0;color:#fff}.overlay-duration-actions button:disabled{opacity:.4;cursor:not-allowed}.overlay-duration-actions button:last-child{margin-left:auto;border-color:#65518c;color:#d9c6ff}
+
+/* Captions use the full TikTok-safe horizontal band (5% margins). */
+.motion-overlay.caption-overlay{left:5%!important;width:90%;transform:translateY(-50%)!important;}
+.motion-overlay.caption-overlay .motion-main-text{display:block;width:100%;max-width:100%;box-sizing:border-box;text-align:center;white-space:pre-wrap;overflow-wrap:anywhere;}
