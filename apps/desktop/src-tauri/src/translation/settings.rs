@@ -110,7 +110,9 @@ fn shared_manifest(app: &AppHandle) -> Result<Option<(PathBuf, serde_json::Value
 
 /// Loads the authorized Groq provider from this application's own Shared config.
 /// The Shared Runtime Manager does not need to be open.
-fn shared_provider_settings(app: &AppHandle) -> Result<(PathBuf, String, String), String> {
+fn shared_provider_settings(
+    app: &AppHandle,
+) -> Result<(PathBuf, String, shared_runtime_manager::api::ProviderRuntimeConfig), String> {
     let (config_path, manifest) = shared_manifest(app)?.ok_or_else(|| {
         "O shared.config.json não foi encontrado. Registre o TTK Creator no Shared Runtime Manager."
             .to_string()
@@ -133,7 +135,7 @@ fn shared_provider_settings(app: &AppHandle) -> Result<(PathBuf, String, String)
         )
     })?;
 
-    Ok((config_path, app_id, provider.model))
+    Ok((config_path, app_id, provider))
 }
 
 fn read_settings(app: &AppHandle) -> Result<GroqSettings, String> {
@@ -145,10 +147,16 @@ fn read_settings(app: &AppHandle) -> Result<GroqSettings, String> {
         GroqSettings::default()
     };
 
-    let (_, _, shared_model) = shared_provider_settings(app)?;
+    let (_, _, provider) = shared_provider_settings(app)?;
     settings.configured = true;
-    settings.model = shared_model;
+    settings.model = provider.model;
     Ok(settings)
+}
+
+/// Returns the provider's configured base endpoint to the native backend.
+pub(crate) fn resolve_api_endpoint(app: &AppHandle) -> Result<String, String> {
+    let (_, _, provider) = shared_provider_settings(app)?;
+    Ok(provider.endpoint)
 }
 
 /// Returns the Groq key only to the native backend that needs to call the provider.
@@ -181,11 +189,11 @@ pub fn save_groq_settings(
 ) -> Result<GroqSettings, String> {
     // This also verifies that the application is authorized and that a Groq
     // provider entry is present in its own shared.config.json.
-    let (_, _, shared_model) = shared_provider_settings(&app)?;
+    let (_, _, provider) = shared_provider_settings(&app)?;
 
     let settings = GroqSettings {
         configured: true,
-        model: shared_model,
+        model: provider.model,
         max_chunk_chars: max_chunk_chars.clamp(1000, 18000),
         max_cues_per_chunk: max_cues_per_chunk.clamp(1, 60),
         delay_ms: delay_ms.clamp(0, 15000),
