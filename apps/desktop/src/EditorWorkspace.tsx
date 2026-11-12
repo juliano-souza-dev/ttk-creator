@@ -204,7 +204,6 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
     );
   }, [textLayers, captions, motionOrder]);
   const setMotion = useCallback((updater: MotionGraphic[] | ((current: MotionGraphic[]) => MotionGraphic[])) => {
-    const current = [...textLayers, ...captions];
     const next = typeof updater === "function" ? updater(motion) : updater;
     const nextTextLayers = next.filter(item => !item.isCaption);
     const nextCaptions = next.filter(item => !!item.isCaption);
@@ -263,7 +262,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
         soundVolume: 80,
       };
       });
-      setMotion(current => [...current, ...created]);
+      setCaptions(current => [...current, ...created]);
       setSelectedMotionId(created[0]?.id ?? null);
       if (created.length) setPlayheadMs(created[0].startMs);
       setActiveTool("captions");
@@ -462,7 +461,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
 
   async function translateCaptions() {
     if (!isDesktopRuntime || translationBusy) return;
-    const captionSequence = motion.filter(item => item.isCaption).sort((a,b) => a.startMs - b.startMs);
+    const captionSequence = captions.slice().sort((a,b) => a.startMs - b.startMs);
     const pending = captionSequence.filter(item => !(item.captionTranslation || "").trim() && (item.captionEnglish || item.text || "").trim());
     if (!pending.length) { setTranslationMessage("Todas as legendas já possuem tradução."); return; }
     setTranslationBusy(true); setTranslationMessage("Verificando as configurações e a chave armazenada..."); setTranslationPhase("Preparando"); translationStopRef.current = false;
@@ -500,7 +499,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
         setTranslationPhase("Aplicando traduções");
         setTranslationMessage("Resposta recebida para o lote " + (index + 1) + ". Aplicando traduções ao projeto...");
         const byId = new Map(result.map(item => [item.id, item.translation]));
-        setMotion(current => current.map(item => {
+        setCaptions(current => current.map(item => {
           const translated = byId.get(item.id);
           if (!translated) return item;
           const words = item.captionWords?.map(word => ({ ...word }));
@@ -777,10 +776,25 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
   function overlayPointerUp(event:ReactPointerEvent<HTMLDivElement>){overlayDrag.current=null;if(event.currentTarget.hasPointerCapture(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId);}
   function addMotion(preset: MotionGraphic["preset"]) {
     const item: MotionGraphic = { id: crypto.randomUUID(), text: preset === "typewriter" ? "YOUR WORD" : "WATCH", icon: "", fontFamily: "Arial", fontWeight: 900, textAlign: "center", startMs: playheadMs, endMs: playheadMs + 3000, durationMs: 3000, preset, typewriterDurationMs: 1500, color: "#ffffff", accent: "#65d6c0", fontSize: 64, x: 50, y: 50, sound: "none", soundId: "", soundVolume: 80 };
-    setMotion(current => [...current, item]); setSelectedMotionId(item.id); stopPlayback();
+    setTextLayers(current => [...current, item]); setSelectedMotionId(item.id); stopPlayback();
   }
-  function updateMotion(id: string, patch: Partial<MotionGraphic>) { setMotion(current => current.map(item => { if (item.id !== id) return item; const nextStart = patch.startMs !== undefined ? Math.max(0, patch.startMs) : item.startMs; let nextEnd = patch.endMs !== undefined ? patch.endMs : item.endMs; if (patch.durationMs !== undefined && patch.endMs === undefined) nextEnd = nextStart + Math.max(300, patch.durationMs); nextEnd = Math.max(nextStart + 300, nextEnd); return { ...item, ...patch, startMs: nextStart, endMs: nextEnd, durationMs: nextEnd - nextStart }; })); }
-  function removeMotion(id: string) { setMotion(current => current.filter(item => item.id !== id)); if (selectedMotionId === id) setSelectedMotionId(null); }
+  function updateMotion(id: string, patch: Partial<MotionGraphic>) {
+    const applyPatch = (current: MotionGraphic[]) => current.map(item => {
+      if (item.id !== id) return item;
+      const nextStart = patch.startMs !== undefined ? Math.max(0, patch.startMs) : item.startMs;
+      let nextEnd = patch.endMs !== undefined ? patch.endMs : item.endMs;
+      if (patch.durationMs !== undefined && patch.endMs === undefined) nextEnd = nextStart + Math.max(300, patch.durationMs);
+      nextEnd = Math.max(nextStart + 300, nextEnd);
+      return { ...item, ...patch, startMs: nextStart, endMs: nextEnd, durationMs: nextEnd - nextStart };
+    });
+    if (captions.some(item => item.id === id)) setCaptions(applyPatch);
+    else setTextLayers(applyPatch);
+  }
+  function removeMotion(id: string) {
+    if (captions.some(item => item.id === id)) setCaptions(current => current.filter(item => item.id !== id));
+    else setTextLayers(current => current.filter(item => item.id !== id));
+    if (selectedMotionId === id) setSelectedMotionId(null);
+  }
 
   async function translateSelectedCaption(targetLanguage: "English" | "Português brasileiro") {
     if (!selectedMotion?.isCaption || singleCaptionTranslationBusy || !isDesktopRuntime) return;
@@ -937,9 +951,9 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
             }];
           });
           if (!created.length) throw new Error("O Super JSON foi reconhecido, mas não contém falas válidas para importar.");
-          setMotion(current => [...current, ...created]);
+          setCaptions(current => [...current, ...created]);
           setSelectedMotionId(created[0]?.id ?? null);
-          setActiveTool("text");
+          setActiveTool("captions");
           const withWords = created.filter(item => item.captionWords?.length).length;
           const withTranslation = created.filter(item => item.captionTranslation).length;
           setSceneSpecMessage(`Super JSON importado: ${created.length} legendas, ${withWords} com sincronização por palavra e ${withTranslation} bilíngues.`);
@@ -984,7 +998,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
           };
         }),
       );
-      setMotion(current => [...current, ...created]);
+      setTextLayers(current => [...current, ...created]);
       setSelectedMotionId(created[0]?.id ?? null);
       setActiveTool("text");
       const hasPendingMetadata = parsed.scenes.some(scene => !!scene.audio || !!scene.character || !!scene.captions?.enabled);
