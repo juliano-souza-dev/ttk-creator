@@ -13,81 +13,16 @@ import type { CaptionWord, MotionGraphic } from "./features/motion-graphics/mode
 import { getLucideIconExportOffset } from "./features/motion-graphics/icon-layout";
 import { mergeMotionLayers, splitMotionLayers } from "./features/motion-graphics/collection";
 import { parseSuperJsonCues, sceneSpecToMotionGraphics } from "./features/motion-graphics/super-json-import";
-import { lucideIconLibrary, lucideIconNames, lucideIconPickerNames, renderLucideIconPng, supportedLucideIconNames } from "./features/motion-graphics/icon-library";
-export { supportedLucideIconNames } from "./features/motion-graphics/icon-library";
+import { lucideIconLibrary, lucideIconNames, lucideIconPickerNames, renderLucideIconPng } from "./features/motion-graphics/icon-library";
 import type { LucideIconName } from "./features/motion-graphics/icon-library";
+import { captionStyleFrom, duplicateCaption, mergeCaptions, splitCaption } from "./features/motion-graphics/caption-editing";
+export { supportedLucideIconNames } from "./features/motion-graphics/icon-library";
+
 import { AudioLines, Film, Plus, Play, Pause, Trash2, Scissors, Copy, SkipBack, SkipForward, Volume2, VolumeX, Music2, Type, WandSparkles, MousePointer2, ChevronLeft, ChevronRight, Download, LoaderCircle, PanelsTopLeft, FileJson, Upload, Eye, Camera, BookOpen, Headphones, Lightbulb, Clock3, MessageCircle, CheckCircle2, Globe2, Heart, Star, Zap, Target, Search, Image, Music, Mic, Video, PlayCircle, AlertCircle, ArrowRight, CircleHelp, Sparkles, Trophy, Rocket, Smile, ThumbsUp, Bookmark, MapPin, Coffee, Sun, Moon, Cloud, Flame, ShieldCheck, Languages, GraduationCap, Pencil, Bell, CalendarDays, RotateCcw, Maximize, Minimize, Captions, Clapperboard, MicOff, Presentation, Monitor, Smartphone, Home, Menu, X, XCircle, Check, Award, Medal, Flag, Info, AlertTriangle, Timer, Brain, Puzzle, Calculator, Hash, BarChart3, PieChart, Palette, Shapes, Share2, Settings, User, Users, Minus, Layers, List, Map as MapIcon } from "lucide-react";
 import { SCENE_TEMPLATES, buildTemplateScene, createSceneSpecFromMotion, validateSceneSpec } from "./shared/scene-spec";
 
 type Props = { projectId: string; assets: MediaAsset[]; onAddMedia: () => void; onOpenTranscription?: (assetId?: string, context?: { clipId: string; timelineStartMs: number; sourceStartMs: number; sourceEndMs: number }) => void };
 const motionPresets = [{id:"pop",label:"Pop Impact",sound:"pop"},{id:"slide",label:"Slide + Whoosh",sound:"whoosh"},{id:"zoom",label:"Zoom + Impact",sound:"impact"},{id:"typewriter",label:"Typewriter",sound:"click"},{id:"impact",label:"Big Impact",sound:"impact"}] as const;
-
-type LucideIconName = keyof typeof lucideIconLibrary;
-const lucideIconNames = Object.keys(lucideIconLibrary) as LucideIconName[];
-export const supportedLucideIconNames: string[] = lucideIconNames;
-port { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ChangeEvent, CSSProperties, DragEvent, PointerEvent as ReactPointerEvent } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
-import { convertFileSrc } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import { open, save } from "@tauri-apps/plugin-dialog";
-import { desktopApi, isDesktopRuntime } from "./services/desktop-api";
-import type { GlobalSound, TranscriptResult } from "./services/desktop-api";
-import type { MediaAsset } from "./shared/types";
-import { defaultDuration, clipDuration, clipEnd, timeLabel, captionBackgroundRgba, imageOverlayEntranceState } from "./features/timeline/model";
-import type { TimelineClip, TimelineGroup, ImageOverlay, TrimDrag, ClipMoveDrag, MotionTrimDrag } from "./features/timeline/model";
-import { motionPreviewState } from "./features/motion-graphics/model";
-import type { CaptionWord, MotionGraphic } from "./features/motion-graphics/model";
-import { getLucideIconExportOffset } from "./features/motion-graphics/icon-layout";
-import { mergeMotionLayers, splitMotionLayers } from "./features/motion-graphics/collection";
-import { parseSuperJsonCues } from "./features/motion-graphics/super-json-import";
-import { AudioLines, Film, Plus, Play, Pause, Trash2, Scissors, Copy, SkipBack, SkipForward, Volume2, VolumeX, Music2, Type, WandSparkles, MousePointer2, ChevronLeft, ChevronRight, Download, LoaderCircle, PanelsTopLeft, FileJson, Upload, Eye, Camera, BookOpen, Headphones, Lightbulb, Clock3, MessageCircle, CheckCircle2, Globe2, Heart, Star, Zap, Target, Search, Image, Music, Mic, Video, PlayCircle, AlertCircle, ArrowRight, CircleHelp, Sparkles, Trophy, Rocket, Smile, ThumbsUp, Bookmark, MapPin, Coffee, Sun, Moon, Cloud, Flame, ShieldCheck, Languages, GraduationCap, Pencil, Bell, CalendarDays, RotateCcw, Maximize, Minimize, Captions, Clapperboard, MicOff, Presentation, Monitor, Smartphone, Home, Menu, X, XCircle, Check, Award, Medal, Flag, Info, AlertTriangle, Timer, Brain, Puzzle, Calculator, Hash, BarChart3, PieChart, Palette, Shapes, Share2, Settings, User, Users, Minus, Layers, List, Map as MapIcon } from "lucide-react";
-import { SCENE_TEMPLATES, buildTemplateScene, createSceneSpecFromMotion, validateSceneSpec } from "./shared/scene-spec";
-
-type Props = { projectId: string; assets: MediaAsset[]; onAddMedia: () => void; onOpenTranscription?: (assetId?: string, context?: { clipId: string; timelineStartMs: number; sourceStartMs: number; sourceEndMs: number }) => void };
-const motionPresets = [{id:"pop",label:"Pop Impact",sound:"pop"},{id:"slide",label:"Slide + Whoosh",sound:"whoosh"},{id:"zoom",label:"Zoom + Impact",sound:"impact"},{id:"typewriter",label:"Typewriter",sound:"click"},{id:"impact",label:"Big Impact",sound:"impact"}] as const;
-const lucideIconLibrary = {
-  // Nomes legados preservados para não quebrar projetos já salvos.
-  Eye, Camera, BookOpen, Headphones, Lightbulb, Clock3, MessageCircle, CheckCircle2,
-  Globe2, Heart, Star, Zap, Target, Image, Music, Mic, Video, PlayCircle, AlertCircle,
-  ArrowRight, CircleHelp, Sparkles, Trophy, Rocket, Smile, ThumbsUp, Bookmark, MapPin,
-  Coffee, Sun, Moon, Cloud, Flame, ShieldCheck, Languages, GraduationCap, Pencil, Bell,
-  CalendarDays,
-  // Biblioteca ampliada: nomes em kebab-case para busca e compatibilidade com Scene Spec.
-  "play": Play, "pause": Pause, "skip-back": SkipBack, "skip-forward": SkipForward,
-  "rotate-ccw": RotateCcw, "volume-2": Volume2, "volume-x": VolumeX,
-  "maximize": Maximize, "minimize": Minimize, "captions": Captions, "video": Video,
-  "film": Film, "clapperboard": Clapperboard, "mic": Mic, "mic-off": MicOff,
-  "camera": Camera, "headphones": Headphones, "music": Music,
-  "book-open": BookOpen, "graduation-cap": GraduationCap, "layers": Layers, "list": List,
-  "chevron-right": ChevronRight, "arrow-right": ArrowRight, "presentation": Presentation,
-  "monitor": Monitor, "smartphone": Smartphone, "home": Home, "menu": Menu, "x": X,
-  "circle-check": CheckCircle2, "circle-x": XCircle, "check": Check, "star": Star,
-  "trophy": Trophy, "award": Award, "medal": Medal, "flag": Flag, "lightbulb": Lightbulb,
-  "circle-question-mark": CircleHelp, "info": Info, "triangle-alert": AlertTriangle,
-  "timer": Timer, "clock": Clock3, "brain": Brain, "target": Target, "puzzle": Puzzle,
-  "rocket": Rocket, "sparkles": Sparkles, "calculator": Calculator, "hash": Hash,
-  "chart-column": BarChart3, "chart-pie": PieChart, "pencil": Pencil, "type": Type,
-  "languages": Languages, "globe": Globe2, "map": MapIcon, "image": Image,
-  "palette": Palette, "shapes": Shapes, "heart": Heart, "download": Download,
-  "upload": Upload, "share-2": Share2, "settings": Settings, "user": User, "users": Users,
-  "eye": Eye, "search": Search, "plus": Plus, "minus": Minus,
-};
-type LucideIconName = keyof typeof lucideIconLibrary;
-const lucideIconNames = Object.keys(lucideIconLibrary) as LucideIconName[];
-export const supportedLucideIconNames: string[] = lucideIconNames;
-const lucideIconPickerNames = [
-  "play", "pause", "skip-back", "skip-forward", "rotate-ccw", "volume-2", "volume-x",
-  "maximize", "minimize", "captions", "video", "film", "clapperboard", "mic", "mic-off",
-  "camera", "headphones", "music", "book-open", "graduation-cap", "layers", "list",
-  "chevron-right", "arrow-right", "presentation", "monitor", "smartphone", "home", "menu", "x",
-  "circle-check", "circle-x", "check", "star", "trophy", "award", "medal", "flag", "lightbulb",
-  "circle-question-mark", "info", "triangle-alert", "timer", "clock", "brain", "target", "puzzle",
-  "rocket", "sparkles", "calculator", "hash", "chart-column", "chart-pie", "pencil", "type",
-  "languages", "globe", "map", "image", "palette", "shapes", "heart", "download", "upload",
-  "share-2", "settings", "user", "users", "eye", "search", "plus", "minus",
-] as LucideIconName[];
-
 
 
 
