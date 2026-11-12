@@ -12,6 +12,7 @@ import type { TimelineClip, TimelineGroup, ImageOverlay, TrimDrag, ClipMoveDrag,
 import { motionPreviewState } from "./features/motion-graphics/model";
 import type { CaptionWord, MotionGraphic } from "./features/motion-graphics/model";
 import { getLucideIconExportOffset } from "./features/motion-graphics/icon-layout";
+import { mergeMotionLayers, splitMotionLayers } from "./features/motion-graphics/collection";
 import { AudioLines, Film, Plus, Play, Pause, Trash2, Scissors, Copy, SkipBack, SkipForward, Volume2, VolumeX, Music2, Type, WandSparkles, MousePointer2, ChevronLeft, ChevronRight, Download, LoaderCircle, PanelsTopLeft, FileJson, Upload, Eye, Camera, BookOpen, Headphones, Lightbulb, Clock3, MessageCircle, CheckCircle2, Globe2, Heart, Star, Zap, Target, Search, Image, Music, Mic, Video, PlayCircle, AlertCircle, ArrowRight, CircleHelp, Sparkles, Trophy, Rocket, Smile, ThumbsUp, Bookmark, MapPin, Coffee, Sun, Moon, Cloud, Flame, ShieldCheck, Languages, GraduationCap, Pencil, Bell, CalendarDays, RotateCcw, Maximize, Minimize, Captions, Clapperboard, MicOff, Presentation, Monitor, Smartphone, Home, Menu, X, XCircle, Check, Award, Medal, Flag, Info, AlertTriangle, Timer, Brain, Puzzle, Calculator, Hash, BarChart3, PieChart, Palette, Shapes, Share2, Settings, User, Users, Minus, Layers, List, Map as MapIcon } from "lucide-react";
 import { SCENE_TEMPLATES, buildTemplateScene, createSceneSpecFromMotion, validateSceneSpec } from "./shared/scene-spec";
 
@@ -97,20 +98,15 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
   const [captions, setCaptions] = useState<MotionGraphic[]>([]);
   const [motionOrder, setMotionOrder] = useState<string[]>([]);
   const [loadedMotionKey, setLoadedMotionKey] = useState<string | null>(null);
-  const motion = useMemo(() => {
-    const byId = new Map([...textLayers, ...captions].map(item => [item.id, item]));
-    const ordered = motionOrder.map(id => byId.get(id)).filter((item): item is MotionGraphic => !!item);
-    const known = new Set(ordered.map(item => item.id));
-    return [...ordered, ...textLayers, ...captions].filter((item, index, all) =>
-      !known.has(item.id) && all.findIndex(candidate => candidate.id === item.id) === index
-    );
-  }, [textLayers, captions, motionOrder]);
+  const motion = useMemo(
+    () => mergeMotionLayers(textLayers, captions, motionOrder),
+    [textLayers, captions, motionOrder],
+  );
   const setMotion = useCallback((updater: MotionGraphic[] | ((current: MotionGraphic[]) => MotionGraphic[])) => {
     const next = typeof updater === "function" ? updater(motion) : updater;
-    const nextTextLayers = next.filter(item => !item.isCaption);
-    const nextCaptions = next.filter(item => !!item.isCaption);
-    setTextLayers(nextTextLayers);
-    setCaptions(nextCaptions);
+    const separated = splitMotionLayers(next);
+    setTextLayers(separated.textLayers);
+    setCaptions(separated.captions);
     setMotionOrder(next.map(item => item.id));
   }, [textLayers, captions, motion]);
   function appendTextLayers(items: MotionGraphic[]) {
