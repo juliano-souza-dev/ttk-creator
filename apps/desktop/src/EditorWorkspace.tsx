@@ -11,10 +11,9 @@ import type { TimelineClip, TimelineGroup, ImageOverlay, TrimDrag, ClipMoveDrag,
 import { createTimelineClip, duplicateTimelineClip, groupMembersFor, memberKeyForClip, memberKeyForMotion, reorderVisualClips, splitTimelineClipAt } from "./features/timeline/operations";
 import { motionPreviewState } from "./features/motion-graphics/model";
 import type { MotionGraphic } from "./features/motion-graphics/model";
-import { getLucideIconExportOffset } from "./features/motion-graphics/icon-layout";
 import { mergeMotionLayers, splitMotionLayers } from "./features/motion-graphics/collection";
 import { parseSuperJsonCues, sceneSpecToMotionGraphics } from "./features/motion-graphics/super-json-import";
-import { lucideIconLibrary, lucideIconNames, lucideIconPickerNames, renderLucideIconPng } from "./features/motion-graphics/icon-library";
+import { lucideIconLibrary, lucideIconNames, lucideIconPickerNames } from "./features/motion-graphics/icon-library";
 import type { LucideIconName } from "./features/motion-graphics/icon-library";
 import { captionStyleFrom, duplicateCaption, mergeCaptions, splitCaption } from "./features/motion-graphics/caption-editing";
 import { buildExportTimelinePayload } from "./features/export/payload";
