@@ -12,7 +12,7 @@ import { createTimelineClip, duplicateTimelineClip, groupMembersFor, memberKeyFo
 import { motionPreviewState } from "./features/motion-graphics/model";
 import type { MotionGraphic } from "./features/motion-graphics/model";
 import { mergeMotionLayers, splitMotionLayers } from "./features/motion-graphics/collection";
-import { parseSuperJsonCues, sceneSpecToMotionGraphics } from "./features/motion-graphics/super-json-import";
+import { parseSuperJsonCues, sceneSpecToMotionGraphics, sceneTemplateToMotionGraphics } from "./features/motion-graphics/super-json-import";
 import { lucideIconLibrary, lucideIconNames, lucideIconPickerNames } from "./features/motion-graphics/icon-library";
 import type { LucideIconName } from "./features/motion-graphics/icon-library";
 import { captionStyleFrom, duplicateCaption, mergeCaptions, splitCaption } from "./features/motion-graphics/caption-editing";
@@ -719,30 +719,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
   function applySceneTemplate(templateId: string) {
     try {
       const scene = buildTemplateScene(templateId, playheadMs);
-      const created: MotionGraphic[] = scene.blocks.map(block => {
-        const startMs = playheadMs + (block.startOffsetMs ?? 0);
-        const endMs = startMs + (block.durationMs ?? scene.durationMs);
-        return {
-          id: crypto.randomUUID(),
-          text: block.text,
-          icon: block.icon ?? "",
-          fontFamily: "Arial",
-          fontWeight: 900,
-          textAlign: block.align ?? "center",
-          startMs,
-          endMs,
-          durationMs: endMs - startMs,
-          preset: "pop",
-          color: block.color,
-          accent: block.accent ?? "#65d6c0",
-          fontSize: block.fontSize,
-          x: block.x,
-          y: block.y,
-          sound: "none",
-          soundId: "",
-          soundVolume: 80,
-        };
-      });
+      const created = sceneTemplateToMotionGraphics(scene, playheadMs);
       appendTextLayers(created);
       setSelectedMotionId(created[0]?.id ?? null);
       setActiveTool("text");
