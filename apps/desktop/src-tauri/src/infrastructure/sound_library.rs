@@ -35,14 +35,11 @@ pub fn list(directory: &Path) -> Result<Vec<GlobalSound>, String> {
 }
 
 pub fn import(directory: &Path, source_path: &str, name: &str) -> Result<GlobalSound, String> {
-    let source_path = source_path.to_string();
-    let name = name.to_string();
-    let state_directory = directory;
-    {
-    use std::path::{Path, Component};
-    let source = Path::new(&source_path);
+    let source = Path::new(source_path);
     if !source.is_file() { return Err("O arquivo de áudio selecionado não existe.".into()); }
-    if source.components().any(|part| matches!(part, Component::ParentDir)) { return Err("Caminho de áudio inválido.".into()); }
+    if source.components().any(|part| matches!(part, Component::ParentDir)) {
+        return Err("Caminho de áudio inválido.".into());
+    }
     let extension = source.extension().and_then(|value| value.to_str()).unwrap_or("").to_ascii_lowercase();
     if !["mp3", "wav", "ogg", "m4a", "aac", "flac"].contains(&extension.as_str()) {
         return Err("Formato não suportado. Use MP3, WAV, OGG, M4A, AAC ou FLAC.".into());
@@ -52,16 +49,15 @@ pub fn import(directory: &Path, source_path: &str, name: &str) -> Result<GlobalS
     let mut sounds = read_sound_manifest(directory)?;
     let id = uuid::Uuid::new_v4().to_string();
     let file_name = format!("{id}.{extension}");
-    let destination = *state_directory.join(&file_name);
+    let destination = directory.join(&file_name);
     std::fs::copy(source, &destination).map_err(|error| format!("Não foi possível copiar o áudio: {error}"))?;
     let sound = GlobalSound { id, name: clean_name.to_string(), file_name };
     sounds.push(sound.clone());
-    if let Err(error) = write_sound_manifest(&*state_directory, &sounds) {
+    if let Err(error) = write_sound_manifest(directory, &sounds) {
         let _ = std::fs::remove_file(destination);
         return Err(error);
     }
     Ok(sound)
-}
 }
 
 pub fn get_path(directory: &Path, sound_id: &str) -> Result<String, String> {
