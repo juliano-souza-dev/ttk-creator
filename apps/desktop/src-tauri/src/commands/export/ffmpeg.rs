@@ -1,4 +1,4 @@
-pub(super) fn resolve_ffmpeg_executable() -> Result<(std::path::PathBuf, String), String> {
+pub(crate) fn resolve_ffmpeg_executable() -> Result<(std::path::PathBuf, String), String> {
     use std::{collections::HashSet, path::PathBuf};
 
     let executable_name = if cfg!(windows) { "ffmpeg.exe" } else { "ffmpeg" };
