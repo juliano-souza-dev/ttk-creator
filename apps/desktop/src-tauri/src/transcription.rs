@@ -232,7 +232,7 @@ fn run_local_python(audio: &Path, model: &str, language: Option<&str>) -> Result
 from faster_whisper import WhisperModel
 
 def clean_unicode(value):
-    return "".join("\\uFFFD" if 0xD800 <= ord(ch) <= 0xDFFF else ch for ch in value)
+    return "".join(chr(0xFFFD) if 0xD800 <= ord(ch) <= 0xDFFF else ch for ch in value)
 
 model_name, audio_path, language = sys.argv[1], sys.argv[2], sys.argv[3]
 out=[]
