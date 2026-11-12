@@ -1,5 +1,5 @@
 mod captions;
-mod ffmpeg;
+pub mod ffmpeg;
 
 use captions::{
     ass_caption_script, caption_background_geometry, ffmpeg_escape_expression,
