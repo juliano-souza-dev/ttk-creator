@@ -30,7 +30,7 @@ type TrimDrag = { clipId: string; edge: "start" | "end"; startX: number; sourceS
 type ClipMoveDrag = { clipId: string; startX: number; lastX: number; timelineStartMs: number; memberKeys: string[] };
 type MotionTrimDrag = { id: string; edge: "start" | "end" | "move"; startX: number; lastX: number; startMs: number; endMs: number; memberKeys: string[] };
 type CaptionWord = { text: string; startMs: number; endMs: number; translation?: string };
-type MotionGraphic = { id: string; visible?: boolean; locked?: boolean; isCaption?: boolean; captionSourceLanguage?: string; captionTranslationLanguage?: string; captionMode?: "source" | "bilingual" | "karaoke"; captionEnglish?: string; captionTranslation?: string; captionWords?: CaptionWord[]; text: string; icon?: string; lucideIconName?: string; lucideIconAnchor?: "left" | "right" | "top" | "bottom"; lucideIconSize?: number; lucideIconColor?: string; elements?: Array<{ type: string; content: string }>; fontFamily?: string; fontWeight?: number; textAlign?: "left" | "center" | "right"; startMs: number; endMs: number; durationMs: number; preset: "pop" | "slide" | "zoom" | "typewriter" | "impact" | "composition"; typewriterDurationMs?: number; color: string; accent: string; fontSize: number; x: number; y: number; sound: "pop" | "whoosh" | "impact" | "click" | "none"; soundId?: string; soundVolume?: number };
+type MotionGraphic = { id: string; visible?: boolean; locked?: boolean; isCaption?: boolean; captionSourceLanguage?: string; captionTranslationLanguage?: string; captionMode?: "source" | "bilingual" | "karaoke"; captionEnglish?: string; captionTranslation?: string; captionWords?: CaptionWord[]; captionBackgroundColor?: string; captionBackgroundOpacity?: number; captionWidth?: number; captionPaddingEm?: number; text: string; icon?: string; lucideIconName?: string; lucideIconAnchor?: "left" | "right" | "top" | "bottom"; lucideIconSize?: number; lucideIconColor?: string; elements?: Array<{ type: string; content: string }>; fontFamily?: string; fontWeight?: number; textAlign?: "left" | "center" | "right"; startMs: number; endMs: number; durationMs: number; preset: "pop" | "slide" | "zoom" | "typewriter" | "impact" | "composition"; typewriterDurationMs?: number; color: string; accent: string; fontSize: number; x: number; y: number; sound: "pop" | "whoosh" | "impact" | "click" | "none"; soundId?: string; soundVolume?: number };
 const motionPresets = [{id:"pop",label:"Pop Impact",sound:"pop"},{id:"slide",label:"Slide + Whoosh",sound:"whoosh"},{id:"zoom",label:"Zoom + Impact",sound:"impact"},{id:"typewriter",label:"Typewriter",sound:"click"},{id:"impact",label:"Big Impact",sound:"impact"}] as const;
 const lucideIconLibrary = {
   // Nomes legados preservados para não quebrar projetos já salvos.
@@ -124,6 +124,14 @@ const timeLabel = (ms: number) => {
   return String(Math.floor(total / 60)).padStart(2, "0") + ":" + String(total % 60).padStart(2, "0");
 };
 
+function captionBackgroundRgba(color: string | undefined, opacity: number | undefined) {
+  const safeOpacity = Math.max(0, Math.min(1, opacity ?? 0.76));
+  const match = /^#?([0-9a-f]{6})$/i.exec(color || "000000");
+  if (!match) return `rgba(0,0,0,${safeOpacity})`;
+  const value = Number.parseInt(match[1], 16);
+  return `rgba(${(value >> 16) & 255},${(value >> 8) & 255},${value & 255},${safeOpacity})`;
+}
+
 function imageOverlayEntranceState(item: ImageOverlay, playheadMs: number) {
   const animation = item.entranceAnimation || "none";
   const duration = Math.max(100, Math.min(3000, item.entranceDurationMs ?? 600));
@@ -140,6 +148,7 @@ function imageOverlayEntranceState(item: ImageOverlay, playheadMs: number) {
 }
 
 function motionPreviewState(item: MotionGraphic, playheadMs: number) {
+  if (item.isCaption) return { text: item.captionEnglish || item.text, transform: "none", opacity: 1 };
   const duration = Math.max(1, item.durationMs || item.endMs - item.startMs);
   const progress = Math.max(0, Math.min(1, (playheadMs - item.startMs) / duration));
   const writingDuration = Math.max(100, Math.min(duration, item.typewriterDurationMs ?? 1500));
@@ -185,8 +194,42 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
   const groupKey = "ttk-creator:groups:" + projectId;
   const [groups, setGroups] = useState<TimelineGroup[]>([]);
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
+  // Text layers and captions are persisted independently. The merged list is only
+  // a timeline/rendering view, never the source of truth for either domain.
   const motionKey = "ttk-creator:motion:" + projectId;
-  const [motion, setMotion] = useState<MotionGraphic[]>([]);
+  const textLayersKey = "ttk-creator:text-layers:" + projectId;
+  const captionsKey = "ttk-creator:captions:" + projectId;
+  const motionOrderKey = "ttk-creator:motion-order:" + projectId;
+  const [textLayers, setTextLayers] = useState<MotionGraphic[]>([]);
+  const [captions, setCaptions] = useState<MotionGraphic[]>([]);
+  const [motionOrder, setMotionOrder] = useState<string[]>([]);
+  const [loadedMotionKey, setLoadedMotionKey] = useState<string | null>(null);
+  const motion = useMemo(() => {
+    const byId = new Map([...textLayers, ...captions].map(item => [item.id, item]));
+    const ordered = motionOrder.map(id => byId.get(id)).filter((item): item is MotionGraphic => !!item);
+    const known = new Set(ordered.map(item => item.id));
+    return [...ordered, ...textLayers, ...captions].filter((item, index, all) =>
+      !known.has(item.id) && all.findIndex(candidate => candidate.id === item.id) === index
+    );
+  }, [textLayers, captions, motionOrder]);
+  const setMotion = useCallback((updater: MotionGraphic[] | ((current: MotionGraphic[]) => MotionGraphic[])) => {
+    const next = typeof updater === "function" ? updater(motion) : updater;
+    const nextTextLayers = next.filter(item => !item.isCaption);
+    const nextCaptions = next.filter(item => !!item.isCaption);
+    setTextLayers(nextTextLayers);
+    setCaptions(nextCaptions);
+    setMotionOrder(next.map(item => item.id));
+  }, [textLayers, captions, motion]);
+  function appendTextLayers(items: MotionGraphic[]) {
+    if (!items.length) return;
+    setTextLayers(current => [...current, ...items]);
+    setMotionOrder(current => [...current, ...items.map(item => item.id)]);
+  }
+  function appendCaptions(items: MotionGraphic[]) {
+    if (!items.length) return;
+    setCaptions(current => [...current, ...items]);
+    setMotionOrder(current => [...current, ...items.map(item => item.id)]);
+  }
   const overlayKey = `ttk-creator:image-overlays:${projectId}`;
   const [imageOverlays,setImageOverlays]=useState<ImageOverlay[]>([]);
   const [selectedOverlayId,setSelectedOverlayId]=useState<string|null>(null);
@@ -219,6 +262,10 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
         captionTranslationLanguage: "",
         captionTranslation: "",
         captionWords: words,
+        captionBackgroundColor: "#000000",
+        captionBackgroundOpacity: 0.76,
+        captionWidth: 90,
+                captionPaddingEm: 0.32,
         text: cue.text,
         icon: "",
         fontFamily: "Arial",
@@ -238,10 +285,10 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
         soundVolume: 80,
       };
       });
-      setMotion(current => [...current, ...created]);
+      appendCaptions(created);
       setSelectedMotionId(created[0]?.id ?? null);
       if (created.length) setPlayheadMs(created[0].startMs);
-      setActiveTool("text");
+      setActiveTool("captions");
       setSceneSpecMessage("Transcrição adicionada à faixa exclusiva: " + created.length + " legendas. Revise o texto e os tempos antes de exportar.");
     };
     window.addEventListener("framelab:transcription-ready", onTranscript);
@@ -259,7 +306,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
   const [translationPhase, setTranslationPhase] = useState("Aguardando comando");
   const translationStopRef = useRef(false);
   const [selectedMotionId, setSelectedMotionId] = useState<string | null>(null);
-  const [activeTool, setActiveTool] = useState<"media" | "audio" | "text" | "effects" | "templates">("media");
+  const [activeTool, setActiveTool] = useState<"media" | "audio" | "text" | "captions" | "effects" | "templates">("media");
   const [sceneSpecMessage, setSceneSpecMessage] = useState("");
   const [iconSearch, setIconSearch] = useState("");
   const [selectedTransition, setSelectedTransition] = useState<TimelineClip["transitionType"] | null>(null);
@@ -341,7 +388,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
         const session = JSON.parse(sessionRaw) as Record<string, unknown>;
         if (Number.isFinite(session.playheadMs)) setPlayheadMs(Math.max(0, Number(session.playheadMs)));
         if (Number.isFinite(session.timelineZoom)) setTimelineZoom(Math.max(50, Math.min(200, Number(session.timelineZoom))));
-        if (typeof session.activeTool === "string" && ["media", "audio", "text", "effects", "templates"].includes(session.activeTool)) setActiveTool(session.activeTool as "media" | "audio" | "text" | "effects" | "templates");
+        if (typeof session.activeTool === "string" && ["media", "audio", "text", "captions", "effects", "templates"].includes(session.activeTool)) setActiveTool(session.activeTool as "media" | "audio" | "text" | "captions" | "effects" | "templates");
         if (typeof session.selectedId === "string") setSelectedId(session.selectedId);
         if (typeof session.selectedMotionId === "string") setSelectedMotionId(session.selectedMotionId);
       }
@@ -356,10 +403,44 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
     }
   }, [storageKey, groupKey, clips, groups, loadedStorageKey]);
   useEffect(() => {
-    try { const raw = window.localStorage.getItem(motionKey); const value = raw ? JSON.parse(raw) : []; setMotion(Array.isArray(value) ? value.map((item: MotionGraphic) => { const startMs = Math.max(0, Number(item.startMs) || 0); const legacyDuration = Math.max(300, Number(item.durationMs) || 1800); const endMs = Number.isFinite(item.endMs) ? Math.max(startMs + 300, Number(item.endMs)) : startMs + legacyDuration; const legacyComposition = item.preset === "composition"; const legacyIcon = item.icon || (legacyComposition ? item.elements?.find(element => element.type === "icon")?.content : ""); return { ...item, preset: legacyComposition ? "pop" : item.preset, typewriterDurationMs: Math.max(100, Number(item.typewriterDurationMs) || 1500), icon: legacyIcon || "", fontFamily: item.fontFamily || "Arial", fontWeight: item.fontWeight || 900, textAlign: item.textAlign || "center", startMs, endMs, durationMs: endMs - startMs, x: Number.isFinite(item.x) ? item.x : 50, y: Number.isFinite(item.y) ? item.y : 50 }; }) : []); }
-    catch { setMotion([]); }
-  }, [motionKey]);
-  useEffect(() => { if (loadedStorageKey === storageKey) window.localStorage.setItem(motionKey, JSON.stringify(motion)); }, [motionKey, motion, loadedStorageKey, storageKey]);
+    try {
+      const textRaw = window.localStorage.getItem(textLayersKey);
+      const captionsRaw = window.localStorage.getItem(captionsKey);
+      const orderRaw = window.localStorage.getItem(motionOrderKey);
+      const legacyRaw = window.localStorage.getItem(motionKey);
+      const hasSeparatedData = textRaw !== null || captionsRaw !== null;
+      const storedText = textRaw ? JSON.parse(textRaw) : [];
+      const storedCaptions = captionsRaw ? JSON.parse(captionsRaw) : [];
+      const legacy = legacyRaw ? JSON.parse(legacyRaw) : [];
+      const source = hasSeparatedData
+        ? [...(Array.isArray(storedText) ? storedText : []), ...(Array.isArray(storedCaptions) ? storedCaptions : [])]
+        : (Array.isArray(legacy) ? legacy : []);
+      const normalized = source.map((item: MotionGraphic) => {
+        const startMs = Math.max(0, Number(item.startMs) || 0);
+        const legacyDuration = Math.max(300, Number(item.durationMs) || 1800);
+        const endMs = Number.isFinite(item.endMs) ? Math.max(startMs + 300, Number(item.endMs)) : startMs + legacyDuration;
+        const legacyComposition = item.preset === "composition";
+        const legacyIcon = item.icon || (legacyComposition ? item.elements?.find(element => element.type === "icon")?.content : "");
+        return { ...item, preset: legacyComposition ? "pop" : item.preset, typewriterDurationMs: Math.max(100, Number(item.typewriterDurationMs) || 1500), icon: legacyIcon || "", fontFamily: item.fontFamily || "Arial", fontWeight: item.fontWeight || 900, textAlign: item.textAlign || "center", startMs, endMs, durationMs: endMs - startMs, x: Number.isFinite(item.x) ? item.x : 50, y: Number.isFinite(item.y) ? item.y : 50 };
+      });
+      setTextLayers(normalized.filter(item => !item.isCaption));
+      setCaptions(normalized.filter(item => !!item.isCaption));
+      const savedOrder = orderRaw ? JSON.parse(orderRaw) : null;
+      setMotionOrder(Array.isArray(savedOrder) ? savedOrder.filter((id: unknown) => typeof id === "string") : normalized.map(item => item.id));
+    } catch {
+      setTextLayers([]);
+      setCaptions([]);
+      setMotionOrder([]);
+    } finally {
+      setLoadedMotionKey(motionKey);
+    }
+  }, [motionKey, textLayersKey, captionsKey, motionOrderKey]);
+  useEffect(() => {
+    if (loadedMotionKey !== motionKey || loadedStorageKey !== storageKey) return;
+    window.localStorage.setItem(textLayersKey, JSON.stringify(textLayers));
+    window.localStorage.setItem(captionsKey, JSON.stringify(captions));
+    window.localStorage.setItem(motionOrderKey, JSON.stringify(motionOrder));
+  }, [motionKey, textLayersKey, captionsKey, motionOrderKey, textLayers, captions, motionOrder, loadedMotionKey, loadedStorageKey, storageKey]);
   useEffect(()=>{try{const raw=localStorage.getItem(overlayKey);const parsed=raw?JSON.parse(raw):[];setImageOverlays(Array.isArray(parsed)?parsed:[]);}catch{setImageOverlays([]);}},[overlayKey]);
   useEffect(()=>{if(loadedStorageKey===storageKey)localStorage.setItem(overlayKey,JSON.stringify(imageOverlays));},[overlayKey,imageOverlays,loadedStorageKey,storageKey]);
   const lastSessionSaveAt = useRef(0);
@@ -403,7 +484,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
 
   async function translateCaptions() {
     if (!isDesktopRuntime || translationBusy) return;
-    const captionSequence = motion.filter(item => item.isCaption).sort((a,b) => a.startMs - b.startMs);
+    const captionSequence = captions.slice().sort((a,b) => a.startMs - b.startMs);
     const pending = captionSequence.filter(item => !(item.captionTranslation || "").trim() && (item.captionEnglish || item.text || "").trim());
     if (!pending.length) { setTranslationMessage("Todas as legendas já possuem tradução."); return; }
     setTranslationBusy(true); setTranslationMessage("Verificando as configurações e a chave armazenada..."); setTranslationPhase("Preparando"); translationStopRef.current = false;
@@ -441,7 +522,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
         setTranslationPhase("Aplicando traduções");
         setTranslationMessage("Resposta recebida para o lote " + (index + 1) + ". Aplicando traduções ao projeto...");
         const byId = new Map(result.map(item => [item.id, item.translation]));
-        setMotion(current => current.map(item => {
+        setCaptions(current => current.map(item => {
           const translated = byId.get(item.id);
           if (!translated) return item;
           const words = item.captionWords?.map(word => ({ ...word }));
@@ -667,8 +748,8 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
         imageOverlays: imageOverlays.filter(item=>item.visible!==false).map(item=>({assetId:item.assetId,startMs:item.startMs,endMs:item.endMs,x:item.x,y:item.y,width:item.width,height:item.height,soundId:item.soundId||"",soundVolume:item.soundVolume,entranceAnimation:item.entranceAnimation||"none",entranceDurationMs:item.entranceDurationMs??600})), 
         destination,
         clips: exportClips,
-        motion: await Promise.all(motion.filter(item=>item.visible!==false).map(async item => ({startMs:item.startMs,endMs:item.endMs,durationMs:item.durationMs,typewriterDurationMs:item.typewriterDurationMs??1500,preset:item.preset,x:item.x,y:item.y,text:item.isCaption ? (item.captionMode === "source" ? (item.captionEnglish || item.text) : [item.captionEnglish || item.text, item.captionTranslation].filter(Boolean).join("\n")) : (item.icon ? item.icon + " " : "") + item.text,color:item.color,fontSize:item.fontSize,fontFamily:item.fontFamily || "Arial",fontWeight:item.fontWeight || 900,textAlign:item.textAlign || "center",isCaption:!!item.isCaption,captionWords:item.isCaption&&item.captionMode==="karaoke"?(item.captionWords||[]):[],captionAccent:item.accent,lucideIconPng:item.lucideIconName && lucideIconLibrary[item.lucideIconName as LucideIconName] ? await renderLucideIconPng(item.lucideIconName as LucideIconName,item.lucideIconColor || item.accent,Math.max(24,Math.min(512,Math.round(item.lucideIconSize ?? item.fontSize)))) : undefined,lucideIconAnchor:item.lucideIconAnchor || "left",lucideIconSize:Math.max(24,Math.min(512,Math.round(item.lucideIconSize ?? item.fontSize))),...getLucideIconExportOffset(item,Math.max(24,Math.min(512,Math.round(item.lucideIconSize ?? item.fontSize))))}))),
-        soundEffects: [...motion.filter(item => !!item.soundId).map(item => ({ soundId: item.soundId!, timelineStartMs: item.startMs, volume: item.soundVolume ?? 80 })), ...imageOverlays.filter(item=>!!item.soundId).map(item=>({soundId:item.soundId!,timelineStartMs:item.startMs,volume:item.soundVolume}))],
+        motion: await Promise.all(motion.filter(item=>item.visible!==false).map(async item => ({startMs:item.startMs,endMs:item.endMs,durationMs:item.durationMs,typewriterDurationMs:item.typewriterDurationMs??1500,preset:item.preset,x:item.x,y:item.y,text:item.isCaption ? (item.captionMode === "source" ? (item.captionEnglish || item.text) : [item.captionEnglish || item.text, item.captionTranslation].filter(Boolean).join("\n")) : (item.icon ? item.icon + " " : "") + item.text,color:item.color,fontSize:item.fontSize,fontFamily:item.fontFamily || "Arial",fontWeight:item.fontWeight || 900,textAlign:item.textAlign || "center",isCaption:!!item.isCaption,captionWords:item.isCaption&&item.captionMode==="karaoke"?(item.captionWords||[]):[],captionAccent:item.accent,captionBackgroundColor:item.captionBackgroundColor||"#000000",captionBackgroundOpacity:item.captionBackgroundOpacity??0.76,captionWidth:item.captionWidth??90,captionPaddingEm:item.captionPaddingEm??0.32,lucideIconPng:item.lucideIconName && lucideIconLibrary[item.lucideIconName as LucideIconName] ? await renderLucideIconPng(item.lucideIconName as LucideIconName,item.lucideIconColor || item.accent,Math.max(24,Math.min(512,Math.round(item.lucideIconSize ?? item.fontSize)))) : undefined,lucideIconAnchor:item.lucideIconAnchor || "left",lucideIconSize:Math.max(24,Math.min(512,Math.round(item.lucideIconSize ?? item.fontSize))),...getLucideIconExportOffset(item,Math.max(24,Math.min(512,Math.round(item.lucideIconSize ?? item.fontSize))))}))),
+        soundEffects: [...textLayers.filter(item => !!item.soundId).map(item => ({ soundId: item.soundId!, timelineStartMs: item.startMs, volume: item.soundVolume ?? 80 })), ...imageOverlays.filter(item=>!!item.soundId).map(item=>({soundId:item.soundId!,timelineStartMs:item.startMs,volume:item.soundVolume}))],
       });
       setExportProgress(100);
     } catch (error) {
@@ -718,10 +799,25 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
   function overlayPointerUp(event:ReactPointerEvent<HTMLDivElement>){overlayDrag.current=null;if(event.currentTarget.hasPointerCapture(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId);}
   function addMotion(preset: MotionGraphic["preset"]) {
     const item: MotionGraphic = { id: crypto.randomUUID(), text: preset === "typewriter" ? "YOUR WORD" : "WATCH", icon: "", fontFamily: "Arial", fontWeight: 900, textAlign: "center", startMs: playheadMs, endMs: playheadMs + 3000, durationMs: 3000, preset, typewriterDurationMs: 1500, color: "#ffffff", accent: "#65d6c0", fontSize: 64, x: 50, y: 50, sound: "none", soundId: "", soundVolume: 80 };
-    setMotion(current => [...current, item]); setSelectedMotionId(item.id); stopPlayback();
+    appendTextLayers([item]); setSelectedMotionId(item.id); stopPlayback();
   }
-  function updateMotion(id: string, patch: Partial<MotionGraphic>) { setMotion(current => current.map(item => { if (item.id !== id) return item; const nextStart = patch.startMs !== undefined ? Math.max(0, patch.startMs) : item.startMs; let nextEnd = patch.endMs !== undefined ? patch.endMs : item.endMs; if (patch.durationMs !== undefined && patch.endMs === undefined) nextEnd = nextStart + Math.max(300, patch.durationMs); nextEnd = Math.max(nextStart + 300, nextEnd); return { ...item, ...patch, startMs: nextStart, endMs: nextEnd, durationMs: nextEnd - nextStart }; })); }
-  function removeMotion(id: string) { setMotion(current => current.filter(item => item.id !== id)); if (selectedMotionId === id) setSelectedMotionId(null); }
+  function updateMotion(id: string, patch: Partial<MotionGraphic>) {
+    const applyPatch = (current: MotionGraphic[]) => current.map(item => {
+      if (item.id !== id) return item;
+      const nextStart = patch.startMs !== undefined ? Math.max(0, patch.startMs) : item.startMs;
+      let nextEnd = patch.endMs !== undefined ? patch.endMs : item.endMs;
+      if (patch.durationMs !== undefined && patch.endMs === undefined) nextEnd = nextStart + Math.max(300, patch.durationMs);
+      nextEnd = Math.max(nextStart + 300, nextEnd);
+      return { ...item, ...patch, startMs: nextStart, endMs: nextEnd, durationMs: nextEnd - nextStart };
+    });
+    if (captions.some(item => item.id === id)) setCaptions(applyPatch);
+    else setTextLayers(applyPatch);
+  }
+  function removeMotion(id: string) {
+    if (captions.some(item => item.id === id)) setCaptions(current => current.filter(item => item.id !== id));
+    else setTextLayers(current => current.filter(item => item.id !== id));
+    if (selectedMotionId === id) setSelectedMotionId(null);
+  }
 
   async function translateSelectedCaption(targetLanguage: "English" | "Português brasileiro") {
     if (!selectedMotion?.isCaption || singleCaptionTranslationBusy || !isDesktopRuntime) return;
@@ -780,7 +876,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
           soundVolume: 80,
         };
       });
-      setMotion(current => [...current, ...created]);
+      appendTextLayers(created);
       setSelectedMotionId(created[0]?.id ?? null);
       setActiveTool("text");
       setSceneSpecMessage(`Template "${scene.name}" aplicado: ${created.length} elementos adicionados.`);
@@ -791,11 +887,11 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
   }
 
   function exportSceneSpec() {
-    if (!motion.length) {
+    if (!textLayers.length) {
       setSceneSpecMessage("Adicione pelo menos um elemento de texto antes de exportar o Scene Spec.");
       return;
     }
-    const spec = createSceneSpecFromMotion(motion);
+    const spec = createSceneSpecFromMotion(textLayers);
     const blob = new Blob([JSON.stringify(spec, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
@@ -858,6 +954,10 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
               captionEnglish: english,
               captionTranslation: portuguese,
               captionWords: words.map(word => ({ ...word, startMs: playheadMs + word.startMs, endMs: playheadMs + word.endMs })),
+              captionBackgroundColor: "#000000",
+              captionBackgroundOpacity: 0.76,
+              captionWidth: 90,
+              captionPaddingEm: 0.32,
               text: portuguese ? english + "\n" + portuguese : english || portuguese,
               icon: "",
               fontFamily: "Arial",
@@ -878,9 +978,9 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
             }];
           });
           if (!created.length) throw new Error("O Super JSON foi reconhecido, mas não contém falas válidas para importar.");
-          setMotion(current => [...current, ...created]);
+          setCaptions(current => [...current, ...created]);
           setSelectedMotionId(created[0]?.id ?? null);
-          setActiveTool("text");
+          setActiveTool("captions");
           const withWords = created.filter(item => item.captionWords?.length).length;
           const withTranslation = created.filter(item => item.captionTranslation).length;
           setSceneSpecMessage(`Super JSON importado: ${created.length} legendas, ${withWords} com sincronização por palavra e ${withTranslation} bilíngues.`);
@@ -925,7 +1025,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
           };
         }),
       );
-      setMotion(current => [...current, ...created]);
+      appendTextLayers(created);
       setSelectedMotionId(created[0]?.id ?? null);
       setActiveTool("text");
       const hasPendingMetadata = parsed.scenes.some(scene => !!scene.audio || !!scene.character || !!scene.captions?.enabled);
@@ -946,7 +1046,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
         void player.play().catch(() => setLoadError("Não foi possível reproduzir o efeito sonoro da imagem."));
       }
     }
-    for (const item of motion) {
+    for (const item of textLayers) {
       if (item.soundId && soundUrls[item.soundId] && playheadMs >= item.startMs && playheadMs < item.startMs + 100 && lastMotionSounds.current[item.id] !== item.startMs) {
         lastMotionSounds.current[item.id] = item.startMs;
         const player = new Audio(soundUrls[item.soundId]);
@@ -1232,10 +1332,11 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
     <aside className="editor-tool-rail" aria-label="Ferramentas">
       <button className={activeTool === "media" ? "active" : ""} onClick={() => setActiveTool("media")}><Film size={19}/><small>Mídia</small></button>
       <button className={activeTool === "audio" ? "active" : ""} onClick={() => setActiveTool("audio")}><Music2 size={19}/><small>Áudio</small></button>
-      <button className={activeTool === "text" ? "active" : ""} onClick={() => setActiveTool("text")}><Type size={19}/><small>Texto</small></button>
+      <button className={activeTool === "text" ? "active" : ""} onClick={() => { setActiveTool("text"); if (selectedMotion?.isCaption) setSelectedMotionId(null); setSelectedOverlayId(null); }}><Type size={19}/><small>Texto</small></button>
+      <button className={activeTool === "captions" ? "active" : ""} onClick={() => { setActiveTool("captions"); if (selectedMotion && !selectedMotion.isCaption) setSelectedMotionId(null); setSelectedOverlayId(null); }}><Captions size={19}/><small>Legendas</small></button>
       <button className={activeTool === "effects" ? "active" : ""} onClick={() => setActiveTool("effects")}><WandSparkles size={19}/><small>Efeitos</small></button>
       <button className={activeTool === "templates" ? "active" : ""} onClick={() => setActiveTool("templates")}><PanelsTopLeft size={19}/><small>Modelos</small></button>
-      <button className="transcription-tool" onClick={() => { const clip=clips.find(item=>item.id===selectedId); const asset=clip?assets.find(item=>item.id===clip.assetId):null; onOpenTranscription?.(asset&&(asset.kind==="audio"||asset.kind==="video")?asset.id:undefined,clip&&asset&&(asset.kind==="audio"||asset.kind==="video")?{clipId:clip.id,timelineStartMs:clip.timelineStartMs,sourceStartMs:clip.sourceStartMs,sourceEndMs:clip.sourceEndMs}:undefined); }} title="Gerar legendas automaticamente"><Captions size={19}/><small>Transcrever</small></button>
+      <button className="transcription-tool" onClick={() => { setActiveTool("captions"); const clip=clips.find(item=>item.id===selectedId); const asset=clip?assets.find(item=>item.id===clip.assetId):null; onOpenTranscription?.(asset&&(asset.kind==="audio"||asset.kind==="video")?asset.id:undefined,clip&&asset&&(asset.kind==="audio"||asset.kind==="video")?{clipId:clip.id,timelineStartMs:clip.timelineStartMs,sourceStartMs:clip.sourceStartMs,sourceEndMs:clip.sourceEndMs}:undefined); }} title="Gerar legendas automaticamente"><Captions size={19}/><small>Transcrever</small></button>
     </aside>
     <aside className="editor-content-panel">
       {activeTool === "media" && <>
@@ -1251,17 +1352,24 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
         {!assets.some(asset => asset.kind === "audio") && <div className="editor-empty"><AudioLines size={24}/><b>Nenhum áudio importado</b><p>Importe uma faixa para adicioná-la à timeline.</p><button className="primary" onClick={onAddMedia}><Plus size={14}/> Importar áudio</button></div>}
       </>}
       {activeTool === "text" && <>
-        <div className="editor-panel-head"><div><b>Motion Graphics</b><small>Composições e textos animados com efeitos sonoros.</small></div><span className="preview-live">{motion.length} ELEMENTO(S)</span></div>
+        <div className="editor-panel-head"><div><b>Textos e composições</b><small>Elementos gráficos independentes das legendas.</small></div><span className="preview-live">{textLayers.length} ELEMENTO(S)</span></div>
         <div className="motion-presets editor-preset-grid">{motionPresets.map(preset => <button key={preset.id} className="motion-preset" onClick={() => addMotion(preset.id)}><b>{preset.label}</b><small>Som: {preset.sound}</small><span>+ Adicionar</span></button>)}</div>
-<section className="translation-panel">
-  <div className="translation-panel-heading"><div><b><Languages size={15}/> Tradução com Groq</b><small>Traduza as legendas em lotes sequenciais, sem alterar a sincronização.</small></div><span className="preview-live">{motion.filter(item=>item.isCaption).length} LEGENDAS</span></div>
-  <button className="primary translation-action" type="button" onClick={()=>void translateCaptions()} disabled={translationBusy || !motion.some(item=>item.isCaption && !(item.captionTranslation||"").trim())}>{translationBusy?<><LoaderCircle className="spin" size={14}/> Traduzindo...</>:<><Languages size={14}/> Traduzir legendas sem tradução</>}</button>
-  {translationBusy && <button className="secondary-action" type="button" onClick={()=>{translationStopRef.current=true;setTranslationMessage("Aguardando o lote atual terminar para interromper com segurança...");}}>Parar após o lote atual</button>}
-  {translationBusy && <div className="translation-live-status" role="status" aria-live="polite"><LoaderCircle className="spin" size={17}/><div><b>{translationPhase}</b><span>{translationMessage}</span></div></div>}
-  {translationBusy && <div className="translation-progress"><div><span>Legendas traduzidas</span><b>{translationProgress.done}/{translationProgress.total}</b></div><div className="progress-track"><i style={{width:(translationProgress.total?translationProgress.done/translationProgress.total*100:0)+"%"}}/></div></div>}
-  {!translationBusy && translationMessage && <p className={"translation-message" + (translationPhase === "Falha identificada" ? " is-error" : translationPhase === "Concluído" ? " is-success" : "")} role="status">{translationMessage}</p>}
-  <small className="property-hint">As legendas concluídas ficam salvas automaticamente. Se houver erro ou limite da API, execute novamente para continuar apenas as pendentes.</small>
-</section>
+      </>}
+      {activeTool === "captions" && <>
+        <div className="editor-panel-head"><div><b>Transcrição e legendas</b><small>Gerencie texto falado, traduções, sincronização e karaoke.</small></div><span className="preview-live">{captions.length} LEGENDA(S)</span></div>
+        <div className="caption-workspace-actions">
+          <button className="primary" type="button" onClick={() => { const clip=clips.find(item=>item.id===selectedId); const asset=clip?assets.find(item=>item.id===clip.assetId):null; onOpenTranscription?.(asset&&(asset.kind==="audio"||asset.kind==="video")?asset.id:undefined,clip&&asset&&(asset.kind==="audio"||asset.kind==="video")?{clipId:clip.id,timelineStartMs:clip.timelineStartMs,sourceStartMs:clip.sourceStartMs,sourceEndMs:clip.sourceEndMs}:undefined); }}><Captions size={14}/> Transcrever mídia</button>
+          <small>As legendas possuem propriedades, temporização e renderização próprias. Textos e composições não são afetados.</small>
+        </div>
+        <section className="translation-panel">
+          <div className="translation-panel-heading"><div><b><Languages size={15}/> Tradução de legendas</b><small>Traduza apenas as legendas, preservando a sincronização.</small></div><span className="preview-live">{captions.filter(item=>!(item.captionTranslation||"").trim()).length} PENDENTE(S)</span></div>
+          <button className="primary translation-action" type="button" onClick={()=>void translateCaptions()} disabled={translationBusy || !captions.some(item => !(item.captionTranslation||"").trim())}>{translationBusy?<><LoaderCircle className="spin" size={14}/> Traduzindo...</>:<><Languages size={14}/> Traduzir legendas sem tradução</>}</button>
+          {translationBusy && <button className="secondary-action" type="button" onClick={()=>{translationStopRef.current=true;setTranslationMessage("Aguardando o lote atual terminar para interromper com segurança...");}}>Parar após o lote atual</button>}
+          {translationBusy && <div className="translation-live-status" role="status" aria-live="polite"><LoaderCircle className="spin" size={17}/><div><b>{translationPhase}</b><span>{translationMessage}</span></div></div>}
+          {translationBusy && <div className="translation-progress"><div><span>Legendas traduzidas</span><b>{translationProgress.done}/{translationProgress.total}</b></div><div className="progress-track"><i style={{width:(translationProgress.total?translationProgress.done/translationProgress.total*100:0)+"%"}}/></div></div>}
+          {!translationBusy && translationMessage && <p className={"translation-message" + (translationPhase === "Falha identificada" ? " is-error" : translationPhase === "Concluído" ? " is-success" : "")} role="status">{translationMessage}</p>}
+          <small className="property-hint">As traduções são salvas automaticamente. Execute novamente para continuar apenas as pendentes.</small>
+        </section>
       </>}
       {activeTool === "templates" && <>
         <div className="editor-panel-head"><div><b>Presets de cena</b><small>Layouts prontos com tipografia e posicionamento definidos.</small></div><span className="preview-live">{SCENE_TEMPLATES.length} MODELOS</span></div>
@@ -1310,10 +1418,10 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
         {activeOverlays.map(item=>{const url=mediaUrls[item.assetId];if(!url)return null;const entrance=imageOverlayEntranceState(item,playheadMs);return <div key={item.id} className={"image-overlay-preview"+(selectedOverlayId===item.id?" selected":"")} style={{left:item.x+"%",top:item.y+"%",width:item.width*previewScale,height:item.height*previewScale,transform:entrance.transform,opacity:entrance.opacity}} onPointerDown={event=>overlayPointerDown(event,item,(event.target as HTMLElement).closest(".image-overlay-handle")?"resize":"move")} onPointerMove={overlayPointerMove} onPointerUp={overlayPointerUp} onPointerCancel={overlayPointerUp}><img src={url} alt="Imagem sobreposta" draggable={false}/>{selectedOverlayId===item.id&&<span className="image-overlay-handle"/>}</div>;})}
         {activeMotion.map(item => {
           const animation = motionPreviewState(item, playheadMs);
-          return <div key={item.id} className={"motion-overlay motion-" + item.preset + (item.isCaption ? " caption-overlay" : "") + (selectedMotionId === item.id ? " motion-selected" : "")} style={{ "--motion-color": item.color, "--motion-accent": item.accent, "--motion-size": (item.fontSize * previewScale) + "px", "--motion-x": item.isCaption ? "5%" : item.x + "%", "--motion-y": item.y + "%" , width: item.isCaption ? "90%" : undefined, transform: item.isCaption ? "translateY(-50%)" : item.textAlign === "left" ? "translate(0,-50%)" : item.textAlign === "right" ? "translate(-100%,-50%)" : "translate(-50%,-50%)" } as CSSProperties}>
-            <span className={"motion-content-group anchor-" + (item.lucideIconAnchor || "left")} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: Math.max(4, (item.lucideIconSize ?? item.fontSize) * previewScale * 0.22), flexDirection: item.lucideIconAnchor === "top" ? "column" : item.lucideIconAnchor === "bottom" ? "column-reverse" : item.lucideIconAnchor === "right" ? "row-reverse" : "row", transform: animation.transform, opacity: animation.opacity, willChange: "transform,opacity" }} onPointerDown={event => { if(item.locked)return; setSelectedId(null); setSelectedMotionId(item.id); event.preventDefault(); event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={event => { if (!event.currentTarget.hasPointerCapture(event.pointerId)) return; const rect = event.currentTarget.closest(".preview-media-frame")?.getBoundingClientRect(); if (!rect) return; updateMotion(item.id, { x: Math.max(0, Math.min(100, ((event.clientX - rect.left) / rect.width) * 100)), y: Math.max(0, Math.min(100, ((event.clientY - rect.top) / rect.height) * 100)) }); }} onPointerUp={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); }}>
+          return <div key={item.id} className={"motion-overlay motion-" + item.preset + (item.isCaption ? " caption-overlay" : "") + (selectedMotionId === item.id ? " motion-selected" : "")} style={{ "--motion-color": item.color, "--motion-accent": item.accent, "--motion-size": (item.fontSize * previewScale) + "px", "--motion-x": item.isCaption ? ((100 - (item.captionWidth ?? 90)) / 2) + "%" : item.x + "%", "--motion-y": item.y + "%" , width: item.isCaption ? (item.captionWidth ?? 90) + "%" : undefined, transform: item.isCaption ? "translateY(-50%)" : item.textAlign === "left" ? "translate(0,-50%)" : item.textAlign === "right" ? "translate(-100%,-50%)" : "translate(-50%,-50%)" } as CSSProperties}>
+            <span className={"motion-content-group anchor-" + (item.lucideIconAnchor || "left")} style={{ display: item.isCaption ? "block" : "inline-flex", alignItems: "center", justifyContent: "center", gap: Math.max(4, (item.lucideIconSize ?? item.fontSize) * previewScale * 0.22), flexDirection: item.lucideIconAnchor === "top" ? "column" : item.lucideIconAnchor === "bottom" ? "column-reverse" : item.lucideIconAnchor === "right" ? "row-reverse" : "row", transform: animation.transform, opacity: animation.opacity, willChange: "transform,opacity" }} onPointerDown={event => { if(item.locked)return; setSelectedId(null); setSelectedMotionId(item.id); setActiveTool(item.isCaption ? "captions" : "text"); event.preventDefault(); event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={event => { if (!event.currentTarget.hasPointerCapture(event.pointerId)) return; const rect = event.currentTarget.closest(".preview-media-frame")?.getBoundingClientRect(); if (!rect) return; updateMotion(item.id, item.isCaption ? { y: Math.max(0, Math.min(100, ((event.clientY - rect.top) / rect.height) * 100)) } : { x: Math.max(0, Math.min(100, ((event.clientX - rect.left) / rect.width) * 100)), y: Math.max(0, Math.min(100, ((event.clientY - rect.top) / rect.height) * 100)) }); }} onPointerUp={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); }}>
               {item.lucideIconName && lucideIconLibrary[item.lucideIconName as LucideIconName] && (() => { const IconView = lucideIconLibrary[item.lucideIconName as LucideIconName]; return <IconView size={(item.lucideIconSize ?? item.fontSize) * previewScale} color={item.lucideIconColor || item.accent} strokeWidth={2.2} aria-hidden="true"/>; })()}
-              <span className="motion-main-text" style={{fontFamily:item.fontFamily || "Arial",fontWeight:(item.fontWeight || 900) >= 700 ? 700 : 400,fontSize:item.fontSize * previewScale,textAlign:item.isCaption ? "center" : item.textAlign || "center",background:item.isCaption ? "rgba(0,0,0,.76)" : "transparent",padding:item.isCaption ? ".32em .55em" : "0",borderRadius:item.isCaption ? ".22em" : "0",boxDecorationBreak:"clone",WebkitBoxDecorationBreak:"clone",display:item.isCaption ? "block" : "inline",width:item.isCaption ? "100%" : undefined,maxWidth:item.isCaption ? "100%" : "90%",boxSizing:"border-box",whiteSpace:item.isCaption ? "pre-wrap" : undefined}}>{item.captionMode === "karaoke" && item.captionWords?.length ? <><span>{item.captionWords.map((word, index) => <span key={index} style={{ color: playheadMs >= word.startMs && playheadMs <= word.endMs ? item.accent : item.color, textShadow: playheadMs >= word.startMs && playheadMs <= word.endMs ? "0 0 12px " + item.accent : "none" }}>{word.text}{index < item.captionWords!.length - 1 ? " " : ""}</span>)}</span>{item.captionTranslation && <><br/><span style={{color:"#d8d4df",fontSize:"0.72em"}}>{item.captionTranslation}</span></>}</> : item.captionTranslation ? <>{item.captionEnglish || item.text}<br/><span style={{color:"#d8d4df",fontSize:"0.72em"}}>{item.captionTranslation}</span></> : animation.text}</span>
+              <span className="motion-main-text" style={{fontFamily:item.fontFamily || "Arial",fontWeight:(item.fontWeight || 900) >= 700 ? 700 : 400,fontSize:item.fontSize * previewScale,textAlign:item.textAlign || "center",background:item.isCaption ? captionBackgroundRgba(item.captionBackgroundColor,item.captionBackgroundOpacity) : "transparent",padding:item.isCaption ? `${item.captionPaddingEm ?? 0.32}em .55em` : "0",borderRadius:"0",boxDecorationBreak:"clone",WebkitBoxDecorationBreak:"clone",display:item.isCaption ? "block" : "inline",width:item.isCaption ? "100%" : undefined,maxWidth:item.isCaption ? "100%" : "90%",boxSizing:"border-box",whiteSpace:item.isCaption ? "pre-wrap" : undefined}}>{item.captionMode === "karaoke" && item.captionWords?.length ? <><span>{item.captionWords.map((word, index) => <span key={index} style={{ color: playheadMs >= word.startMs && playheadMs <= word.endMs ? item.accent : item.color, textShadow: playheadMs >= word.startMs && playheadMs <= word.endMs ? "0 0 12px " + item.accent : "none" }}>{word.text}{index < item.captionWords!.length - 1 ? " " : ""}</span>)}</span>{item.captionTranslation && <><br/><span style={{color:"#d8d4df",fontSize:"0.72em"}}>{item.captionTranslation}</span></>}</> : item.captionTranslation && item.captionMode !== "source" ? <>{item.captionEnglish || item.text}<br/><span style={{color:"#d8d4df",fontSize:"0.72em"}}>{item.captionTranslation}</span></> : animation.text}</span>
             </span>
           </div>;
         })}
@@ -1330,49 +1438,64 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
       <div className="editor-panel-head layer-panel-heading"><div><b><Layers size={14}/> Camadas</b><small>Visibilidade, bloqueio e ordem</small></div></div>
       <div className="layer-manager">
         <div className="layer-manager-group"><b>Imagens</b>{[...imageOverlays].reverse().map((item,ri)=>{const index=imageOverlays.length-1-ri;return <div key={item.id} className={"layer-manager-row"+(selectedOverlayId===item.id?" selected":"")} onClick={()=>{setSelectedOverlayId(item.id);setSelectedMotionId(null);setSelectedId(null);}}><Image size={14}/><span>{assets.find(asset=>asset.id===item.assetId)?.name||"Imagem"}</span><button type="button" title="Visibilidade" onClick={event=>{event.stopPropagation();updateOverlay(item.id,{visible:item.visible===false});}}><Eye size={13}/></button><button type="button" title="Bloquear" onClick={event=>{event.stopPropagation();updateOverlay(item.id,{locked:!item.locked});}}>{item.locked?<ShieldCheck size={13}/>:<MousePointer2 size={13}/>}</button><button type="button" title="Subir camada" disabled={index===imageOverlays.length-1} onClick={event=>{event.stopPropagation();moveOverlayLayer(item.id,1);}}>↑</button><button type="button" title="Descer camada" disabled={index===0} onClick={event=>{event.stopPropagation();moveOverlayLayer(item.id,-1);}}>↓</button></div>;})}{!imageOverlays.length&&<small className="layer-empty">Nenhuma imagem</small>}</div>
-        <div className="layer-manager-group"><b>Textos e composições</b>{[...motion].reverse().map((item,ri)=>{const index=motion.length-1-ri;return <div key={item.id} className={"layer-manager-row"+(selectedMotionId===item.id?" selected":"")} onClick={()=>{setSelectedMotionId(item.id);setSelectedOverlayId(null);setSelectedId(null);}}><Type size={14}/><span>{(item.captionEnglish||item.text||"Texto").slice(0,24)}</span><button type="button" title="Visibilidade" onClick={event=>{event.stopPropagation();updateMotion(item.id,{visible:item.visible===false});}}><Eye size={13}/></button><button type="button" title="Bloquear" onClick={event=>{event.stopPropagation();updateMotion(item.id,{locked:!item.locked});}}>{item.locked?<ShieldCheck size={13}/>:<MousePointer2 size={13}/>}</button><button type="button" title="Subir camada" disabled={index===motion.length-1} onClick={event=>{event.stopPropagation();moveMotionLayer(item.id,1);}}>↑</button><button type="button" title="Descer camada" disabled={index===0} onClick={event=>{event.stopPropagation();moveMotionLayer(item.id,-1);}}>↓</button></div>;})}{!motion.length&&<small className="layer-empty">Nenhum texto ou composição</small>}</div>
+        <div className="layer-manager-group"><b>Textos e composições</b>{[...textLayers].reverse().map(item=>{const index=motion.findIndex(layer=>layer.id===item.id);return <div key={item.id} className={"layer-manager-row"+(selectedMotionId===item.id?" selected":"")} onClick={()=>{setSelectedMotionId(item.id);setSelectedOverlayId(null);setSelectedId(null);setActiveTool("text");}}><Type size={14}/><span>{(item.text||"Texto").slice(0,24)}</span><button type="button" title="Visibilidade" onClick={event=>{event.stopPropagation();updateMotion(item.id,{visible:item.visible===false});}}><Eye size={13}/></button><button type="button" title="Bloquear" onClick={event=>{event.stopPropagation();updateMotion(item.id,{locked:!item.locked});}}>{item.locked?<ShieldCheck size={13}/>:<MousePointer2 size={13}/>}</button><button type="button" title="Subir camada" disabled={index===motion.length-1} onClick={event=>{event.stopPropagation();moveMotionLayer(item.id,1);}}>↑</button><button type="button" title="Descer camada" disabled={index===0} onClick={event=>{event.stopPropagation();moveMotionLayer(item.id,-1);}}>↓</button></div>;})}{!textLayers.length&&<small className="layer-empty">Nenhum texto ou composição</small>}</div>
+         <div className="layer-manager-group"><b>Transcrição e legendas</b>{[...captions].reverse().map(item=>{const index=motion.findIndex(layer=>layer.id===item.id);return <div key={item.id} className={"layer-manager-row"+(selectedMotionId===item.id?" selected":"")} onClick={()=>{setSelectedMotionId(item.id);setSelectedOverlayId(null);setSelectedId(null);setActiveTool("captions");}}><Captions size={14}/><span>{(item.captionEnglish||item.text||"Legenda").slice(0,24)}</span><button type="button" title="Visibilidade" onClick={event=>{event.stopPropagation();updateMotion(item.id,{visible:item.visible===false});}}><Eye size={13}/></button><button type="button" title="Bloquear" onClick={event=>{event.stopPropagation();updateMotion(item.id,{locked:!item.locked});}}>{item.locked?<ShieldCheck size={13}/>:<MousePointer2 size={13}/>}</button><button type="button" title="Subir camada" disabled={index===motion.length-1} onClick={event=>{event.stopPropagation();moveMotionLayer(item.id,1);}}>↑</button><button type="button" title="Descer camada" disabled={index===0} onClick={event=>{event.stopPropagation();moveMotionLayer(item.id,-1);}}>↓</button></div>;})}{!captions.length&&<small className="layer-empty">Nenhuma legenda</small>}</div>
       </div>
       {selectedOverlay ? <><div className="editor-panel-head"><div><b>Imagem sobreposta</b><small>Camada independente</small></div></div><div className="properties-scroll"><div className="property-section"><b>Dimensões proporcionais</b><label>Largura <strong>{Math.round(selectedOverlay.width)} px</strong><input type="range" min="60" max="1080" value={selectedOverlay.width} onChange={event=>{const width=Number(event.target.value);updateOverlay(selectedOverlay.id,{width,height:width/(selectedOverlay.width/Math.max(1,selectedOverlay.height))});}}/></label><small>Arraste a alça no canto inferior direito para redimensionar diretamente no preview.</small></div><div className="property-section"><b>Animação de entrada</b><label>Estilo<select value={selectedOverlay.entranceAnimation||"none"} onChange={event=>updateOverlay(selectedOverlay.id,{entranceAnimation:event.target.value as ImageOverlay["entranceAnimation"]})}><option value="none">Sem animação</option><option value="fade">Aparecer suavemente</option><option value="slide-left">Entrar pela esquerda</option><option value="slide-right">Entrar pela direita</option><option value="slide-up">Entrar por baixo</option><option value="slide-down">Entrar por cima</option></select></label>{(selectedOverlay.entranceAnimation||"none")!=="none"&&<label>Duração <strong>{((selectedOverlay.entranceDurationMs??600)/1000).toFixed(1)} s</strong><input type="range" min="100" max="2000" step="100" value={selectedOverlay.entranceDurationMs??600} onChange={event=>updateOverlay(selectedOverlay.id,{entranceDurationMs:Number(event.target.value)})}/></label>}<small>A animação começa automaticamente no início da camada e também será aplicada ao MP4 exportado.</small></div><div className="property-section"><b>Tempo</b><label>Início (s)<input type="number" min="0" step="0.1" value={(selectedOverlay.startMs/1000).toFixed(1)} onChange={event=>updateOverlay(selectedOverlay.id,{startMs:Math.max(0,Number(event.target.value)*1000)})}/></label><label>Saída (s)<input type="number" min={(selectedOverlay.startMs+100)/1000} step="0.1" value={(selectedOverlay.endMs/1000).toFixed(1)} onChange={event=>{const value=Number(event.target.value);if(Number.isFinite(value))updateOverlay(selectedOverlay.id,{endMs:Math.max(selectedOverlay.startMs+100,value*1000)});}}/></label><div className="overlay-duration-actions"><button type="button" title="Diminuir saída em 0,1 segundo" disabled={selectedOverlay.endMs<=selectedOverlay.startMs+100} onClick={()=>updateOverlay(selectedOverlay.id,{endMs:Math.max(selectedOverlay.startMs+100,selectedOverlay.endMs-100)})}>− 0,1 s</button><button type="button" title="Aumentar saída em 0,1 segundo" onClick={()=>updateOverlay(selectedOverlay.id,{endMs:selectedOverlay.endMs+100})}>+ 0,1 s</button><button type="button" title="Estender a imagem até o fim do restante da timeline" onClick={()=>updateOverlay(selectedOverlay.id,{endMs:Math.max(selectedOverlay.startMs+100,timelineContentEndMs)})}>Até o fim da timeline</button></div><small>A saída pode ultrapassar a duração original da imagem e será considerada na duração total da timeline.</small></div><div className="property-section"><b>Efeito sonoro da imagem</b><label>Som<select value={selectedOverlay.soundId||""} onChange={event=>updateOverlay(selectedOverlay.id,{soundId:event.target.value})}><option value="">Sem efeito sonoro</option>{globalSounds.map(sound=><option key={sound.id} value={sound.id}>{sound.name}</option>)}</select></label><label>Volume <strong>{selectedOverlay.soundVolume}%</strong><input type="range" min="0" max="100" value={selectedOverlay.soundVolume} onChange={event=>updateOverlay(selectedOverlay.id,{soundVolume:Number(event.target.value)})}/></label></div><div className="property-section"><b>Posição</b><label>Horizontal (%)<input type="range" min="0" max="100" value={selectedOverlay.x} onChange={event=>updateOverlay(selectedOverlay.id,{x:Number(event.target.value)})}/></label><label>Vertical (%)<input type="range" min="0" max="100" value={selectedOverlay.y} onChange={event=>updateOverlay(selectedOverlay.id,{y:Number(event.target.value)})}/></label></div><button className="danger-action property-delete" onClick={()=>removeOverlay(selectedOverlay.id)}>Excluir imagem</button></div></> : selectedMotion ? <>
-        <div className="editor-panel-head"><div><b>Propriedades</b><small>Texto, tipografia e animação</small></div></div>
+        <div className="editor-panel-head"><div><b>{selectedMotion.isCaption ? "Propriedades da legenda" : "Propriedades do texto"}</b><small>{selectedMotion.isCaption ? "Conteúdo falado, estilo, fundo e sincronização." : "Tipografia, composição, animação e efeitos."}</small></div></div>
         <div className="properties-scroll">
-          <details open className="property-section"><summary>Texto</summary>
-            {selectedMotion.isCaption && <div className="caption-translate-actions"><b>Traduzir legenda</b><small>Origem detectada: {selectedMotion.captionSourceLanguage || "automática"}. O idioma é identificado pela transcrição e conferido novamente pela IA.</small><div><button type="button" className="secondary-action" disabled={singleCaptionTranslationBusy} onClick={()=>void translateSelectedCaption("English")}>{singleCaptionTranslationBusy?<LoaderCircle className="spin" size={13}/>:<Languages size={13}/>} Para inglês</button><button type="button" className="secondary-action" disabled={singleCaptionTranslationBusy} onClick={()=>void translateSelectedCaption("Português brasileiro")}>{singleCaptionTranslationBusy?<LoaderCircle className="spin" size={13}/>:<Languages size={13}/>} Para PT-BR</button></div>{translationMessage&&!translationBusy&&<small className={translationPhase==="Falha identificada"?"is-error":"is-success"}>{translationMessage}</small>}</div>}
-            <label className="motion-caption-toggle"><input type="checkbox" checked={!!selectedMotion.isCaption} onChange={event => updateMotion(selectedMotion.id, { isCaption: event.target.checked })}/> Exibir como legenda (com fundo)</label><small className="property-hint">Adiciona um fundo escuro semitransparente para destacar o texto sobre qualquer vídeo.</small>{selectedMotion.isCaption && <label className="property-control">Modo da legenda<select value={selectedMotion.captionMode || (selectedMotion.captionTranslation ? "bilingual" : "source")} onChange={event => updateMotion(selectedMotion.id, { captionMode: event.target.value as MotionGraphic["captionMode"] })}><option value="source">Original</option><option value="bilingual" disabled={!selectedMotion.captionTranslation}>Original + tradução</option><option value="karaoke" disabled={!selectedMotion.captionWords?.length}>Karaoke por palavra</option></select></label>}<label>{selectedMotion.isCaption ? "Texto original" : "Conteúdo"}<textarea className="motion-textarea" rows={6} value={selectedMotion.isCaption ? (selectedMotion.captionEnglish || selectedMotion.text) : selectedMotion.text} onChange={event => updateMotion(selectedMotion.id, selectedMotion.isCaption ? { text: event.target.value, captionEnglish: event.target.value } : { text: event.target.value })} maxLength={1200} placeholder={"Digite sua frase. Use Enter para criar uma nova linha."}/></label>{selectedMotion.isCaption && <label>Tradução<textarea className="motion-textarea" rows={3} value={selectedMotion.captionTranslation || ""} onChange={event => updateMotion(selectedMotion.id, { captionTranslation: event.target.value })} maxLength={1200} placeholder="Texto traduzido"/></label>}<small className="property-hint">Use Enter para quebrar a linha. O texto será distribuído dentro da área segura do vídeo.</small>
-            <div className="lucide-library">
-              <div className="lucide-library-heading"><b>Biblioteca Lucide SVG</b><small>Ícone vetorial ancorado ao texto</small></div>
-              <label className="lucide-search"><Search size={14}/><input value={iconSearch} onChange={event => setIconSearch(event.target.value)} placeholder="Buscar ícone..."/></label>
-              <div className="lucide-icon-grid">
-                {lucideIconPickerNames.filter(name => name.toLowerCase().includes(iconSearch.trim().toLowerCase())).map(name => {
-                  const IconView = lucideIconLibrary[name];
-                  return <button type="button" key={name} className={"lucide-icon-option" + (selectedMotion.lucideIconName === name ? " selected" : "")} title={name} aria-label={name} onClick={() => updateMotion(selectedMotion.id, { lucideIconName: selectedMotion.lucideIconName === name ? undefined : name })}><IconView size={19}/><small>{name}</small></button>;
-                })}
+          {selectedMotion.isCaption ? <>
+            <details open className="property-section"><summary>Conteúdo e idioma</summary>
+              <div className="caption-translate-actions"><b>Traduzir legenda</b><small>Idioma de origem: {selectedMotion.captionSourceLanguage || "automático"}.</small><div><button type="button" className="secondary-action" disabled={singleCaptionTranslationBusy} onClick={()=>void translateSelectedCaption("English")}>{singleCaptionTranslationBusy?<LoaderCircle className="spin" size={13}/>:<Languages size={13}/>} Para inglês</button><button type="button" className="secondary-action" disabled={singleCaptionTranslationBusy} onClick={()=>void translateSelectedCaption("Português brasileiro")}>{singleCaptionTranslationBusy?<LoaderCircle className="spin" size={13}/>:<Languages size={13}/>} Para PT-BR</button></div>{translationMessage&&!translationBusy&&<small className={translationPhase==="Falha identificada"?"is-error":"is-success"}>{translationMessage}</small>}</div>
+              <label>Modo<select value={selectedMotion.captionMode || (selectedMotion.captionTranslation ? "bilingual" : "source")} onChange={event=>updateMotion(selectedMotion.id,{captionMode:event.target.value as MotionGraphic["captionMode"]})}><option value="source">Original</option><option value="bilingual" disabled={!selectedMotion.captionTranslation}>Original + tradução</option><option value="karaoke" disabled={!selectedMotion.captionWords?.length}>Karaoke por palavra</option></select></label>
+              <label>Texto original<textarea className="motion-textarea" rows={5} value={selectedMotion.captionEnglish || selectedMotion.text} onChange={event=>updateMotion(selectedMotion.id,{text:event.target.value,captionEnglish:event.target.value})} maxLength={1200}/></label>
+              <label>Tradução<textarea className="motion-textarea" rows={3} value={selectedMotion.captionTranslation || ""} onChange={event=>updateMotion(selectedMotion.id,{captionTranslation:event.target.value})} maxLength={1200} placeholder="Texto traduzido"/></label>
+              <small className="property-hint">A edição do texto da legenda não altera os textos e composições da timeline.</small>
+            </details>
+            <details open className="property-section"><summary>Estilo da legenda</summary>
+              <label>Fonte<select value={selectedMotion.fontFamily || "Arial"} onChange={event=>updateMotion(selectedMotion.id,{fontFamily:event.target.value})}><option value="Arial">Arial</option><option value="Georgia">Georgia</option><option value="Impact">Impact</option><option value="Trebuchet MS">Trebuchet MS</option><option value="Verdana">Verdana</option><option value="Courier New">Courier New</option></select></label>
+              <label>Tamanho<input type="number" min="18" max="180" value={selectedMotion.fontSize} onChange={event=>updateMotion(selectedMotion.id,{fontSize:Math.max(18,Math.min(180,Number(event.target.value)))})}/></label>
+              <label>Peso<select value={selectedMotion.fontWeight || 900} onChange={event=>updateMotion(selectedMotion.id,{fontWeight:Number(event.target.value)})}><option value={400}>Normal</option><option value={600}>Semibold</option><option value={700}>Negrito</option><option value={900}>Extra negrito</option></select></label>
+              <label>Alinhamento<select value={selectedMotion.textAlign || "center"} onChange={event=>updateMotion(selectedMotion.id,{textAlign:event.target.value as MotionGraphic["textAlign"]})}><option value="left">Esquerda</option><option value="center">Centralizado</option><option value="right">Direita</option></select></label>
+              <div className="motion-colors"><label>Texto<input type="color" value={selectedMotion.color} onChange={event=>updateMotion(selectedMotion.id,{color:event.target.value})}/></label><label>Palavra ativa<input type="color" value={selectedMotion.accent} onChange={event=>updateMotion(selectedMotion.id,{accent:event.target.value})}/></label></div>
+              <div className="caption-style-controls"><b>Fundo e área</b>
+                <label>Cor do fundo<input type="color" value={selectedMotion.captionBackgroundColor || "#000000"} onChange={event=>updateMotion(selectedMotion.id,{captionBackgroundColor:event.target.value})}/></label>
+                <label>Opacidade <strong>{Math.round((selectedMotion.captionBackgroundOpacity ?? 0.76)*100)}%</strong><input type="range" min="0" max="100" value={Math.round((selectedMotion.captionBackgroundOpacity ?? 0.76)*100)} onChange={event=>updateMotion(selectedMotion.id,{captionBackgroundOpacity:Number(event.target.value)/100})}/></label>
+                <label>Largura <strong>{selectedMotion.captionWidth ?? 90}%</strong><input type="range" min="60" max="100" value={selectedMotion.captionWidth ?? 90} onChange={event=>updateMotion(selectedMotion.id,{captionWidth:Number(event.target.value)})}/></label>
+                <label>Espaçamento interno <strong>{(selectedMotion.captionPaddingEm ?? 0.32).toFixed(2)} em</strong><input type="range" min="0" max="1" step="0.02" value={selectedMotion.captionPaddingEm ?? 0.32} onChange={event=>updateMotion(selectedMotion.id,{captionPaddingEm:Number(event.target.value)})}/></label>
               </div>
-              {selectedMotion.lucideIconName && <>
-                <div className="motion-fields two">
-                  <label>Âncora<select value={selectedMotion.lucideIconAnchor || "left"} onChange={event => updateMotion(selectedMotion.id, { lucideIconAnchor: event.target.value as MotionGraphic["lucideIconAnchor"] })}><option value="left">À esquerda do texto</option><option value="right">À direita do texto</option><option value="top">Acima do texto</option><option value="bottom">Abaixo do texto</option></select></label>
-                  <label>Tamanho (px)<input type="number" min="12" max="180" value={selectedMotion.lucideIconSize ?? selectedMotion.fontSize} onChange={event => updateMotion(selectedMotion.id, { lucideIconSize: Math.max(12, Math.min(180, Number(event.target.value))) })}/></label>
-                </div>
-                <label>Cor do ícone<input type="color" value={selectedMotion.lucideIconColor || selectedMotion.accent} onChange={event => updateMotion(selectedMotion.id, { lucideIconColor: event.target.value })}/></label>
-                <button type="button" className="secondary-action" onClick={() => updateMotion(selectedMotion.id, { lucideIconName: undefined })}>Remover ícone SVG</button>
-              </>}
-              <small className="property-hint">O ícone acompanha o bloco quando você arrasta o texto na prévia. A exportação MP4 dos SVGs será conectada ao renderizador na próxima etapa.</small>
-            </div>
-            <label>Emoji ou símbolo (opcional)<input value={selectedMotion.icon || ""} onChange={event => updateMotion(selectedMotion.id, { icon: event.target.value })} maxLength={12} placeholder="Ex.: ★  →  ✓"/></label>
-          </details>
-          <details open className="property-section"><summary>Tempo</summary><div className="motion-fields two"><label>Início (s)<input type="number" min="0" step="0.1" value={(selectedMotion.startMs / 1000).toFixed(1)} onChange={event => updateMotion(selectedMotion.id, { startMs: Math.max(0, Number(event.target.value) * 1000) })}/></label><label>Saída (s)<input type="number" min={(selectedMotion.startMs / 1000 + 0.3).toFixed(1)} step="0.1" value={(selectedMotion.endMs / 1000).toFixed(1)} onChange={event => updateMotion(selectedMotion.id, { endMs: Math.max(selectedMotion.startMs + 300, Number(event.target.value) * 1000) })}/></label><label>Duração calculada (s)<input type="number" value={(selectedMotion.durationMs / 1000).toFixed(1)} readOnly title="Calculada automaticamente pelo início e pelo horário de saída"/></label></div></details>
-          <details open className="property-section"><summary>Estilo</summary>
-            <label>Fonte<select value={selectedMotion.fontFamily || "Arial"} onChange={event => updateMotion(selectedMotion.id, { fontFamily: event.target.value })}>
-              <option value="Arial">Arial</option><option value="Georgia">Georgia</option><option value="Impact">Impact</option><option value="Trebuchet MS">Trebuchet MS</option><option value="Verdana">Verdana</option><option value="Courier New">Courier New</option>
-            </select></label>
-            <label>Tamanho<input type="number" min="18" max="180" value={selectedMotion.fontSize} onChange={event => updateMotion(selectedMotion.id, { fontSize: Math.max(18, Math.min(180, Number(event.target.value))) })}/></label>
-            <label>Peso<select value={selectedMotion.fontWeight || 900} onChange={event => updateMotion(selectedMotion.id, { fontWeight: Number(event.target.value) })}><option value={400}>Normal</option><option value={600}>Semibold</option><option value={700}>Negrito</option><option value={900}>Extra negrito</option></select></label>
-            <label>Alinhamento<select value={selectedMotion.textAlign || "center"} onChange={event => updateMotion(selectedMotion.id, { textAlign: event.target.value as MotionGraphic["textAlign"] })}><option value="left">Esquerda</option><option value="center">Centralizado</option><option value="right">Direita</option></select></label>
-            <label>Animação<select value={selectedMotion.preset} onChange={event => updateMotion(selectedMotion.id, { preset: event.target.value as MotionGraphic["preset"] })}>{motionPresets.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}</select></label>{selectedMotion.preset === "typewriter" && <div className="typewriter-duration-control"><label>Duração da escrita <strong>{((selectedMotion.typewriterDurationMs ?? 1500) / 1000).toFixed(1)} s</strong><input type="range" min="100" max={Math.max(100, Math.min(10000, selectedMotion.durationMs || selectedMotion.endMs - selectedMotion.startMs))} step="100" value={Math.min(selectedMotion.typewriterDurationMs ?? 1500, Math.max(100, selectedMotion.durationMs || selectedMotion.endMs - selectedMotion.startMs))} onChange={event => updateMotion(selectedMotion.id, { typewriterDurationMs: Number(event.target.value) })}/></label><small className="property-hint">Controla a velocidade de revelação das letras. Depois da escrita, o texto completo permanece visível até o horário de saída.</small></div>}
-            <label>Efeito sonoro<select value={selectedMotion.soundId || ""} onChange={event => updateMotion(selectedMotion.id, { soundId: event.target.value, sound: "none" })}><option value="">Sem efeito sonoro</option>{globalSounds.map(sound => <option key={sound.id} value={sound.id}>{sound.name}</option>)}</select></label><label>Volume do efeito <strong>{selectedMotion.soundVolume ?? 80}%</strong><input type="range" min="0" max="100" value={selectedMotion.soundVolume ?? 80} onChange={event => updateMotion(selectedMotion.id, { soundVolume: Number(event.target.value) })}/></label>
-            <div className="motion-colors"><label>Texto<input type="color" value={selectedMotion.color} onChange={event => updateMotion(selectedMotion.id, { color: event.target.value })}/></label><label>Destaque<input type="color" value={selectedMotion.accent} onChange={event => updateMotion(selectedMotion.id, { accent: event.target.value })}/></label></div>
-          </details>
-          <details open className="property-section"><summary>Posição</summary><div className="motion-position-controls"><label>Horizontal <strong>{Math.round(selectedMotion.x)}%</strong><input type="range" min="0" max="100" value={selectedMotion.x} onChange={event => updateMotion(selectedMotion.id, { x: Number(event.target.value) })}/></label><label>Vertical <strong>{Math.round(selectedMotion.y)}%</strong><input type="range" min="0" max="100" value={selectedMotion.y} onChange={event => updateMotion(selectedMotion.id, { y: Number(event.target.value) })}/></label><button className="secondary-action" onClick={() => updateMotion(selectedMotion.id, { x: 50, y: 50 })}>Centralizar</button></div></details>
-          <button className="danger-action property-delete" onClick={() => removeMotion(selectedMotion.id)}>Excluir elemento</button>
+            </details>
+            <details open className="property-section"><summary>Tempo e posição</summary>
+              <div className="motion-fields two"><label>Início (s)<input type="number" min="0" step="0.1" value={(selectedMotion.startMs/1000).toFixed(1)} onChange={event=>updateMotion(selectedMotion.id,{startMs:Math.max(0,Number(event.target.value)*1000)})}/></label><label>Saída (s)<input type="number" min={(selectedMotion.startMs/1000+0.3).toFixed(1)} step="0.1" value={(selectedMotion.endMs/1000).toFixed(1)} onChange={event=>updateMotion(selectedMotion.id,{endMs:Math.max(selectedMotion.startMs+300,Number(event.target.value)*1000)})}/></label></div>
+              <label>Vertical <strong>{Math.round(selectedMotion.y)}%</strong><input type="range" min="0" max="100" value={selectedMotion.y} onChange={event=>updateMotion(selectedMotion.id,{y:Number(event.target.value)})}/></label>
+              <button className="secondary-action" onClick={()=>updateMotion(selectedMotion.id,{y:82})}>Restaurar posição vertical</button>
+            </details>
+          </> : <>
+            <details open className="property-section"><summary>Texto</summary>
+              <label>Conteúdo<textarea className="motion-textarea" rows={6} value={selectedMotion.text} onChange={event=>updateMotion(selectedMotion.id,{text:event.target.value})} maxLength={1200} placeholder="Digite sua frase. Use Enter para criar uma nova linha."/></label>
+              <div className="lucide-library">
+                <div className="lucide-library-heading"><b>Biblioteca Lucide SVG</b><small>Ícone vetorial ancorado ao texto</small></div>
+                <label className="lucide-search"><Search size={14}/><input value={iconSearch} onChange={event=>setIconSearch(event.target.value)} placeholder="Buscar ícone..."/></label>
+                <div className="lucide-icon-grid">{lucideIconPickerNames.filter(name=>name.toLowerCase().includes(iconSearch.trim().toLowerCase())).map(name=>{const IconView=lucideIconLibrary[name];return <button type="button" key={name} className={"lucide-icon-option"+(selectedMotion.lucideIconName===name?" selected":"")} title={name} aria-label={name} onClick={()=>updateMotion(selectedMotion.id,{lucideIconName:selectedMotion.lucideIconName===name?undefined:name})}><IconView size={19}/><small>{name}</small></button>;})}</div>
+                {selectedMotion.lucideIconName && <><div className="motion-fields two"><label>Âncora<select value={selectedMotion.lucideIconAnchor || "left"} onChange={event=>updateMotion(selectedMotion.id,{lucideIconAnchor:event.target.value as MotionGraphic["lucideIconAnchor"]})}><option value="left">À esquerda do texto</option><option value="right">À direita do texto</option><option value="top">Acima do texto</option><option value="bottom">Abaixo do texto</option></select></label><label>Tamanho (px)<input type="number" min="12" max="180" value={selectedMotion.lucideIconSize ?? selectedMotion.fontSize} onChange={event=>updateMotion(selectedMotion.id,{lucideIconSize:Math.max(12,Math.min(180,Number(event.target.value)))})}/></label></div><label>Cor do ícone<input type="color" value={selectedMotion.lucideIconColor || selectedMotion.accent} onChange={event=>updateMotion(selectedMotion.id,{lucideIconColor:event.target.value})}/></label><button type="button" className="secondary-action" onClick={()=>updateMotion(selectedMotion.id,{lucideIconName:undefined})}>Remover ícone SVG</button></>}
+              </div>
+              <label>Emoji ou símbolo (opcional)<input value={selectedMotion.icon || ""} onChange={event=>updateMotion(selectedMotion.id,{icon:event.target.value})} maxLength={12} placeholder="Ex.: ★  →  ✓"/></label>
+            </details>
+            <details open className="property-section"><summary>Tempo</summary><div className="motion-fields two"><label>Início (s)<input type="number" min="0" step="0.1" value={(selectedMotion.startMs/1000).toFixed(1)} onChange={event=>updateMotion(selectedMotion.id,{startMs:Math.max(0,Number(event.target.value)*1000)})}/></label><label>Saída (s)<input type="number" min={(selectedMotion.startMs/1000+0.3).toFixed(1)} step="0.1" value={(selectedMotion.endMs/1000).toFixed(1)} onChange={event=>updateMotion(selectedMotion.id,{endMs:Math.max(selectedMotion.startMs+300,Number(event.target.value)*1000)})}/></label></div></details>
+            <details open className="property-section"><summary>Estilo e animação</summary>
+              <label>Fonte<select value={selectedMotion.fontFamily || "Arial"} onChange={event=>updateMotion(selectedMotion.id,{fontFamily:event.target.value})}><option value="Arial">Arial</option><option value="Georgia">Georgia</option><option value="Impact">Impact</option><option value="Trebuchet MS">Trebuchet MS</option><option value="Verdana">Verdana</option><option value="Courier New">Courier New</option></select></label>
+              <label>Tamanho<input type="number" min="18" max="180" value={selectedMotion.fontSize} onChange={event=>updateMotion(selectedMotion.id,{fontSize:Math.max(18,Math.min(180,Number(event.target.value)))})}/></label>
+              <label>Peso<select value={selectedMotion.fontWeight || 900} onChange={event=>updateMotion(selectedMotion.id,{fontWeight:Number(event.target.value)})}><option value={400}>Normal</option><option value={600}>Semibold</option><option value={700}>Negrito</option><option value={900}>Extra negrito</option></select></label>
+              <label>Alinhamento<select value={selectedMotion.textAlign || "center"} onChange={event=>updateMotion(selectedMotion.id,{textAlign:event.target.value as MotionGraphic["textAlign"]})}><option value="left">Esquerda</option><option value="center">Centralizado</option><option value="right">Direita</option></select></label>
+              <label>Animação<select value={selectedMotion.preset} onChange={event=>updateMotion(selectedMotion.id,{preset:event.target.value as MotionGraphic["preset"]})}>{motionPresets.map(p=><option key={p.id} value={p.id}>{p.label}</option>)}</select></label>
+              {selectedMotion.preset==="typewriter" && <label>Duração da escrita <strong>{((selectedMotion.typewriterDurationMs ?? 1500)/1000).toFixed(1)} s</strong><input type="range" min="100" max={Math.max(100,Math.min(10000,selectedMotion.durationMs||selectedMotion.endMs-selectedMotion.startMs))} step="100" value={Math.min(selectedMotion.typewriterDurationMs??1500,Math.max(100,selectedMotion.durationMs||selectedMotion.endMs-selectedMotion.startMs))} onChange={event=>updateMotion(selectedMotion.id,{typewriterDurationMs:Number(event.target.value)})}/></label>}
+              <label>Efeito sonoro<select value={selectedMotion.soundId || ""} onChange={event=>updateMotion(selectedMotion.id,{soundId:event.target.value,sound:"none"})}><option value="">Sem efeito sonoro</option>{globalSounds.map(sound=><option key={sound.id} value={sound.id}>{sound.name}</option>)}</select></label>
+              <label>Volume do efeito <strong>{selectedMotion.soundVolume ?? 80}%</strong><input type="range" min="0" max="100" value={selectedMotion.soundVolume ?? 80} onChange={event=>updateMotion(selectedMotion.id,{soundVolume:Number(event.target.value)})}/></label>
+              <div className="motion-colors"><label>Texto<input type="color" value={selectedMotion.color} onChange={event=>updateMotion(selectedMotion.id,{color:event.target.value})}/></label><label>Destaque<input type="color" value={selectedMotion.accent} onChange={event=>updateMotion(selectedMotion.id,{accent:event.target.value})}/></label></div>
+            </details>
+            <details open className="property-section"><summary>Posição</summary><label>Horizontal <strong>{Math.round(selectedMotion.x)}%</strong><input type="range" min="0" max="100" value={selectedMotion.x} onChange={event=>updateMotion(selectedMotion.id,{x:Number(event.target.value)})}/></label><label>Vertical <strong>{Math.round(selectedMotion.y)}%</strong><input type="range" min="0" max="100" value={selectedMotion.y} onChange={event=>updateMotion(selectedMotion.id,{y:Number(event.target.value)})}/></label><button className="secondary-action" onClick={()=>updateMotion(selectedMotion.id,{x:50,y:50})}>Centralizar</button></details>
+          </>}
+          <button className="danger-action property-delete" onClick={()=>removeMotion(selectedMotion.id)}>Excluir {selectedMotion.isCaption ? "legenda" : "texto"}</button>
         </div>
       </> : <>
         <div className="editor-panel-head"><div><b>Ajustes do clipe</b><small>{selectedAsset?.name ?? "Selecione um clipe na timeline"}</small></div></div>
@@ -1420,12 +1543,12 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
           {imageOverlays.filter(item=>item.visible!==false).map(item=><button key={item.id} type="button" className={"motion-timeline-clip image-overlay-timeline"+(selectedOverlayId===item.id?" selected":"")} style={{left:item.startMs/scale*100+"%",width:Math.max(3,(item.endMs-item.startMs)/scale*100)+"%",touchAction:"none"}} onPointerDown={event=>beginOverlayTimelineMove(event,item)} onPointerMove={moveOverlayOnTimeline} onPointerUp={endOverlayTimelineDrag} onPointerCancel={endOverlayTimelineDrag} onClick={()=>{if(overlayTimelineDidMoveRef.current){overlayTimelineDidMoveRef.current=false;return;}setSelectedOverlayId(item.id);setSelectedMotionId(null);setSelectedId(null);seekTo(item.startMs);}}><span className="image-overlay-trim-edge left" onPointerDown={event=>beginOverlayTimelineTrim(event,item,"start")} onPointerMove={moveOverlayOnTimeline} onPointerUp={endOverlayTimelineDrag} onPointerCancel={endOverlayTimelineDrag}/><b>▧ {assets.find(asset=>asset.id===item.assetId)?.name||"Imagem livre"}</b><small>{timeLabel(item.endMs-item.startMs)}</small><span className="image-overlay-trim-edge right" onPointerDown={event=>beginOverlayTimelineTrim(event,item,"end")} onPointerMove={moveOverlayOnTimeline} onPointerUp={endOverlayTimelineDrag} onPointerCancel={endOverlayTimelineDrag}/></button>)}
           {!imageOverlays.some(item=>item.visible!==false)&&<span className="track-hint">{imageOverlays.length?"Todas as imagens estão ocultas. Reative-as no painel Camadas.":"Adicione imagens livres para organizá-las nesta faixa"}</span>}<div className="timeline-cursor" style={{left:playheadMs/scale*100+"%"}}/>
         </div></div>
-        <div className="motion-track-row timeline-motion-row transcript-track-row"><div className="track-label">TRANSCRIÇÃO</div><div className="track-clips timeline-canvas motion-timeline transcript-timeline" style={{width:Math.max(100,timelineZoom)+"%"}} onClick={event=>{if((event.target as HTMLElement).closest(".motion-timeline-clip"))return;const rect=event.currentTarget.getBoundingClientRect();if(!rect.width)return;const atMs=Math.max(0,Math.min(scale,((event.clientX-rect.left)/rect.width)*scale));setTimelineInsertAtMs(atMs);setPlayheadMs(atMs);setPreviewTick(value=>value+1);stopPlayback();}} onDragOver={event=>event.preventDefault()} onDrop={event=>{event.preventDefault();const id=event.dataTransfer.getData("text/motion-graphic-id");if(!id)return;const rect=event.currentTarget.getBoundingClientRect();updateMotion(id,{startMs:Math.max(0,(event.clientX-rect.left)/rect.width*scale)});}}>
-          {motion.filter(item=>item.isCaption&&item.visible!==false).map(item=><button key={item.id} type="button" className={"motion-timeline-clip transcript-timeline-clip"+(selectedMotionId===item.id?" selected":"")} style={{left:item.startMs/scale*100+"%",width:Math.max(3,(item.endMs-item.startMs)/scale*100)+"%",touchAction:"none"}} onPointerDown={event=>beginMotionMove(event,item)} onPointerMove={moveMotionOnTimeline} onPointerUp={endMotionTrim} onPointerCancel={endMotionTrim} onClick={()=>{setSelectedMotionId(item.id);setSelectedId(null);seekTo(item.startMs);setActiveTool("text");}}><span className="motion-trim-edge left" onPointerDown={event=>beginMotionTrim(event,item,"start")} onPointerMove={moveMotionOnTimeline} onPointerUp={endMotionTrim} onPointerCancel={endMotionTrim}/><b>{item.captionEnglish||item.text}</b><small>{timeLabel(item.startMs)} · {item.captionTranslation?"TRADUZIDA":"ORIGINAL"}</small><span className="motion-trim-edge right" onPointerDown={event=>beginMotionTrim(event,item,"end")} onPointerMove={moveMotionOnTimeline} onPointerUp={endMotionTrim} onPointerCancel={endMotionTrim}/></button>)}
-          {!motion.some(item=>item.isCaption&&item.visible!==false)&&<span className="track-hint">{motion.some(item=>item.isCaption)?"Todas as legendas estão ocultas. Reative-as no painel Camadas.":"As legendas transcritas aparecerão nesta faixa exclusiva"}</span>}<div className="timeline-cursor" style={{left:playheadMs/scale*100+"%"}}/>
+        <div className="motion-track-row timeline-motion-row transcript-track-row"><div className="track-label">LEGENDAS</div><div className="track-clips timeline-canvas motion-timeline transcript-timeline" style={{width:Math.max(100,timelineZoom)+"%"}} onClick={event=>{if((event.target as HTMLElement).closest(".motion-timeline-clip"))return;const rect=event.currentTarget.getBoundingClientRect();if(!rect.width)return;const atMs=Math.max(0,Math.min(scale,((event.clientX-rect.left)/rect.width)*scale));setTimelineInsertAtMs(atMs);setPlayheadMs(atMs);setPreviewTick(value=>value+1);stopPlayback();}} onDragOver={event=>event.preventDefault()} onDrop={event=>{event.preventDefault();const id=event.dataTransfer.getData("text/motion-graphic-id");if(!id)return;const rect=event.currentTarget.getBoundingClientRect();updateMotion(id,{startMs:Math.max(0,(event.clientX-rect.left)/rect.width*scale)});}}>
+          {captions.filter(item=>item.visible!==false).map(item=><button key={item.id} type="button" className={"motion-timeline-clip transcript-timeline-clip"+(selectedMotionId===item.id?" selected":"")} style={{left:item.startMs/scale*100+"%",width:Math.max(3,(item.endMs-item.startMs)/scale*100)+"%",touchAction:"none"}} onPointerDown={event=>beginMotionMove(event,item)} onPointerMove={moveMotionOnTimeline} onPointerUp={endMotionTrim} onPointerCancel={endMotionTrim} onClick={()=>{setSelectedMotionId(item.id);setSelectedId(null);seekTo(item.startMs);setActiveTool("captions");}}><span className="motion-trim-edge left" onPointerDown={event=>beginMotionTrim(event,item,"start")} onPointerMove={moveMotionOnTimeline} onPointerUp={endMotionTrim} onPointerCancel={endMotionTrim}/><b>{item.captionEnglish||item.text}</b><small>{timeLabel(item.startMs)} · {item.captionTranslation?"TRADUZIDA":"ORIGINAL"}</small><span className="motion-trim-edge right" onPointerDown={event=>beginMotionTrim(event,item,"end")} onPointerMove={moveMotionOnTimeline} onPointerUp={endMotionTrim} onPointerCancel={endMotionTrim}/></button>)}
+          {!captions.some(item=>item.visible!==false)&&<span className="track-hint">{captions.length?"Todas as legendas estão ocultas. Reative-as no painel Camadas.":"As legendas transcritas aparecerão nesta faixa exclusiva"}</span>}<div className="timeline-cursor" style={{left:playheadMs/scale*100+"%"}}/>
         </div></div>
         <div className="motion-track-row timeline-motion-row"><div className="track-label">COMPOSIÇÕES</div><div className="track-clips timeline-canvas motion-timeline" style={{width:Math.max(100,timelineZoom)+"%"}} onClick={event=>{if((event.target as HTMLElement).closest(".motion-timeline-clip"))return;const rect=event.currentTarget.getBoundingClientRect();if(!rect.width)return;const atMs=Math.max(0,Math.min(scale,((event.clientX-rect.left)/rect.width)*scale));setTimelineInsertAtMs(atMs);setPlayheadMs(atMs);setPreviewTick(value=>value+1);stopPlayback();}} onDragOver={event=>event.preventDefault()} onDrop={event=>{event.preventDefault();const id=event.dataTransfer.getData("text/motion-graphic-id");if(!id)return;const rect=event.currentTarget.getBoundingClientRect();updateMotion(id,{startMs:Math.max(0,(event.clientX-rect.left)/rect.width*scale)});}}>
-          {motion.filter(item=>!item.isCaption&&item.visible!==false).map(item=><button key={item.id} className={"motion-timeline-clip"+(selectedMotionId===item.id?" selected":"")+(groups.some(group=>group.members.includes(memberKeyForMotion(item.id)))?" grouped":"")+(selectedMembers.includes(memberKeyForMotion(item.id))?" multi-selected":"")} style={{left:item.startMs/scale*100+"%",width:Math.max(3,(item.endMs-item.startMs)/scale*100)+"%",touchAction:"none"}} onPointerDown={event=>beginMotionMove(event,item)} onPointerMove={moveMotionOnTimeline} onPointerUp={endMotionTrim} onPointerCancel={endMotionTrim} onClick={()=>{setSelectedMotionId(item.id);setSelectedId(null);seekTo(item.startMs);}}><span className="motion-trim-edge left" onPointerDown={event=>beginMotionTrim(event,item,"start")} onPointerMove={moveMotionOnTimeline} onPointerUp={endMotionTrim} onPointerCancel={endMotionTrim}/><b>{item.icon ? item.icon + " " : ""}{item.text}</b><small>{item.preset}</small><span className="motion-trim-edge right" onPointerDown={event=>beginMotionTrim(event,item,"end")} onPointerMove={moveMotionOnTimeline} onPointerUp={endMotionTrim} onPointerCancel={endMotionTrim}/></button>)}
+          {textLayers.filter(item=>item.visible!==false).map(item=><button key={item.id} className={"motion-timeline-clip"+(selectedMotionId===item.id?" selected":"")+(groups.some(group=>group.members.includes(memberKeyForMotion(item.id)))?" grouped":"")+(selectedMembers.includes(memberKeyForMotion(item.id))?" multi-selected":"")} style={{left:item.startMs/scale*100+"%",width:Math.max(3,(item.endMs-item.startMs)/scale*100)+"%",touchAction:"none"}} onPointerDown={event=>beginMotionMove(event,item)} onPointerMove={moveMotionOnTimeline} onPointerUp={endMotionTrim} onPointerCancel={endMotionTrim} onClick={()=>{setSelectedMotionId(item.id);setSelectedId(null);seekTo(item.startMs);setActiveTool("text");}}><span className="motion-trim-edge left" onPointerDown={event=>beginMotionTrim(event,item,"start")} onPointerMove={moveMotionOnTimeline} onPointerUp={endMotionTrim} onPointerCancel={endMotionTrim}/><b>{item.icon ? item.icon + " " : ""}{item.text}</b><small>{item.preset}</small><span className="motion-trim-edge right" onPointerDown={event=>beginMotionTrim(event,item,"end")} onPointerMove={moveMotionOnTimeline} onPointerUp={endMotionTrim} onPointerCancel={endMotionTrim}/></button>)}
           <div className="timeline-cursor" style={{left:playheadMs/scale*100+"%"}}/>
         </div></div>
       </div>

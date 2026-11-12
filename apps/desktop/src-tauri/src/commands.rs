@@ -261,6 +261,14 @@ pub struct ExportMotion {
     #[serde(default)]
     caption_accent: String,
     #[serde(default)]
+    caption_background_color: String,
+    #[serde(default)]
+    caption_background_opacity: f64,
+    #[serde(default)]
+    caption_width: f64,
+    #[serde(default)]
+    caption_padding_em: f64,
+    #[serde(default)]
     lucide_icon_png: Option<String>,
     #[serde(default)]
     lucide_icon_anchor: String,
@@ -469,11 +477,13 @@ fn estimate_text_width(value: &str, font_size: u32) -> f64 {
 }
 
 fn wrap_text_for_export(value: &str, font_size: u32) -> String {
-    // Keep subtitle text inside the central 90% safe width (54..1026 px at 1080p).
+    wrap_text_for_export_width(value, font_size, 972.0)
+}
+
+fn wrap_text_for_export_width(value: &str, font_size: u32, max_width: f64) -> String {
     // Estimate glyph widths rather than relying on a character count, which clips
     // wide words and wastes space on narrow glyphs.
     let normalized = value.replace("\r\n", "\n").replace('\r', "\n");
-    let max_width = 972.0_f64;
     normalized.split('\n').map(|line| {
         let mut lines = Vec::new();
         let mut current = String::new();
@@ -501,6 +511,170 @@ fn wrap_text_for_export(value: &str, font_size: u32) -> String {
         if !current.is_empty() { lines.push(current); }
         if lines.is_empty() { String::new() } else { lines.join("\n") }
     }).collect::<Vec<_>>().join("\n")
+}
+
+
+fn ass_color(color: &str, alpha: u8) -> String {
+    let raw = color.trim().trim_start_matches('#');
+    let rgb = u32::from_str_radix(raw, 16).unwrap_or(0xFFFFFF);
+    let red = (rgb >> 16) & 0xFF;
+    let green = (rgb >> 8) & 0xFF;
+    let blue = rgb & 0xFF;
+    format!("&H{alpha:02X}{blue:02X}{green:02X}{red:02X}&")
+}
+
+fn ass_timestamp(milliseconds: u64) -> String {
+    let centiseconds = milliseconds / 10;
+    let total_seconds = centiseconds / 100;
+    let hours = total_seconds / 3600;
+    let minutes = (total_seconds % 3600) / 60;
+    let seconds = total_seconds % 60;
+    format!("{hours}:{minutes:02}:{seconds:02}.{:02}", centiseconds % 100)
+}
+
+fn ass_escape_text(value: &str) -> String {
+    value.replace('\\', "\\\\")
+        .replace('{', "\\{")
+        .replace('}', "\\}")
+        .replace("\r\n", "\\N")
+        .replace('\r', "\\N")
+        .replace('\n', "\\N")
+}
+
+fn ass_caption_script(item: &ExportMotion) -> String {
+    let width = (item.caption_width.clamp(60.0, 100.0) * 10.8).round();
+    let margin = ((1080.0 - width) / 2.0).round() as u32;
+    let font_size = item.font_size.clamp(18, 180);
+    let text_margin = margin + (font_size as f64 * 0.55).round() as u32;
+    let font_name = if item.font_family.trim().is_empty() { "Arial" } else { item.font_family.trim() };
+    let bold = if item.font_weight >= 700 { -1 } else { 0 };
+    let primary = ass_color(&item.color, 0);
+    let secondary = ass_color(if item.caption_accent.is_empty() { "#65d6c0" } else { &item.caption_accent }, 0);
+    let alignment = match item.text_align.as_str() { "left" => 4, "right" => 6, _ => 5 };
+    let anchor_x = match item.text_align.as_str() { "left" => text_margin as f64, "right" => 1080.0 - text_margin as f64, _ => 540.0 };
+    let anchor_y = (item.y.clamp(0.0, 100.0) / 100.0 * 1920.0).round();
+    let style = format!(
+        "Style: Caption,{font_name},{font_size},{primary},{secondary},&H00000000&,&H00000000&,{bold},0,0,0,100,100,0,0,1,0,0,{alignment},{text_margin},{text_margin},0,1"
+    );
+    let words = &item.caption_words;
+    let source = if words.is_empty() {
+        item.text.split('\n').next().unwrap_or(&item.text).to_string()
+    } else {
+        words.iter().map(|word| word.text.as_str()).collect::<Vec<_>>().join(" ")
+    };
+    let translation = item.text.split('\n').skip(1).collect::<Vec<_>>().join("\n");
+    let mut intervals: Vec<(u64, u64, Option<usize>)> = Vec::new();
+    let mut cursor = item.start_ms;
+    if words.is_empty() {
+        intervals.push((item.start_ms, item.end_ms, None));
+    } else {
+        let mut sorted: Vec<(usize, &ExportCaptionWord)> = words.iter().enumerate().collect();
+        sorted.sort_by_key(|(_, word)| word.start_ms);
+        for (word_index, word) in sorted {
+            let start = word.start_ms.max(item.start_ms).max(cursor);
+            let end = word.end_ms.min(item.end_ms);
+            if start > cursor {
+                intervals.push((cursor, start, None));
+            }
+            if end > start {
+                intervals.push((start, end, Some(word_index)));
+                cursor = end;
+            }
+        }
+        if cursor < item.end_ms {
+            intervals.push((cursor, item.end_ms, None));
+        }
+        if intervals.is_empty() && item.end_ms > item.start_ms {
+            intervals.push((item.start_ms, item.end_ms, None));
+        }
+    }
+    let mut script = String::from(
+        "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n[V4+ Styles]\nFormat: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding\n"
+    );
+    script.push_str(&style);
+    script.push_str("\n\n[Events]\nFormat: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text\n");
+    for (start_ms, end_ms, active_word) in intervals {
+        if end_ms <= start_ms { continue; }
+        let max_text_width = (width - font_size as f64 * 1.1).max(font_size as f64);
+        let mut source_markup = String::new();
+        if words.is_empty() {
+            let wrapped = wrap_text_for_export_width(&source, font_size, max_text_width);
+            source_markup.push_str(&ass_escape_text(&wrapped));
+        } else {
+            let mut current_width = 0.0_f64;
+            for (index, word) in words.iter().enumerate() {
+                let word_width = estimate_text_width(&word.text, font_size);
+                let next_width = if current_width <= 0.0 { word_width } else {
+                    current_width + estimate_text_width(" ", font_size) + word_width
+                };
+                if current_width > 0.0 && next_width > max_text_width {
+                    source_markup.push_str("\\N");
+                    current_width = 0.0;
+                } else if current_width > 0.0 {
+                    source_markup.push(' ');
+                    current_width += estimate_text_width(" ", font_size);
+                }
+                if Some(index) == active_word {
+                    source_markup.push_str(&format!("{{\\1c{secondary}}}{}{{\\rCaption}}", ass_escape_text(&word.text)));
+                } else {
+                    source_markup.push_str(&ass_escape_text(&word.text));
+                }
+                current_width += word_width;
+            }
+        }
+        let translation_markup = if translation.trim().is_empty() {
+            String::new()
+        } else {
+            let translation_size = (font_size as f64 * 0.72).round().max(12.0) as u32;
+            let wrapped_translation = wrap_text_for_export_width(&translation, translation_size, max_text_width);
+            format!("\\N{{\\fs{translation_size}\\1c&H00DFD4D8&}}{}{{\\rCaption}}", ass_escape_text(&wrapped_translation))
+        };
+        let text = format!("{{\\an{alignment}\\pos({anchor_x:.0},{anchor_y:.0})}}{source_markup}{translation_markup}");
+        script.push_str(&format!(
+            "Dialogue: 0,{},{},Caption,,0,0,0,,{}\n",
+            ass_timestamp(start_ms), ass_timestamp(end_ms), text
+        ));
+    }
+    script
+}
+
+fn ffmpeg_escape_filter_path(path: &std::path::Path) -> String {
+    path.to_string_lossy().replace('\\', "/").replace(':', "\\:").replace('\'', "\\'")
+}
+
+fn caption_background_geometry(item: &ExportMotion) -> Option<(f64, f64, f64, f64, String)> {
+    let opacity = item.caption_background_opacity.clamp(0.0, 1.0);
+    if opacity <= 0.0 { return None; }
+    let width = item.caption_width.clamp(60.0, 100.0) * 10.8;
+    let x = (1080.0 - width) / 2.0;
+    let font_size = item.font_size.clamp(18, 180);
+    let max_text_width = (width - font_size as f64 * 1.1).max(font_size as f64);
+    let source = if item.caption_words.is_empty() {
+        item.text.split('\n').next().unwrap_or(&item.text)
+    } else {
+        // Reconstruct the spoken line from the word timings, matching the karaoke text.
+        // The subtitle renderer uses the same word sequence.
+        ""
+    };
+    let source_owned = if item.caption_words.is_empty() { source.to_string() } else {
+        item.caption_words.iter().map(|word| word.text.as_str()).collect::<Vec<_>>().join(" ")
+    };
+    let source_lines = wrap_text_for_export_width(&source_owned, font_size, max_text_width).lines().count().max(1) as f64;
+    let translation = item.text.split('\n').skip(1).collect::<Vec<_>>().join(" ");
+    let translation_lines = if translation.trim().is_empty() { 0.0 } else {
+        wrap_text_for_export_width(&translation, (font_size as f64 * 0.72).round() as u32, max_text_width).lines().count().max(1) as f64
+    };
+    let padding = item.caption_padding_em.clamp(0.0, 1.0) * font_size as f64;
+    let height = (source_lines * font_size as f64 * 1.18 + translation_lines * font_size as f64 * 0.72 * 1.18 + padding * 2.0).max(font_size as f64);
+    let anchor_y = item.y.clamp(0.0, 100.0) / 100.0 * 1920.0;
+    let y = (anchor_y - height / 2.0).clamp(0.0, (1920.0 - height).max(0.0));
+    let raw_color = item.caption_background_color.trim().trim_start_matches('#');
+    let color = if raw_color.len() == 6 && u32::from_str_radix(raw_color, 16).is_ok() {
+        format!("0x{raw_color}@{opacity:.3}")
+    } else {
+        format!("black@{opacity:.3}")
+    };
+    Some((x, y, width, height.min(1920.0), color))
 }
 
 fn ffmpeg_escape_expression(value: &str) -> String {
@@ -556,6 +730,7 @@ pub async fn export_timeline(
         let mut sound_inputs: Vec<(usize, &ExportSoundEffect)> = Vec::new();
         let mut overlay_inputs: Vec<(usize, &ExportImageOverlay)> = Vec::new();
         let mut icon_temp_files: Vec<PathBuf> = Vec::new();
+        let mut caption_temp_files: Vec<PathBuf> = Vec::new();
         let mut icon_inputs: Vec<(usize, usize, &ExportMotion)> = Vec::new();
         let mut total_ms = 0u64;
 
@@ -722,6 +897,29 @@ pub async fn export_timeline(
         }
 
         for (index, item) in request.motion.iter().enumerate() {
+            if item.is_caption {
+                let start = item.start_ms as f64 / 1000.0;
+                let end = item.end_ms as f64 / 1000.0;
+                if end <= start { continue; }
+                if let Some((x, y, width, height, color)) = caption_background_geometry(item) {
+                    let background_label = format!("caption_background{index}");
+                    filter_parts.push(format!(
+                        "[{previous}]drawbox=x={x:.2}:y={y:.2}:w={width:.2}:h={height:.2}:color={color}:t=fill:enable='between(t\\,{start:.6}\\,{end:.6})'[{background_label}]"
+                    ));
+                    previous = background_label;
+                }
+                let subtitle_path = std::env::temp_dir().join(format!("framelab-caption-{}.ass", uuid::Uuid::new_v4()));
+                std::fs::write(&subtitle_path, ass_caption_script(item).as_bytes())
+                    .map_err(|error| format!("Não foi possível preparar a legenda karaoke: {error}"))?;
+                caption_temp_files.push(subtitle_path.clone());
+                let subtitle_label = format!("caption_ass{index}");
+                filter_parts.push(format!(
+                    "[{previous}]ass=filename='{}'[{subtitle_label}]",
+                    ffmpeg_escape_filter_path(&subtitle_path)
+                ));
+                previous = subtitle_label;
+                continue;
+            }
             let color = if item.color.starts_with('#') && item.color.len() == 7 { format!("0x{}", &item.color[1..]) } else { "white".into() };
             let (font_name, bold_suffix) = match item.font_family.as_str() {
                 "Georgia" => ("georgia", "bd"), "Impact" => ("impact", ""),
@@ -744,77 +942,6 @@ pub async fn export_timeline(
             let duration_ms = if item.duration_ms > 0 { item.duration_ms.min(item.end_ms.saturating_sub(item.start_ms)) } else { item.end_ms.saturating_sub(item.start_ms) };
             let duration = (duration_ms.max(1) as f64) / 1000.0;
             let writing_duration = (if item.typewriter_duration_ms > 0 { item.typewriter_duration_ms.min(duration_ms) } else { 1500.min(duration_ms.max(100)) }.max(100) as f64) / 1000.0;
-            // Use only long-supported drawtext options. `boxw` and `text_align`
-            // are unavailable in some bundled FFmpeg builds (notably older Windows
-            // builds), so center the text with the x expression and let drawtext
-            // size its background box to the wrapped text.
-            let caption_box = if item.is_caption {
-                format!(":box=1:boxcolor=black@0.76:boxborderw={}", (item.font_size.clamp(18, 180) / 3).max(6))
-            } else {
-                String::new()
-            };
-            // Keep caption text centered inside the 90% safe width (x=54..1026).
-            let caption_x = if item.is_caption { "54+(972-text_w)/2".to_string() } else { base_x.clone() };
-
-            // Karaoke captions are exported as a stable full-text base plus timed
-            // accent overlays for each transcribed word. The word timestamps are
-            // timeline-relative and therefore stay aligned with the editor preview.
-            if item.is_caption && !item.caption_words.is_empty() {
-                let wrapped = wrap_text_for_export(&item.text, item.font_size);
-                let base_label = format!("caption_base{index}");
-                filter_parts.push(format!(
-                    "[{previous}]drawtext=fontfile='{font_file}':text='{}':fontcolor={color}{caption_box}:fontsize={}:x='{caption_x}':y='{anchor_y}-text_h/2':enable='between(t\\,{start:.6}\\,{end:.6})'[{base_label}]",
-                    ffmpeg_escape_text(&wrapped),
-                    item.font_size.clamp(18, 180)
-                ));
-                let mut lines: Vec<Vec<&ExportCaptionWord>> = Vec::new();
-                let mut current_line: Vec<&ExportCaptionWord> = Vec::new();
-                let mut current_width = 0.0_f64;
-                for word in &item.caption_words {
-                    let word_width = estimate_text_width(&word.text, item.font_size);
-                    let next_width = if current_line.is_empty() { word_width } else { current_width + estimate_text_width(" ", item.font_size) + word_width };
-                    if !current_line.is_empty() && next_width > 972.0 {
-                        lines.push(std::mem::take(&mut current_line));
-                        current_width = 0.0;
-                    }
-                    if !current_line.is_empty() {
-                        current_width += estimate_text_width(" ", item.font_size);
-                    }
-                    current_width += word_width;
-                    current_line.push(word);
-                }
-                if !current_line.is_empty() { lines.push(current_line); }
-                let mut current_label = base_label;
-                for (line_index, line) in lines.iter().enumerate() {
-                    let line_width: f64 = line.iter().map(|word| estimate_text_width(&word.text, item.font_size)).sum::<f64>()
-                        + estimate_text_width(" ", item.font_size) * line.len().saturating_sub(1) as f64;
-                    let line_left = match item.text_align.as_str() {
-                        "left" => 54.0,
-                        "right" => 1026.0 - line_width,
-                        _ => 540.0 - line_width / 2.0,
-                    };
-                    let mut word_x = line_left;
-                    for (word_index, word) in line.iter().enumerate() {
-                        let next_label = format!("karaoke{index}_{line_index}_{word_index}");
-                        let word_start = (word.start_ms.max(item.start_ms) as f64 / 1000.0).max(start);
-                        let word_end = (word.end_ms.min(item.end_ms) as f64 / 1000.0).min(end);
-                        if word_end > word_start {
-                            let word_text = ffmpeg_escape_text(&word.text);
-                            let word_y = format!("{anchor_y}-text_h/2+{}", line_index as f64 * item.font_size.clamp(18, 180) as f64 * 1.2);
-                            filter_parts.push(format!(
-                                "[{current_label}]drawtext=fontfile='{font_file}':text='{word_text}':fontcolor={}:fontsize={}:x='{word_x:.3}':y='{word_y}':enable='between(t\\,{word_start:.6}\\,{word_end:.6})'[{next_label}]",
-                                if item.caption_accent.is_empty() { "#65d6c0" } else { item.caption_accent.as_str() },
-                                item.font_size.clamp(18, 180)
-                            ));
-                            current_label = next_label;
-                        }
-                        word_x += estimate_text_width(&word.text, item.font_size) + estimate_text_width(" ", item.font_size);
-                    }
-                }
-                previous = current_label;
-                continue;
-            }
-
             if item.preset == "typewriter" {
                 // Render successive text prefixes in non-overlapping time slices. This
                 // produces a true character-by-character reveal in the exported frames.
@@ -844,7 +971,7 @@ pub async fn export_timeline(
                         format!("gte(t,{step_start:.6})*lt(t,{step_end:.6})")
                     };
                     let enable = ffmpeg_escape_expression(&enable);
-                    filter_parts.push(format!("[{current}]drawtext=fontfile='{font_file}':text='{text}':fontcolor={color}{caption_box}:fontsize={}:x='{caption_x}':y='{anchor_y}-text_h/2':enable='{enable}'[{next}]", item.font_size.clamp(18, 180)));
+                    filter_parts.push(format!("[{current}]drawtext=fontfile='{font_file}':text='{text}':fontcolor={color}:fontsize={}:x='{base_x}':y='{anchor_y}-text_h/2':enable='{enable}'[{next}]", item.font_size.clamp(18, 180)));
                     current = next;
                 }
                 previous = current;
@@ -864,9 +991,8 @@ pub async fn export_timeline(
             let next = format!("text{index}");
             let scale_expr = ffmpeg_escape_expression(&scale);
             let alpha_expr = ffmpeg_escape_expression(&alpha);
-            let x = if item.is_caption { caption_x.clone() } else { x };
             let x_expr = ffmpeg_escape_expression(&x);
-            filter_parts.push(format!("[{previous}]drawtext=fontfile='{font_file}':text='{}':fontcolor={color}{caption_box}:fontsize='max(1\\,{}*({scale_expr}))':alpha='{alpha_expr}':x='{x_expr}':y='{anchor_y}-text_h/2':enable='between(t\\,{start:.3}\\,{end:.3})'[{next}]", ffmpeg_escape_text(&wrap_text_for_export(&item.text, item.font_size)), item.font_size.clamp(18, 180)));
+            filter_parts.push(format!("[{previous}]drawtext=fontfile='{font_file}':text='{}':fontcolor={color}:fontsize='max(1\\,{}*({scale_expr}))':alpha='{alpha_expr}':x='{x_expr}':y='{anchor_y}-text_h/2':enable='between(t\\,{start:.3}\\,{end:.3})'[{next}]", ffmpeg_escape_text(&wrap_text_for_export(&item.text, item.font_size)), item.font_size.clamp(18, 180)));
             previous = next;
         }
         for (icon_position, (input_index, motion_index, item)) in icon_inputs.iter().enumerate() {
@@ -936,8 +1062,11 @@ pub async fn export_timeline(
         let mut required_filters = vec![
             "color", "scale", "crop", "fps", "setsar", "setpts", "overlay", "format", "fade",
         ];
-        if !request.motion.is_empty() {
+        if request.motion.iter().any(|item| !item.is_caption) {
             required_filters.push("drawtext");
+        }
+        if request.motion.iter().any(|item| item.is_caption) {
+            required_filters.extend(["ass", "drawbox"]);
         }
         if !icon_inputs.is_empty() {
             required_filters.push("colorchannelmixer");
@@ -947,6 +1076,7 @@ pub async fn export_timeline(
         }
         if let Err(error) = ensure_ffmpeg_capabilities(&ffmpeg_path, &required_filters) {
             for path in &icon_temp_files { let _ = std::fs::remove_file(path); }
+            for path in &caption_temp_files { let _ = std::fs::remove_file(path); }
             return Err(error);
         }
 
@@ -957,8 +1087,11 @@ pub async fn export_timeline(
         let filter_script_path = std::env::temp_dir()
             .join(format!("framelab-filter-{}.txt", uuid::Uuid::new_v4()));
         let filter_script = filter_parts.join(";\n");
-        std::fs::write(&filter_script_path, filter_script.as_bytes())
-            .map_err(|error| format!("Não foi possível preparar os filtros de exportação: {error}"))?;
+        if let Err(error) = std::fs::write(&filter_script_path, filter_script.as_bytes()) {
+            for path in &icon_temp_files { let _ = std::fs::remove_file(path); }
+            for path in &caption_temp_files { let _ = std::fs::remove_file(path); }
+            return Err(format!("Não foi possível preparar os filtros de exportação: {error}"));
+        }
 
         // FFmpeg 8.0 removed the deprecated -filter_complex_script option.
         // Newer versions load option values from files with the /option syntax.
@@ -1005,6 +1138,7 @@ pub async fn export_timeline(
             Err(error) => {
                 let _ = std::fs::remove_file(&filter_script_path);
                 for path in &icon_temp_files { let _ = std::fs::remove_file(path); }
+                for path in &caption_temp_files { let _ = std::fs::remove_file(path); }
                 return Err(format!(
                     "Não foi possível iniciar o FFmpeg em {}: {error}",
                     ffmpeg_path.display()
@@ -1038,6 +1172,7 @@ pub async fn export_timeline(
         let status_result = child.wait();
         let _ = std::fs::remove_file(&filter_script_path);
         for path in &icon_temp_files { let _ = std::fs::remove_file(path); }
+        for path in &caption_temp_files { let _ = std::fs::remove_file(path); }
         let status = status_result
             .map_err(|error| format!("Não foi possível aguardar o FFmpeg: {error}"))?;
         let stderr = stderr_reader.join().unwrap_or_else(|_| "Não foi possível ler o diagnóstico do FFmpeg.".into());
