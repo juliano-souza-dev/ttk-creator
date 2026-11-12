@@ -11,6 +11,7 @@ import { defaultDuration, clipDuration, clipEnd, timeLabel, captionBackgroundRgb
 import type { TimelineClip, TimelineGroup, ImageOverlay, TrimDrag, ClipMoveDrag, MotionTrimDrag } from "./features/timeline/model";
 import { motionPreviewState } from "./features/motion-graphics/model";
 import type { CaptionWord, MotionGraphic } from "./features/motion-graphics/model";
+import { getLucideIconExportOffset } from "./features/motion-graphics/icon-layout";
 import { AudioLines, Film, Plus, Play, Pause, Trash2, Scissors, Copy, SkipBack, SkipForward, Volume2, VolumeX, Music2, Type, WandSparkles, MousePointer2, ChevronLeft, ChevronRight, Download, LoaderCircle, PanelsTopLeft, FileJson, Upload, Eye, Camera, BookOpen, Headphones, Lightbulb, Clock3, MessageCircle, CheckCircle2, Globe2, Heart, Star, Zap, Target, Search, Image, Music, Mic, Video, PlayCircle, AlertCircle, ArrowRight, CircleHelp, Sparkles, Trophy, Rocket, Smile, ThumbsUp, Bookmark, MapPin, Coffee, Sun, Moon, Cloud, Flame, ShieldCheck, Languages, GraduationCap, Pencil, Bell, CalendarDays, RotateCcw, Maximize, Minimize, Captions, Clapperboard, MicOff, Presentation, Monitor, Smartphone, Home, Menu, X, XCircle, Check, Award, Medal, Flag, Info, AlertTriangle, Timer, Brain, Puzzle, Calculator, Hash, BarChart3, PieChart, Palette, Shapes, Share2, Settings, User, Users, Minus, Layers, List, Map as MapIcon } from "lucide-react";
 import { SCENE_TEMPLATES, buildTemplateScene, createSceneSpecFromMotion, validateSceneSpec } from "./shared/scene-spec";
 
@@ -58,31 +59,6 @@ const lucideIconPickerNames = [
   "share-2", "settings", "user", "users", "eye", "search", "plus", "minus",
 ] as LucideIconName[];
 
-function getLucideIconExportOffset(item: MotionGraphic, iconSize: number) {
-  const canvas = document.createElement("canvas");
-  const context = canvas.getContext("2d");
-  const fontSize = Math.max(18, item.fontSize);
-  const fontWeight = item.fontWeight || 900;
-  const fontFamily = item.fontFamily || "Arial";
-  if (context) context.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
-  const label = (item.icon ? item.icon + " " : "") + item.text;
-  const textWidth = context ? context.measureText(label).width : fontSize * Math.max(1, label.length) * 0.55;
-  const textHeight = fontSize * 1.2;
-  const gap = Math.max(4, iconSize * 0.22);
-  const vertical = item.lucideIconAnchor === "top" || item.lucideIconAnchor === "bottom";
-  const groupWidth = vertical ? Math.max(iconSize, textWidth) : iconSize + gap + textWidth;
-  const groupHeight = vertical ? iconSize + gap + textHeight : Math.max(iconSize, textHeight);
-  const groupLeft = item.textAlign === "left" ? 0 : item.textAlign === "right" ? -groupWidth : -groupWidth / 2;
-  const groupTop = -groupHeight / 2;
-  const x = vertical
-    ? groupLeft + (groupWidth - iconSize) / 2
-    : item.lucideIconAnchor === "right" ? groupLeft + iconSize + gap + textWidth : groupLeft;
-  const y = item.lucideIconAnchor === "top"
-    ? groupTop
-    : item.lucideIconAnchor === "bottom" ? groupTop + textHeight + gap
-    : groupTop + (groupHeight - iconSize) / 2;
-  return { lucideIconOffsetX: x, lucideIconOffsetY: y };
-}
 
 async function renderLucideIconPng(name: LucideIconName, color: string, size: number): Promise<string> {
   const IconView = lucideIconLibrary[name];
