@@ -33,6 +33,18 @@ export type LucideIconName = keyof typeof lucideIconLibrary;
 export const lucideIconNames = Object.keys(lucideIconLibrary) as LucideIconName[];
 export const supportedLucideIconNames: string[] = lucideIconNames;
 
+export const lucideIconPickerNames = [
+  "play", "pause", "skip-back", "skip-forward", "rotate-ccw", "volume-2", "volume-x",
+  "maximize", "minimize", "captions", "video", "film", "clapperboard", "mic", "mic-off",
+  "camera", "headphones", "music", "book-open", "graduation-cap", "layers", "list",
+  "chevron-right", "arrow-right", "presentation", "monitor", "smartphone", "home", "menu", "x",
+  "circle-check", "circle-x", "check", "star", "trophy", "award", "medal", "flag", "lightbulb",
+  "circle-question-mark", "info", "triangle-alert", "timer", "clock", "brain", "target", "puzzle",
+  "rocket", "sparkles", "calculator", "hash", "chart-column", "chart-pie", "pencil", "type",
+  "languages", "globe", "map", "image", "palette", "shapes", "heart", "download", "upload",
+  "share-2", "settings", "user", "users", "eye", "search", "plus", "minus",
+] as LucideIconName[];
+
 
 
 export async function renderLucideIconPng(name: LucideIconName, color: string, size: number): Promise<string> {
