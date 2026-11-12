@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { desktopApi, isDesktopRuntime } from "../../services/desktop-api";
 import type { MotionGraphic } from "./model";
 
 type Options = {
   captions: MotionGraphic[];
-  setCaptions: React.Dispatch<React.SetStateAction<MotionGraphic[]>>;
+  setCaptions: Dispatch<SetStateAction<MotionGraphic[]>>;
   selectedCaption: MotionGraphic | null;
   updateMotion: (id: string, patch: Partial<MotionGraphic>) => void;
 };
