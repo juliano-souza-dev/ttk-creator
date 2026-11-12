@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 127.0.0.1",
     "tauri": "tauri",
-    "start-dev": "npm run tauri dev"
+    "start-dev": "git -C ../.. pull --ff-only origin main && npm run build && npm run tauri dev"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.8.0",
