@@ -1,8 +1,8 @@
 // Tauri command facade. Each feature owns its command handlers and implementation.
-mod export;
-mod media;
-mod sounds;
-mod transcription;
+pub mod export;
+pub mod media;
+pub mod sounds;
+pub mod transcription;
 
 pub use export::{check_ffmpeg, export_timeline};
 pub use media::{
