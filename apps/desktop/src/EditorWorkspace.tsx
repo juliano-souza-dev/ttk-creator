@@ -24,7 +24,7 @@ import { buildExportTimelinePayload } from "./features/export/payload";
 import { transcriptToCaptions } from "./features/motion-graphics/transcript-import";
 export { supportedLucideIconNames } from "./features/motion-graphics/icon-library";
 
-import {  } from "lucide-react";
+import { AudioLines, Film, Plus, Play, Pause, Trash2, Scissors, Copy, SkipBack, SkipForward, Volume2, VolumeX, Music2, Type, WandSparkles, MousePointer2, ChevronLeft, ChevronRight, Download, LoaderCircle, PanelsTopLeft, FileJson, Upload, Eye, Search, Image, ShieldCheck, Languages, Captions, Check, Layers } from "lucide-react";
 import { SCENE_TEMPLATES, buildTemplateScene, createSceneSpecFromMotion, validateSceneSpec } from "./shared/scene-spec";
 
 type Props = { projectId: string; assets: MediaAsset[]; onAddMedia: () => void; onOpenTranscription?: (assetId?: string, context?: { clipId: string; timelineStartMs: number; sourceStartMs: number; sourceEndMs: number }) => void };
