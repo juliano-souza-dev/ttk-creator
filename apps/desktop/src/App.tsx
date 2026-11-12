@@ -5,7 +5,8 @@ import { desktopApi, isDesktopRuntime } from "./services/desktop-api";
 import EditorWorkspace, { supportedLucideIconNames } from "./EditorWorkspace";
 import TaskCenter from "./TaskCenter";
 import type { DownloadProgress, MediaAsset, Project, YoutubeInspection, YoutubeCacheEntry } from "./shared/types";
-import type { GroqSettings, TranscriptionProgress } from "./services/desktop-api";
+import type { GroqSettings } from "./services/desktop-api";
+import { useTranscription } from "./features/transcription/useTranscription";
 import { validateSceneSpec, type SceneSpec } from "./shared/scene-spec";
 import { buildSceneSpecProjectData, getSceneSpecMediaSources } from "./features/scene-spec/project-import";
 import { Clapperboard, LayoutGrid, Film, GraduationCap, Settings2, Plus, Search, FolderOpen, FolderPlus, Clock3, Video, Sparkles, Play, X, ArrowUpRight, Upload, Youtube, CheckCircle2, LoaderCircle, ShieldCheck, Link2, Download, Undo2, Redo2, ArrowLeft, FileJson, Mic, Captions, Info } from "lucide-react"
@@ -46,18 +47,13 @@ export default function App() {
   const [groqLanguage,setGroqLanguage] = useState("Português brasileiro");
   const [groqSettingsBusy,setGroqSettingsBusy] = useState(false);
   const [groqSettingsMessage,setGroqSettingsMessage] = useState("");
-  const [transcriptionAssetId,setTranscriptionAssetId] = useState("");
-  const [transcriptionContext,setTranscriptionContext] = useState<{clipId:string;timelineStartMs:number;sourceStartMs:number;sourceEndMs:number}|null>(null);
-  const [transcriptionMode,setTranscriptionMode] = useState<"auto"|"cloud"|"local">("auto");
-  const [transcriptionLanguage,setTranscriptionLanguage] = useState("");
-  const [transcriptionModel,setTranscriptionModel] = useState("small");
-  const [transcriptionBusy,setTranscriptionBusy] = useState(false);
-  const [transcriptionProgress,setTranscriptionProgress] = useState<TranscriptionProgress|null>(null);
-  const [localAsrInstalled,setLocalAsrInstalled] = useState(false);
-  const [localAsrChecking,setLocalAsrChecking] = useState(false);
-  const [localAsrInstalling,setLocalAsrInstalling] = useState(false);
-  const [transcriptionMessage,setTranscriptionMessage] = useState("");
-  const [transcriptionOpen,setTranscriptionOpen] = useState(false);
+  const {
+    transcriptionAssetId, setTranscriptionAssetId, setTranscriptionContext,
+    transcriptionMode, setTranscriptionMode, transcriptionLanguage, setTranscriptionLanguage,
+    transcriptionModel, setTranscriptionModel, transcriptionBusy, transcriptionProgress,
+    localAsrInstalled, localAsrChecking, localAsrInstalling, transcriptionMessage,
+    transcriptionOpen, setTranscriptionOpen, installLocalTranscription, transcribeSelectedMedia
+  } = useTranscription(activeProject, assets);
 
   async function refresh() {
     if (!isDesktopRuntime) return;
@@ -102,22 +98,6 @@ export default function App() {
     }).then(fn=>{ if(disposed) fn(); else unlisten=fn; });
     return ()=>{disposed=true;unlisten?.();};
   },[activeProject?.id]);
-
-  useEffect(()=>{
-    let cancelled=false;
-    if(!activeProject) return;
-    setLocalAsrChecking(true);
-    void desktopApi.checkLocalAsr().then(ready=>{if(!cancelled)setLocalAsrInstalled(ready);})
-      .catch(()=>{if(!cancelled)setLocalAsrInstalled(false);})
-      .finally(()=>{if(!cancelled)setLocalAsrChecking(false);});
-    return ()=>{cancelled=true;};
-  },[activeProject?.id]);
-
-  useEffect(()=>{
-    if(!assets.some(asset=>asset.id===transcriptionAssetId && (asset.kind==="video"||asset.kind==="audio"))) {
-      setTranscriptionAssetId(assets.find(asset=>asset.kind==="video"||asset.kind==="audio")?.id??"");
-    }
-  },[assets,transcriptionAssetId]);
 
   async function refreshAssets(project:Project) {
     if(!isDesktopRuntime) return;
@@ -239,31 +219,6 @@ export default function App() {
       }
       setError("Não foi possível criar o projeto a partir do Scene Spec: " + (error instanceof Error ? error.message : String(error)));
     } finally { setBusy(false); }
-  }
-
-  async function installLocalTranscription() {
-    setLocalAsrInstalling(true); setTranscriptionMessage("");
-    try {
-      const message=await desktopApi.installLocalAsr();
-      setLocalAsrInstalled(await desktopApi.checkLocalAsr());
-      setTranscriptionMessage(message);
-    } catch(error) {
-      setTranscriptionMessage("Não foi possível instalar o suporte local: "+String(error));
-    } finally { setLocalAsrInstalling(false); }
-  }
-
-  async function transcribeSelectedMedia() {
-    if(!activeProject||!transcriptionAssetId||transcriptionBusy) return;
-    setTranscriptionBusy(true); setTranscriptionMessage(""); setTranscriptionProgress(null); setError("");
-    try {
-      const result=await desktopApi.transcribeMedia(activeProject.id,transcriptionAssetId,transcriptionMode,transcriptionLanguage,transcriptionModel);
-      window.dispatchEvent(new CustomEvent("framelab:transcription-ready",{detail:{projectId:activeProject.id,result,context:transcriptionContext}}));
-      setTranscriptionContext(null);
-      setTranscriptionMessage(result.cues.length+" legendas criadas com "+(result.engine==="groq"?"Groq Whisper":"Faster-Whisper local")+". Elas foram adicionadas à faixa exclusiva de transcrição.");
-      setTranscriptionProgress({projectId:activeProject.id,stage:"completed",percent:100,completedChunks:1,totalChunks:1,message:"Transcrição concluída"});
-    } catch(error) {
-      setTranscriptionMessage("Falha na transcrição: "+(error instanceof Error?error.message:String(error)));
-    } finally { setTranscriptionBusy(false); }
   }
 
   async function openGroqSettings() {
