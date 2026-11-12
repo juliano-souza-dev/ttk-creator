@@ -866,7 +866,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
     const translatedSplit = translatedParts.length > 1
       ? Math.max(1, Math.floor(translatedParts.length * splitIndex / parts.length))
       : 0;
-    const firstTranslation = translatedSplit ? translatedParts.slice(0, translatedSplit).join(" ") : "";
+    const firstTranslation = translatedSplit ? translatedParts.slice(0, translatedSplit).join(" ") : (selectedMotion.captionTranslation || "");
     const secondTranslation = translatedSplit ? translatedParts.slice(translatedSplit).join(" ") : "";
     const second: MotionGraphic = {
       ...selectedMotion,
@@ -938,6 +938,30 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
     appendCaptions([duplicate]);
     setSelectedMotionId(duplicate.id);
     setPlayheadMs(duplicate.startMs);
+  }
+
+  function applySelectedCaptionStyleToSelection() {
+    if (!selectedMotion?.isCaption) return;
+    const selectedIds = new Set(captions
+      .filter(item => selectedMembers.includes("motion:" + item.id))
+      .map(item => item.id));
+    if (!selectedIds.size) return;
+    const style: Partial<MotionGraphic> = {
+      fontFamily: selectedMotion.fontFamily,
+      fontWeight: selectedMotion.fontWeight,
+      textAlign: selectedMotion.textAlign,
+      color: selectedMotion.color,
+      accent: selectedMotion.accent,
+      fontSize: selectedMotion.fontSize,
+      captionBackgroundColor: selectedMotion.captionBackgroundColor,
+      captionBackgroundOpacity: selectedMotion.captionBackgroundOpacity,
+      captionWidth: selectedMotion.captionWidth,
+      captionPaddingEm: selectedMotion.captionPaddingEm,
+      y: selectedMotion.y,
+    };
+    setCaptions(current => current.map(item => selectedIds.has(item.id) ? { ...item, ...style } : item));
+    setTranslationMessage("Estilo aplicado às " + selectedIds.size + " legendas selecionadas.");
+    setTranslationPhase("Concluído");
   }
 
   function applySelectedCaptionStyleToAll() {
@@ -1629,6 +1653,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
               <label>Alinhamento<select value={selectedMotion.textAlign || "center"} onChange={event=>updateMotion(selectedMotion.id,{textAlign:event.target.value as MotionGraphic["textAlign"]})}><option value="left">Esquerda</option><option value="center">Centralizado</option><option value="right">Direita</option></select></label>
               <div className="motion-colors"><label>Texto<input type="color" value={selectedMotion.color} onChange={event=>updateMotion(selectedMotion.id,{color:event.target.value})}/></label><label>Palavra ativa<input type="color" value={selectedMotion.accent} onChange={event=>updateMotion(selectedMotion.id,{accent:event.target.value})}/></label></div>
               <button type="button" className="secondary-action caption-apply-all" onClick={applySelectedCaptionStyleToAll}><Copy size={13}/> Aplicar este estilo a todas as legendas</button>
+              <button type="button" className="secondary-action caption-apply-all" onClick={applySelectedCaptionStyleToSelection} disabled={!captions.some(item=>selectedMembers.includes("motion:"+item.id))}><Copy size={13}/> Aplicar às legendas selecionadas</button>
               <div className="caption-style-controls"><b>Fundo e área</b>
                 <label>Cor do fundo<input type="color" value={selectedMotion.captionBackgroundColor || "#000000"} onChange={event=>updateMotion(selectedMotion.id,{captionBackgroundColor:event.target.value})}/></label>
                 <label>Opacidade <strong>{Math.round((selectedMotion.captionBackgroundOpacity ?? 0.76)*100)}%</strong><input type="range" min="0" max="100" value={Math.round((selectedMotion.captionBackgroundOpacity ?? 0.76)*100)} onChange={event=>updateMotion(selectedMotion.id,{captionBackgroundOpacity:Number(event.target.value)/100})}/></label>
