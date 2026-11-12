@@ -74,13 +74,11 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
   }, []);
   function appendTextLayers(items: MotionGraphic[]) {
     if (!items.length) return;
-    setTextLayers(current => [...current, ...items]);
-    setMotionOrder(current => [...current, ...items.map(item => item.id)]);
+    setMotion(current => [...current, ...items]);
   }
   function appendCaptions(items: MotionGraphic[]) {
     if (!items.length) return;
-    setCaptions(current => [...current, ...items]);
-    setMotionOrder(current => [...current, ...items.map(item => item.id)]);
+    setMotion(current => [...current, ...items]);
   }
   const overlayKey = `ttk-creator:image-overlays:${projectId}`;
   const [imageOverlays,setImageOverlays]=useState<ImageOverlay[]>([]);
@@ -497,20 +495,17 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
     appendTextLayers([item]); setSelectedMotionId(item.id); stopPlayback();
   }
   function updateMotion(id: string, patch: Partial<MotionGraphic>) {
-    const applyPatch = (current: MotionGraphic[]) => current.map(item => {
+    setMotion(current => current.map(item => {
       if (item.id !== id) return item;
       const nextStart = patch.startMs !== undefined ? Math.max(0, patch.startMs) : item.startMs;
       let nextEnd = patch.endMs !== undefined ? patch.endMs : item.endMs;
       if (patch.durationMs !== undefined && patch.endMs === undefined) nextEnd = nextStart + Math.max(300, patch.durationMs);
       nextEnd = Math.max(nextStart + 300, nextEnd);
       return { ...item, ...patch, startMs: nextStart, endMs: nextEnd, durationMs: nextEnd - nextStart };
-    });
-    if (captions.some(item => item.id === id)) setCaptions(applyPatch);
-    else setTextLayers(applyPatch);
+    }));
   }
   function removeMotion(id: string) {
-    if (captions.some(item => item.id === id)) setCaptions(current => current.filter(item => item.id !== id));
-    else setTextLayers(current => current.filter(item => item.id !== id));
+    setMotion(current => current.filter(item => item.id !== id));
     if (selectedMotionId === id) setSelectedMotionId(null);
   }
 
