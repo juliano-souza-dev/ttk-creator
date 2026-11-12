@@ -6,6 +6,14 @@ From this directory:
 
 ```bash
 npm install
+npm run start-dev
+```
+
+The `start-dev` command updates the local checkout from `origin/main` using a fast-forward-only pull, builds the frontend, and then launches the Tauri desktop app in development mode. If the local branch has uncommitted changes or cannot be fast-forwarded, Git stops the command before the build.
+
+To start the Tauri development process without pulling or running a separate build first:
+
+```bash
 npm run tauri dev
 ```
 
