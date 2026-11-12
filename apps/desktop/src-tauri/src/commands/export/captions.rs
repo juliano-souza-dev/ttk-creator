@@ -1,4 +1,4 @@
-use super::ExportMotion;
+use super::{ExportCaptionWord, ExportMotion};
 
 pub(super) fn estimate_text_width(value: &str, font_size: u32) -> f64 {
     value.chars().map(|character| {
