@@ -8,10 +8,10 @@ use captions::{
 };
 use ffmpeg::{ensure_ffmpeg_capabilities, media_has_audio_stream};
 pub use ffmpeg::check_ffmpeg;
-pub(super) use ffmpeg::resolve_ffmpeg_executable;
+pub(crate) use ffmpeg::resolve_ffmpeg_executable;
 
 use tauri::{AppHandle, Emitter, State};
-use crate::{domain::models::MediaAsset, state::AppState};
+use crate::{infrastructure::sound_library::read_sound_manifest, state::AppState};
 
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -120,6 +120,7 @@ pub struct ExportRequest {
     sound_effects: Vec<ExportSoundEffect>,
 }
 
+#[derive(Clone, serde::Serialize)]
 struct ExportProgress {
     percent: f64,
 }
