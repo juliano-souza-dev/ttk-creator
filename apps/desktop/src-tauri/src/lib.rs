@@ -68,7 +68,7 @@ pub fn run() {
             commands::media::youtube::download_youtube,
             commands::media::youtube::prepare_youtube_cache,
             commands::media::youtube::trim_youtube_cache,
-            commands::export::check_ffmpeg,
+            commands::export::ffmpeg::check_ffmpeg,
             commands::sounds::list_global_sounds,
             commands::sounds::import_global_sound,
             commands::sounds::get_global_sound_path,
