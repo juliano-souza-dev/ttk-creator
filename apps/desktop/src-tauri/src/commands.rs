@@ -226,6 +226,14 @@ pub struct ExportClip {
 
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct ExportCaptionWord {
+    text: String,
+    start_ms: u64,
+    end_ms: u64,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ExportMotion {
     text: String,
     start_ms: u64,
@@ -248,6 +256,10 @@ pub struct ExportMotion {
     typewriter_duration_ms: u64,
     #[serde(default)]
     is_caption: bool,
+    #[serde(default)]
+    caption_words: Vec<ExportCaptionWord>,
+    #[serde(default)]
+    caption_accent: String,
     #[serde(default)]
     lucide_icon_png: Option<String>,
     #[serde(default)]
@@ -441,32 +453,46 @@ pub async fn check_ffmpeg() -> Result<String, String> {
     }).await.map_err(|error| format!("A verificação do FFmpeg foi interrompida: {error}"))?
 }
 
+fn estimate_text_width(value: &str, font_size: u32) -> f64 {
+    value.chars().map(|character| {
+        let factor = match character {
+            'i' | 'l' | 'I' | '!' | '.' | ',' | ':' | ';' | '\'' | '|' => 0.28,
+            'f' | 't' | 'r' | '(' | ')' | '[' | ']' => 0.36,
+            'm' | 'w' | 'M' | 'W' | '@' | '%' => 0.88,
+            ' ' => 0.30,
+            c if c.is_ascii_uppercase() => 0.66,
+            c if c.is_ascii_digit() => 0.56,
+            _ => 0.54,
+        };
+        factor * font_size.max(1) as f64
+    }).sum()
+}
+
 fn wrap_text_for_export(value: &str, font_size: u32) -> String {
-    // drawtext does not automatically wrap at a maximum width. Estimate a
-    // conservative character count so exported lines stay inside 90% of 1080px.
-    // Normalize Windows/macOS line endings without collapsing intentional blank lines.
+    // Keep subtitle text inside the central 90% safe width (54..1026 px at 1080p).
+    // Estimate glyph widths rather than relying on a character count, which clips
+    // wide words and wastes space on narrow glyphs.
     let normalized = value.replace("\r\n", "\n").replace('\r', "\n");
-    let max_chars = ((972.0 / (font_size.max(1) as f64 * 0.65)).floor() as usize).max(8);
+    let max_width = 972.0_f64;
     normalized.split('\n').map(|line| {
         let mut lines = Vec::new();
         let mut current = String::new();
         for word in line.split_whitespace() {
-            if current.is_empty() {
-                current.push_str(word);
-            } else if current.chars().count() + 1 + word.chars().count() <= max_chars {
-                current.push(' ');
-                current.push_str(word);
+            let candidate = if current.is_empty() { word.to_string() } else { format!("{current} {word}") };
+            if current.is_empty() || estimate_text_width(&candidate, font_size) <= max_width {
+                current = candidate;
             } else {
                 lines.push(std::mem::take(&mut current));
-                if word.chars().count() <= max_chars {
+                if estimate_text_width(word, font_size) <= max_width {
                     current.push_str(word);
                 } else {
                     let mut chunk = String::new();
                     for character in word.chars() {
-                        chunk.push(character);
-                        if chunk.chars().count() >= max_chars {
+                        let candidate = format!("{chunk}{character}");
+                        if !chunk.is_empty() && estimate_text_width(&candidate, font_size) > max_width {
                             lines.push(std::mem::take(&mut chunk));
                         }
+                        chunk.push(character);
                     }
                     current = chunk;
                 }
@@ -719,6 +745,65 @@ pub async fn export_timeline(
             let duration = (duration_ms.max(1) as f64) / 1000.0;
             let writing_duration = (if item.typewriter_duration_ms > 0 { item.typewriter_duration_ms.min(duration_ms) } else { 1500.min(duration_ms.max(100)) }.max(100) as f64) / 1000.0;
             let caption_box = if item.is_caption { format!(":box=1:boxcolor=black@0.76:boxborderw={}", (item.font_size.clamp(18, 180) / 3).max(6)) } else { String::new() };
+
+            // Karaoke captions are exported as a stable full-text base plus timed
+            // accent overlays for each transcribed word. The word timestamps are
+            // timeline-relative and therefore stay aligned with the editor preview.
+            if item.is_caption && !item.caption_words.is_empty() {
+                let wrapped = wrap_text_for_export(&item.text, item.font_size);
+                let base_label = format!("caption_base{index}");
+                filter_parts.push(format!(
+                    "[{previous}]drawtext=fontfile='{font_file}':text='{}':fontcolor={color}{caption_box}:fontsize={}:x='{base_x}':y='{anchor_y}-text_h/2':enable='between(t\\,{start:.6}\\,{end:.6})'[{base_label}]",
+                    ffmpeg_escape_text(&wrapped),
+                    item.font_size.clamp(18, 180)
+                ));
+                let mut lines: Vec<Vec<&ExportCaptionWord>> = Vec::new();
+                let mut current_line: Vec<&ExportCaptionWord> = Vec::new();
+                let mut current_width = 0.0_f64;
+                for word in &item.caption_words {
+                    let word_width = estimate_text_width(&word.text, item.font_size);
+                    let next_width = if current_line.is_empty() { word_width } else { current_width + estimate_text_width(" ", item.font_size) + word_width };
+                    if !current_line.is_empty() && next_width > 972.0 {
+                        lines.push(std::mem::take(&mut current_line));
+                        current_width = 0.0;
+                    }
+                    if !current_line.is_empty() {
+                        current_width += estimate_text_width(" ", item.font_size);
+                    }
+                    current_width += word_width;
+                    current_line.push(word);
+                }
+                if !current_line.is_empty() { lines.push(current_line); }
+                let mut current_label = base_label;
+                for (line_index, line) in lines.iter().enumerate() {
+                    let line_width: f64 = line.iter().map(|word| estimate_text_width(&word.text, item.font_size)).sum::<f64>()
+                        + estimate_text_width(" ", item.font_size) * line.len().saturating_sub(1) as f64;
+                    let line_left = match item.text_align.as_str() {
+                        "left" => 54.0,
+                        "right" => 1026.0 - line_width,
+                        _ => 540.0 - line_width / 2.0,
+                    };
+                    let mut word_x = line_left;
+                    for (word_index, word) in line.iter().enumerate() {
+                        let next_label = format!("karaoke{index}_{line_index}_{word_index}");
+                        let word_start = (word.start_ms.max(item.start_ms) as f64 / 1000.0).max(start);
+                        let word_end = (word.end_ms.min(item.end_ms) as f64 / 1000.0).min(end);
+                        if word_end > word_start {
+                            let word_text = ffmpeg_escape_text(&word.text);
+                            let word_y = format!("{anchor_y}-text_h/2+{}", line_index as f64 * item.font_size.clamp(18, 180) as f64 * 1.2);
+                            filter_parts.push(format!(
+                                "[{current_label}]drawtext=fontfile='{font_file}':text='{word_text}':fontcolor={}:fontsize={}:x='{word_x:.3}':y='{word_y}':enable='between(t\\,{word_start:.6}\\,{word_end:.6})'[{next_label}]",
+                                if item.caption_accent.is_empty() { "#65d6c0" } else { item.caption_accent.as_str() },
+                                item.font_size.clamp(18, 180)
+                            ));
+                            current_label = next_label;
+                        }
+                        word_x += estimate_text_width(&word.text, item.font_size) + estimate_text_width(" ", item.font_size);
+                    }
+                }
+                previous = current_label;
+                continue;
+            }
 
             if item.preset == "typewriter" {
                 // Render successive text prefixes in non-overlapping time slices. This
