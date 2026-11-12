@@ -134,7 +134,7 @@ fn read_settings(app: &AppHandle) -> Result<GroqSettings, String> {
     Ok(settings)
 }
 
-pub(super) fn resolve_api_key(app: &AppHandle) -> Result<String, String> {
+pub(crate) fn resolve_api_key(app: &AppHandle) -> Result<String, String> {
     if let Some(entry) = shared_provider_entry(app)? {
         return entry.get_password()
             .map_err(|error| format!("A credencial Groq não foi encontrada no Shared Runtime. Cadastre-a uma única vez pelo Shared Runtime Manager. Detalhe: {error}"));
