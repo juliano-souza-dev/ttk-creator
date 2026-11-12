@@ -946,7 +946,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
     event.preventDefault(); event.stopPropagation();
     const key = memberKeyForClip(clip.id);
     if (event.ctrlKey || event.metaKey || event.shiftKey) { toggleMemberSelection(key); setSelectedId(clip.id); setSelectedMotionId(null); return; }
-    const memberKeys = groupMembersFor(key);
+    const memberKeys = groupMembersFor(groups, key);
     event.currentTarget.setPointerCapture(event.pointerId);
     clipMoveDragRef.current = { clipId: clip.id, startX: event.clientX, lastX: event.clientX, timelineStartMs: clip.timelineStartMs, memberKeys, didMove: false };
     setSelectedId(clip.id); setSelectedMotionId(null); setSelectedMembers(memberKeys); stopPlayback();
@@ -997,7 +997,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
     event.currentTarget.setPointerCapture(event.pointerId);
     const key = memberKeyForMotion(item.id);
     if (event.ctrlKey || event.metaKey || event.shiftKey) { toggleMemberSelection(key); setSelectedMotionId(item.id); setSelectedId(null); return; }
-    const memberKeys = groupMembersFor(key);
+    const memberKeys = groupMembersFor(groups, key);
     motionTrimDragRef.current = { id: item.id, edge: "move", startX: event.clientX, lastX: event.clientX, startMs: item.startMs, endMs: item.endMs, memberKeys, didMove: false };
     selectMotionItem(item); setSelectedMembers(memberKeys);
   }
