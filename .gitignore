@@ -24,6 +24,9 @@ src-tauri/gen/schemas/
 *.sqlite3
 *.db
 
+# Shared Runtime Manager: per-installation configuration
+shared.config.json
+
 # Environment and secrets
 .env
 .env.*
