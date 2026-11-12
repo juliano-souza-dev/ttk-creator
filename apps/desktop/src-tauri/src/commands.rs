@@ -781,16 +781,22 @@ pub async fn export_timeline(
             let duration = duration_ms as f64 / 1000.0;
             let progress = format!("clip(t/{duration:.6},0,1)");
             let eased = format!("(1-pow(1-{progress},3))");
-            let (scale, alpha) = match item.preset.as_str() {
-                "pop" => (format!("0.35+0.65*{eased}"), "1".to_string()),
-                "zoom" => (format!("2.4-1.4*{eased}"), format!("min(1,{progress}*4)")),
-                "impact" => (format!("if(lt({progress},0.65),3-2.12*({progress}/0.65),0.88+0.12*(({progress}-0.65)/0.35))"), format!("min(1,{progress}*4)")),
-                _ => ("1".to_string(), "1".to_string()),
+            let (scale, fade_alpha) = match item.preset.as_str() {
+                "pop" => (format!("0.35+0.65*{eased}"), false),
+                "zoom" => (format!("2.4-1.4*{eased}"), true),
+                "impact" => (format!("if(lt({progress},0.65),3-2.12*({progress}/0.65),0.88+0.12*(({progress}-0.65)/0.35))"), true),
+                _ => ("1".to_string(), false),
             };
             let icon_stream = format!("icon_source{icon_position}_{motion_index}");
             let scale_expr = ffmpeg_escape_expression(&scale);
-            let alpha_expr = ffmpeg_escape_expression(&alpha);
-            filter_parts.push(format!("[{input_index}:v]scale=w='max(1\\,{icon_size}*({scale_expr}))':h='max(1\\,{icon_size}*({scale_expr}))':eval=frame,format=rgba,colorchannelmixer=aa='{alpha_expr}':eval=frame[{icon_stream}]"));
+            let fade_filter = if fade_alpha {
+                let start = item.start_ms as f64 / 1000.0;
+                let fade_duration = (duration * 0.25).max(0.001);
+                format!(",fade=t=in:st={start:.6}:d={fade_duration:.6}:alpha=1")
+            } else {
+                String::new()
+            };
+            filter_parts.push(format!("[{input_index}:v]scale=w='max(1\\,{icon_size}*({scale_expr}))':h='max(1\\,{icon_size}*({scale_expr}))':eval=frame,format=rgba{fade_filter}[{icon_stream}]"));
             let x = format!("{anchor_x}+({})+({icon_size}-overlay_w)/2", item.lucide_icon_offset_x);
             let y = format!("{anchor_y}+({})+({icon_size}-overlay_h)/2", item.lucide_icon_offset_y);
             let next = format!("icon{icon_position}_{motion_index}");
