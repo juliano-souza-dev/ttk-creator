@@ -2,7 +2,7 @@ use reqwest::{header, Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
-use super::settings::{resolve_api_endpoint, resolve_api_key};
+use super::settings::{resolve_api_endpoint, resolve_api_key, resolve_api_model};
 
 #[derive(Deserialize)]
 struct ChatCompletion { choices: Vec<Choice> }
@@ -22,8 +22,9 @@ pub struct CueInput { pub id: String, pub text: String, pub context_before: Opti
 pub struct CueTranslation { pub id: String, pub translation: String }
 
 #[tauri::command]
-pub async fn test_groq_connection(app: AppHandle, model: String) -> Result<String, String> {
+pub async fn test_groq_connection(app: AppHandle) -> Result<String, String> {
     let key = resolve_api_key(&app)?;
+    let model = resolve_api_model(&app)?;
     let endpoint = format!("{}/chat/completions", resolve_api_endpoint(&app)?.trim_end_matches('/'));
     let client = Client::builder().timeout(Duration::from_secs(30)).build().map_err(|e| e.to_string())?;
     let response = client.post(endpoint)
@@ -45,13 +46,14 @@ fn emit_translation_status(app: &AppHandle, stage: &str, message: &str) {
 }
 
 #[tauri::command]
-pub async fn translate_groq_chunk(app: AppHandle, model: String, target_language: String, cues: Vec<CueInput>) -> Result<Vec<CueTranslation>, String> {
+pub async fn translate_groq_chunk(app: AppHandle, target_language: String, cues: Vec<CueInput>) -> Result<Vec<CueTranslation>, String> {
     if cues.is_empty() { return Ok(Vec::new()); }
     if cues.len() > 60 { return Err("O lote excede o limite de 60 legendas.".into()); }
     let total_chars: usize = cues.iter().map(|c| c.text.len()).sum();
     if total_chars > 18000 { return Err("O lote excede o limite de 18.000 caracteres.".into()); }
     emit_translation_status(&app, "Conectando à Groq", "Solicitando autenticação e preparando o envio do lote...");
     let key = resolve_api_key(&app)?;
+    let model = resolve_api_model(&app)?;
     let endpoint = format!("{}/chat/completions", resolve_api_endpoint(&app)?.trim_end_matches('/'));
     let payload = cues.iter().map(|cue| serde_json::json!({"id":cue.id,"text":cue.text,"contextBefore":cue.context_before,"contextAfter":cue.context_after})).collect::<Vec<_>>();
     let system = format!(
