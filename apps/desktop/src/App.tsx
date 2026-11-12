@@ -36,7 +36,7 @@ export default function App() {
   } = useYoutubeImport({ project: activeProject, setAssets, setBusy, setError, setNotice, setMediaModal });
   const sceneSpecProjectInput = useRef<HTMLInputElement|null>(null);
   const {
-    groqSettingsOpen, setGroqSettingsOpen, groqSettings, groqApiKey, setGroqApiKey,
+    groqSettingsOpen, setGroqSettingsOpen, groqSettings,
     groqModel, setGroqModel, groqMaxChars, setGroqMaxChars, groqMaxCues, setGroqMaxCues,
     groqDelay, setGroqDelay, groqLanguage, setGroqLanguage, groqSettingsBusy,
     groqSettingsMessage, openGroqSettings, saveAndTestGroq
@@ -270,11 +270,8 @@ export default function App() {
     {groqSettingsOpen&&<div className="backdrop" onMouseDown={e=>{if(e.target===e.currentTarget&&!groqSettingsBusy)setGroqSettingsOpen(false);}}><section className="groq-settings-modal">
       <button type="button" className="close" onClick={()=>!groqSettingsBusy&&setGroqSettingsOpen(false)}><X size={18}/></button>
       <label className="eyebrow muted"><Settings2 size={13}/> INTELIGÊNCIA ARTIFICIAL</label><h2>Configurações da Groq</h2>
-      <p>Configure a conexão uma vez. A chave fica no armazenamento seguro do Windows e não é incluída nos projetos.</p>
-      <label className="field-label" htmlFor="groq-key">Chave de API {groqSettings?.configured&&<span className="groq-configured">· Chave cadastrada</span>}</label>
-      <input id="groq-key" type="password" autoComplete="new-password" value={groqApiKey} onChange={e=>setGroqApiKey(e.target.value)} placeholder={groqSettings?.configured?"Informe uma nova chave para substituir":"gsk_..."} />
-      <small className="groq-field-hint">A chave não pode ser recuperada pelo aplicativo. Para alterá-la, informe uma nova.</small>
-      <label className="field-label" htmlFor="groq-model">Modelo Groq</label><input id="groq-model" value={groqModel} onChange={e=>setGroqModel(e.target.value)} placeholder="llama-3.3-70b-versatile"/>
+      <p>A credencial e o modelo são gerenciados pelo Shared Runtime Manager. O TTK utiliza a configuração local autorizada e não precisa manter o Shared aberto.</p>
+      <label className="field-label" htmlFor="groq-model">Modelo Groq · definido no Shared Runtime</label><input id="groq-model" value={groqModel} readOnly aria-readonly="true" placeholder="Aguardando configuração do Shared Runtime"/>
       <div className="groq-settings-grid">
         <label><span>Máx. caracteres por lote</span><input type="number" min={1000} max={18000} value={groqMaxChars} onChange={e=>setGroqMaxChars(Number(e.target.value))}/></label>
         <label><span>Máx. legendas por lote</span><input type="number" min={1} max={60} value={groqMaxCues} onChange={e=>setGroqMaxCues(Number(e.target.value))}/></label>
@@ -283,7 +280,7 @@ export default function App() {
       </div>
       <div className="groq-free-note"><ShieldCheck size={15}/> Perfil conservador recomendado para conta gratuita: 7.000 caracteres, 25 legendas e 1,8 segundo entre lotes. A API ainda pode aplicar limites variáveis por modelo.</div>
       {groqSettingsMessage&&<div className="groq-settings-message" role="status">{groqSettingsMessage}</div>}
-      <div className="modal-footer"><button className="cancel-button" disabled={groqSettingsBusy} onClick={()=>setGroqSettingsOpen(false)}>Fechar</button><button className="primary" disabled={groqSettingsBusy||(!groqApiKey.trim()&&!groqSettings?.configured)||!groqModel.trim()} onClick={()=>void saveAndTestGroq()}>{groqSettingsBusy?<><LoaderCircle className="spin" size={14}/> Salvando...</>:<><CheckCircle2 size={14}/> Salvar e testar</>}</button></div>
+      <div className="modal-footer"><button className="cancel-button" disabled={groqSettingsBusy} onClick={()=>setGroqSettingsOpen(false)}>Fechar</button><button className="primary" disabled={groqSettingsBusy||!groqModel.trim()} onClick={()=>void saveAndTestGroq()}>{groqSettingsBusy?<><LoaderCircle className="spin" size={14}/> Salvando...</>:<><CheckCircle2 size={14}/> Salvar preferências e testar</>}</button></div>
     </section></div>}
     {!isDesktopRuntime&&<div className="browser-warning">Prévia no navegador. Execute pelo Tauri para importar arquivos no computador.</div>}
   </main><TaskCenter /></>;
