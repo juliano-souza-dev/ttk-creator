@@ -743,54 +743,18 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
 
   function splitSelectedCaption() {
     if (!selectedMotion?.isCaption) return;
-    const sourceText = (selectedMotion.captionEnglish || selectedMotion.text || "").trim();
-    const parts = sourceText.split(/\s+/).filter(Boolean);
-    if (parts.length < 2) {
-      setTranslationMessage("Adicione pelo menos duas palavras para dividir a legenda.");
+    const result = splitCaption(selectedMotion);
+    if (!result.ok) {
+      setTranslationMessage(result.reason === "too-few-words"
+        ? "Adicione pelo menos duas palavras para dividir a legenda."
+        : "O trecho é curto demais para ser dividido com segurança.");
       setTranslationPhase("Falha identificada");
       return;
     }
-    const splitIndex = Math.max(1, Math.floor(parts.length / 2));
-    const firstText = parts.slice(0, splitIndex).join(" ");
-    const secondText = parts.slice(splitIndex).join(" ");
-    const words = selectedMotion.captionWords || [];
-    const wordSplitIndex = Math.min(words.length, Math.max(1, Math.floor(words.length / 2)));
-    const firstWords = words.slice(0, wordSplitIndex);
-    const secondWords = words.slice(wordSplitIndex);
-    const splitAtMs = secondWords.length
-      ? Math.max(selectedMotion.startMs + 150, secondWords[0].startMs)
-      : selectedMotion.startMs + Math.round((selectedMotion.endMs - selectedMotion.startMs) * splitIndex / parts.length);
-    if (splitAtMs >= selectedMotion.endMs - 150) {
-      setTranslationMessage("O trecho é curto demais para ser dividido com segurança.");
-      setTranslationPhase("Falha identificada");
-      return;
-    }
-    const translatedParts = (selectedMotion.captionTranslation || "").trim().split(/\s+/).filter(Boolean);
-    const translatedSplit = translatedParts.length > 1
-      ? Math.max(1, Math.floor(translatedParts.length * splitIndex / parts.length))
-      : 0;
-    const firstTranslation = translatedSplit ? translatedParts.slice(0, translatedSplit).join(" ") : (selectedMotion.captionTranslation || "");
-    const secondTranslation = translatedSplit ? translatedParts.slice(translatedSplit).join(" ") : "";
-    const second: MotionGraphic = {
-      ...selectedMotion,
-      id: crypto.randomUUID(),
-      text: secondText,
-      captionEnglish: secondText,
-      captionTranslation: secondTranslation,
-      captionWords: secondWords,
-      startMs: splitAtMs,
-      endMs: selectedMotion.endMs,
-      durationMs: selectedMotion.endMs - splitAtMs,
-    };
-    setCaptions(current => [
-      ...current.map(item => item.id === selectedMotion.id
-        ? { ...item, text: firstText, captionEnglish: firstText, captionTranslation: firstTranslation, captionWords: firstWords, endMs: splitAtMs, durationMs: splitAtMs - item.startMs }
-        : item),
-      second,
-    ]);
-    setMotionOrder(current => [...current.filter(id => id !== second.id), second.id]);
-    setSelectedMotionId(second.id);
-    setPlayheadMs(splitAtMs);
+    setCaptions(current => [...current.map(item => item.id === selectedMotion.id ? result.first : item), result.second]);
+    setMotionOrder(current => [...current.filter(id => id !== result.second.id), result.second.id]);
+    setSelectedMotionId(result.second.id);
+    setPlayheadMs(result.splitAtMs);
     setTranslationMessage("Legenda dividida em dois blocos.");
     setTranslationPhase("Concluído");
   }
@@ -803,41 +767,19 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
     if (!neighbor) return;
     const first = direction === "previous" ? neighbor : selectedMotion;
     const second = direction === "previous" ? selectedMotion : neighbor;
-    const firstText = (first.captionEnglish || first.text || "").trim();
-    const secondText = (second.captionEnglish || second.text || "").trim();
-    const firstTranslation = (first.captionTranslation || "").trim();
-    const secondTranslation = (second.captionTranslation || "").trim();
-    const mergedWords = [...(first.captionWords || []), ...(second.captionWords || [])].sort((a, b) => a.startMs - b.startMs);
-    const mergedText = [firstText, secondText].filter(Boolean).join(" ");
-    const mergedTranslation = [firstTranslation, secondTranslation].filter(Boolean).join(" ");
-    const startMs = Math.min(first.startMs, second.startMs);
-    const endMs = Math.max(first.endMs, second.endMs);
+    const merged = mergeCaptions(first, second);
     setCaptions(current => current
       .filter(item => item.id !== neighbor.id)
-      .map(item => item.id === selectedMotion.id
-        ? { ...item, text: mergedText, captionEnglish: mergedText, captionTranslation: mergedTranslation, captionWords: mergedWords, startMs, endMs, durationMs: endMs - startMs }
-        : item));
+      .map(item => item.id === selectedMotion.id ? merged : item));
     setSelectedMotionId(selectedMotion.id);
-    setPlayheadMs(startMs);
+    setPlayheadMs(merged.startMs);
     setTranslationMessage("Legendas mescladas em um único bloco.");
     setTranslationPhase("Concluído");
   }
 
   function duplicateSelectedCaption() {
     if (!selectedMotion?.isCaption) return;
-    const duration = selectedMotion.endMs - selectedMotion.startMs;
-    const duplicate: MotionGraphic = {
-      ...selectedMotion,
-      id: crypto.randomUUID(),
-      startMs: selectedMotion.endMs,
-      endMs: selectedMotion.endMs + duration,
-      durationMs: duration,
-      captionWords: (selectedMotion.captionWords || []).map(word => ({
-        ...word,
-        startMs: word.startMs + duration,
-        endMs: word.endMs + duration,
-      })),
-    };
+    const duplicate = duplicateCaption(selectedMotion);
     appendCaptions([duplicate]);
     setSelectedMotionId(duplicate.id);
     setPlayheadMs(duplicate.startMs);
@@ -849,19 +791,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
       .filter(item => selectedMembers.includes("motion:" + item.id))
       .map(item => item.id));
     if (!selectedIds.size) return;
-    const style: Partial<MotionGraphic> = {
-      fontFamily: selectedMotion.fontFamily,
-      fontWeight: selectedMotion.fontWeight,
-      textAlign: selectedMotion.textAlign,
-      color: selectedMotion.color,
-      accent: selectedMotion.accent,
-      fontSize: selectedMotion.fontSize,
-      captionBackgroundColor: selectedMotion.captionBackgroundColor,
-      captionBackgroundOpacity: selectedMotion.captionBackgroundOpacity,
-      captionWidth: selectedMotion.captionWidth,
-      captionPaddingEm: selectedMotion.captionPaddingEm,
-      y: selectedMotion.y,
-    };
+    const style = captionStyleFrom(selectedMotion);
     setCaptions(current => current.map(item => selectedIds.has(item.id) ? { ...item, ...style } : item));
     setTranslationMessage("Estilo aplicado às " + selectedIds.size + " legendas selecionadas.");
     setTranslationPhase("Concluído");
@@ -869,19 +799,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
 
   function applySelectedCaptionStyleToAll() {
     if (!selectedMotion?.isCaption) return;
-    const style: Partial<MotionGraphic> = {
-      fontFamily: selectedMotion.fontFamily,
-      fontWeight: selectedMotion.fontWeight,
-      textAlign: selectedMotion.textAlign,
-      color: selectedMotion.color,
-      accent: selectedMotion.accent,
-      fontSize: selectedMotion.fontSize,
-      captionBackgroundColor: selectedMotion.captionBackgroundColor,
-      captionBackgroundOpacity: selectedMotion.captionBackgroundOpacity,
-      captionWidth: selectedMotion.captionWidth,
-      captionPaddingEm: selectedMotion.captionPaddingEm,
-      y: selectedMotion.y,
-    };
+    const style = captionStyleFrom(selectedMotion);
     setCaptions(current => current.map(item => ({ ...item, ...style })));
     setTranslationMessage("Estilo aplicado a todas as legendas.");
     setTranslationPhase("Concluído");
