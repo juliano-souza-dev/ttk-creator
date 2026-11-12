@@ -14,6 +14,7 @@ import type { CaptionWord, MotionGraphic } from "./features/motion-graphics/mode
 import { getLucideIconExportOffset } from "./features/motion-graphics/icon-layout";
 import { mergeMotionLayers, splitMotionLayers } from "./features/motion-graphics/collection";
 import { parseSuperJsonCues } from "./features/motion-graphics/super-json-import";
+import { sceneSpecToMotionGraphics } from "./features/motion-graphics/super-json-import";
 import { AudioLines, Film, Plus, Play, Pause, Trash2, Scissors, Copy, SkipBack, SkipForward, Volume2, VolumeX, Music2, Type, WandSparkles, MousePointer2, ChevronLeft, ChevronRight, Download, LoaderCircle, PanelsTopLeft, FileJson, Upload, Eye, Camera, BookOpen, Headphones, Lightbulb, Clock3, MessageCircle, CheckCircle2, Globe2, Heart, Star, Zap, Target, Search, Image, Music, Mic, Video, PlayCircle, AlertCircle, ArrowRight, CircleHelp, Sparkles, Trophy, Rocket, Smile, ThumbsUp, Bookmark, MapPin, Coffee, Sun, Moon, Cloud, Flame, ShieldCheck, Languages, GraduationCap, Pencil, Bell, CalendarDays, RotateCcw, Maximize, Minimize, Captions, Clapperboard, MicOff, Presentation, Monitor, Smartphone, Home, Menu, X, XCircle, Check, Award, Medal, Flag, Info, AlertTriangle, Timer, Brain, Puzzle, Calculator, Hash, BarChart3, PieChart, Palette, Shapes, Share2, Settings, User, Users, Minus, Layers, List, Map as MapIcon } from "lucide-react";
 import { SCENE_TEMPLATES, buildTemplateScene, createSceneSpecFromMotion, validateSceneSpec } from "./shared/scene-spec";
 
@@ -992,36 +993,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
       if (unsupportedIcons.length) {
         throw new Error("O Scene Spec contém ícones Lucide não disponíveis nesta biblioteca: " + [...new Set(unsupportedIcons)].join(", "));
       }
-      const created: MotionGraphic[] = parsed.scenes.flatMap(scene =>
-        scene.blocks.map(block => {
-          const startMs = playheadMs + (block.startOffsetMs ?? 0);
-          const endMs = startMs + (block.durationMs ?? scene.durationMs);
-          return {
-            id: crypto.randomUUID(),
-            text: block.text,
-            icon: block.icon ?? "",
-            lucideIconName: block.iconName ?? "",
-            lucideIconAnchor: block.iconAnchor ?? "left",
-            lucideIconSize: block.iconSize,
-            lucideIconColor: block.iconColor,
-            fontFamily: "Arial",
-            fontWeight: 900,
-            textAlign: block.align ?? "center",
-            startMs,
-            endMs,
-            durationMs: endMs - startMs,
-            preset: "pop" as const,
-            color: block.color,
-            accent: block.accent ?? "#65d6c0",
-            fontSize: block.fontSize,
-            x: block.x,
-            y: block.y,
-            sound: "none" as const,
-            soundId: "",
-            soundVolume: 80,
-          };
-        }),
-      );
+      const created = sceneSpecToMotionGraphics(parsed, playheadMs);
       appendTextLayers(created);
       setSelectedMotionId(created[0]?.id ?? null);
       setActiveTool("text");
