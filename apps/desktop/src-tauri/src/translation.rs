@@ -210,7 +210,7 @@ pub async fn translate_groq_chunk(app: AppHandle, model: String, target_language
     let total_chars: usize = cues.iter().map(|c| c.text.len()).sum();
     if total_chars > 18000 { return Err("O lote excede o limite de 18.000 caracteres.".into()); }
     emit_translation_status(&app, "Conectando à Groq", "Solicitando autenticação e preparando o envio do lote...");
-    let key = api_key()?;
+    let key = resolve_api_key(&app)?;
     let payload = cues.iter().map(|cue| serde_json::json!({"id":cue.id,"text":cue.text,"contextBefore":cue.context_before,"contextAfter":cue.context_after})).collect::<Vec<_>>();
     let system = format!(
         "You are a professional audiovisual subtitle translator. Detect the source language automatically for each text and translate it into {}. Use contextBefore and contextAfter only to understand continuity, references and tone; translate only the text field. Preserve meaning, tone, register, idioms and continuity. Keep translations concise and natural for subtitles. Do not translate names unnecessarily. Return ONLY valid JSON in this exact shape: {{\"translations\":[{{\"id\":\"same id\",\"translation\":\"translated text\"}}]}}. Include every input id exactly once. Never add commentary.",
