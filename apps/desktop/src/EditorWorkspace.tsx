@@ -513,7 +513,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
 
   const timelineContentEndMs = Math.max(clips.reduce((max, clip) => Math.max(max, clipEnd(clip)), 0), motion.reduce((max, item) => Math.max(max, item.endMs), 0), imageOverlays.filter(item=>item.id!==selectedOverlayId).reduce((max,item)=>Math.max(max,item.endMs),0));
   const totalDuration = Math.max(timelineContentEndMs, imageOverlays.reduce((max,item)=>Math.max(max,item.endMs),0));
-  const selectedOverlay=imageOverlays.find(item=>item.id===selectedOverlayId)??null;
+  const selectedOverlay=!selectedId&&!selectedMotionId?(imageOverlays.find(item=>item.id===selectedOverlayId)??null):null;
   const activeOverlays=imageOverlays.filter(item=>item.visible!==false&&playheadMs>=item.startMs&&playheadMs<item.endMs);
   const selectedMotion = motion.find(item => item.id === selectedMotionId) ?? null;
   const activeMotion = motion.filter(item => item.visible!==false && playheadMs >= item.startMs && playheadMs < item.endMs);
