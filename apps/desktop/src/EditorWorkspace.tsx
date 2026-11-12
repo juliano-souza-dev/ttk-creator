@@ -17,6 +17,7 @@ import { parseSuperJsonCues, sceneSpecToMotionGraphics } from "./features/motion
 import { lucideIconLibrary, lucideIconNames, lucideIconPickerNames, renderLucideIconPng } from "./features/motion-graphics/icon-library";
 import type { LucideIconName } from "./features/motion-graphics/icon-library";
 import { captionStyleFrom, duplicateCaption, mergeCaptions, splitCaption } from "./features/motion-graphics/caption-editing";
+import { buildExportTimelinePayload } from "./features/export/payload";
 import { transcriptToCaptions } from "./features/motion-graphics/transcript-import";
 export { supportedLucideIconNames } from "./features/motion-graphics/icon-library";
 
@@ -538,29 +539,16 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
         setExportMessage("");
         return;
       }
-      const exportClips = clips.flatMap(clip => {
-        const asset = assets.find(item => item.id === clip.assetId);
-        return asset ? [{
-          id: clip.id,
-          assetId: clip.assetId,
-          kind: asset.kind,
-          sourceStartMs: clip.sourceStartMs,
-          sourceEndMs: clip.sourceEndMs,
-          timelineStartMs: clip.timelineStartMs,
-          volume: clip.volume,
-          muted: clip.muted,
-          transitionType: clip.transitionType ?? "fade-black",
-          transitionMs: clip.transitionMs ?? 500,
-        }] : [];
-      });
-      await desktopApi.exportTimeline({
+      const payload = await buildExportTimelinePayload({
         projectId,
-        imageOverlays: imageOverlays.filter(item=>item.visible!==false).map(item=>({assetId:item.assetId,startMs:item.startMs,endMs:item.endMs,x:item.x,y:item.y,width:item.width,height:item.height,soundId:item.soundId||"",soundVolume:item.soundVolume,entranceAnimation:item.entranceAnimation||"none",entranceDurationMs:item.entranceDurationMs??600})), 
         destination,
-        clips: exportClips,
-        motion: await Promise.all(motion.filter(item=>item.visible!==false).map(async item => ({startMs:item.startMs,endMs:item.endMs,durationMs:item.durationMs,typewriterDurationMs:item.typewriterDurationMs??1500,preset:item.preset,x:item.x,y:item.y,text:item.isCaption ? (item.captionMode === "source" ? (item.captionEnglish || item.text) : [item.captionEnglish || item.text, item.captionTranslation].filter(Boolean).join("\n")) : (item.icon ? item.icon + " " : "") + item.text,color:item.color,fontSize:item.fontSize,fontFamily:item.fontFamily || "Arial",fontWeight:item.fontWeight || 900,textAlign:item.textAlign || "center",isCaption:!!item.isCaption,captionWords:item.isCaption&&item.captionMode==="karaoke"?(item.captionWords||[]):[],captionAccent:item.accent,captionBackgroundColor:item.captionBackgroundColor||"#000000",captionBackgroundOpacity:item.captionBackgroundOpacity??0.76,captionWidth:item.captionWidth??90,captionPaddingEm:item.captionPaddingEm??0.32,lucideIconPng:item.lucideIconName && lucideIconLibrary[item.lucideIconName as LucideIconName] ? await renderLucideIconPng(item.lucideIconName as LucideIconName,item.lucideIconColor || item.accent,Math.max(24,Math.min(512,Math.round(item.lucideIconSize ?? item.fontSize)))) : undefined,lucideIconAnchor:item.lucideIconAnchor || "left",lucideIconSize:Math.max(24,Math.min(512,Math.round(item.lucideIconSize ?? item.fontSize))),...getLucideIconExportOffset(item,Math.max(24,Math.min(512,Math.round(item.lucideIconSize ?? item.fontSize))))}))),
-        soundEffects: [...textLayers.filter(item => !!item.soundId).map(item => ({ soundId: item.soundId!, timelineStartMs: item.startMs, volume: item.soundVolume ?? 80 })), ...imageOverlays.filter(item=>!!item.soundId).map(item=>({soundId:item.soundId!,timelineStartMs:item.startMs,volume:item.soundVolume}))],
+        clips,
+        assets,
+        motion,
+        textLayers,
+        imageOverlays,
       });
+      await desktopApi.exportTimeline(payload);
       setExportProgress(100);
     } catch (error) {
       setExportMessage("Não foi possível exportar: " + String(error));
