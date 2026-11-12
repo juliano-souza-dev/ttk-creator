@@ -183,7 +183,7 @@ pub struct CueTranslation { pub id: String, pub translation: String }
 
 #[tauri::command]
 pub async fn test_groq_connection(app: AppHandle, model: String) -> Result<String, String> {
-    let key = api_key()?;
+    let key = resolve_api_key(&app)?;
     let client = Client::builder().timeout(Duration::from_secs(30)).build().map_err(|e| e.to_string())?;
     let response = client.post("https://api.groq.com/openai/v1/chat/completions")
         .bearer_auth(key).json(&serde_json::json!({
