@@ -38,7 +38,7 @@ export function useGroqSettings() {
         targetLanguage: groqLanguage
       });
       setGroqSettingsMessage("Preferências salvas. Testando a conexão com a credencial do Shared Runtime...");
-      const result = await desktopApi.testGroqConnection(groqModel);
+      const result = await desktopApi.testGroqConnection();
       setGroqSettingsMessage("Preferências salvas. " + result);
     } catch (error) {
       setGroqSettingsMessage("Falha ao salvar ou testar a Groq: " + (error instanceof Error ? error.message : String(error)));
