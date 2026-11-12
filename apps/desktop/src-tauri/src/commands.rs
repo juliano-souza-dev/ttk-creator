@@ -547,6 +547,7 @@ fn ass_caption_script(item: &ExportMotion) -> String {
     let width = (item.caption_width.clamp(60.0, 100.0) * 10.8).round();
     let margin = ((1080.0 - width) / 2.0).round() as u32;
     let font_size = item.font_size.clamp(18, 180);
+    let text_margin = margin + (font_size as f64 * 0.55).round() as u32;
     let font_name = if item.font_family.trim().is_empty() { "Arial" } else { item.font_family.trim() };
     let bold = if item.font_weight >= 700 { -1 } else { 0 };
     let primary = ass_color(&item.color, 0);
@@ -555,7 +556,7 @@ fn ass_caption_script(item: &ExportMotion) -> String {
     let anchor_x = match item.text_align.as_str() { "left" => margin as f64, "right" => 1080.0 - margin as f64, _ => 540.0 };
     let anchor_y = (item.y.clamp(0.0, 100.0) / 100.0 * 1920.0).round();
     let style = format!(
-        "Style: Caption,{font_name},{font_size},{primary},{secondary},&H00000000&,&H00000000&,{bold},0,0,0,100,100,0,0,1,0,0,{alignment},{margin},{margin},0,1"
+        "Style: Caption,{font_name},{font_size},{primary},{secondary},&H00000000&,&H00000000&,{bold},0,0,0,100,100,0,0,1,0,0,{alignment},{text_margin},{text_margin},0,1"
     );
     let words = &item.caption_words;
     let source = if words.is_empty() {
@@ -633,7 +634,7 @@ fn caption_background_geometry(item: &ExportMotion) -> Option<(f64, f64, f64, f6
     let width = item.caption_width.clamp(60.0, 100.0) * 10.8;
     let x = (1080.0 - width) / 2.0;
     let font_size = item.font_size.clamp(18, 180);
-    let max_text_width = width - (item.caption_padding_em.max(0.0) * font_size as f64 * 2.0);
+    let max_text_width = (width - font_size as f64 * 1.1).max(font_size as f64);
     let source = if item.caption_words.is_empty() {
         item.text.split('\n').next().unwrap_or(&item.text)
     } else {
