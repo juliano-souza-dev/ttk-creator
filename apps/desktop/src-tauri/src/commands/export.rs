@@ -304,13 +304,13 @@ pub async fn export_timeline(
             let y=(overlay.y.clamp(0.0,100.0)/100.0)*1920.0-height as f64/2.0;
             let slide_progress = format!("(1-pow(1-min(1\\,max(0\\,(t-{start:.6})/{entrance_duration:.3}))\\,3))");
             let animated_x = match overlay.entrance_animation.as_str() {
-                "slide-left" => format!("{x:.2}-({slide_progress})*{width}"),
+                "slide-left" => format!("{x:.2}-(1-({slide_progress}))*{width}"),
                 "slide-right" => format!("{x:.2}+(1-({slide_progress}))*{width}"),
                 _ => format!("{x:.2}"),
             };
             let animated_y = match overlay.entrance_animation.as_str() {
                 "slide-up" => format!("{y:.2}+(1-({slide_progress}))*{height}"),
-                "slide-down" => format!("{y:.2}-({slide_progress})*{height}"),
+                "slide-down" => format!("{y:.2}-(1-({slide_progress}))*{height}"),
                 _ => format!("{y:.2}"),
             };
             let enable = ffmpeg_escape_expression(&format!("gte(t,{start:.6})*lt(t,{end:.6})"));
