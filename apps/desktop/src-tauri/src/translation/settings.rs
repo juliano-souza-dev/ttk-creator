@@ -147,9 +147,8 @@ fn read_settings(app: &AppHandle) -> Result<GroqSettings, String> {
         GroqSettings::default()
     };
 
-    let (_, _, provider) = shared_provider_settings(app)?;
     settings.configured = true;
-    settings.model = provider.model;
+    settings.model = resolve_api_model(app)?;
     Ok(settings)
 }
 
@@ -157,6 +156,12 @@ fn read_settings(app: &AppHandle) -> Result<GroqSettings, String> {
 pub(crate) fn resolve_api_endpoint(app: &AppHandle) -> Result<String, String> {
     let (_, _, provider) = shared_provider_settings(app)?;
     Ok(provider.endpoint)
+}
+
+/// Returns the provider model configured centrally in Shared Runtime.
+pub(crate) fn resolve_api_model(app: &AppHandle) -> Result<String, String> {
+    let (_, _, provider) = shared_provider_settings(app)?;
+    Ok(provider.model)
 }
 
 /// Returns the Groq key only to the native backend that needs to call the provider.
