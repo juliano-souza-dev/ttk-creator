@@ -838,6 +838,128 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
     if (selectedMotionId === id) setSelectedMotionId(null);
   }
 
+  function splitSelectedCaption() {
+    if (!selectedMotion?.isCaption) return;
+    const sourceText = (selectedMotion.captionEnglish || selectedMotion.text || "").trim();
+    const parts = sourceText.split(/\s+/).filter(Boolean);
+    if (parts.length < 2) {
+      setTranslationMessage("Adicione pelo menos duas palavras para dividir a legenda.");
+      setTranslationPhase("Falha identificada");
+      return;
+    }
+    const splitIndex = Math.max(1, Math.floor(parts.length / 2));
+    const firstText = parts.slice(0, splitIndex).join(" ");
+    const secondText = parts.slice(splitIndex).join(" ");
+    const words = selectedMotion.captionWords || [];
+    const wordSplitIndex = Math.min(words.length, Math.max(1, Math.floor(words.length / 2)));
+    const firstWords = words.slice(0, wordSplitIndex);
+    const secondWords = words.slice(wordSplitIndex);
+    const splitAtMs = secondWords.length
+      ? Math.max(selectedMotion.startMs + 150, secondWords[0].startMs)
+      : selectedMotion.startMs + Math.round((selectedMotion.endMs - selectedMotion.startMs) * splitIndex / parts.length);
+    if (splitAtMs >= selectedMotion.endMs - 150) {
+      setTranslationMessage("O trecho é curto demais para ser dividido com segurança.");
+      setTranslationPhase("Falha identificada");
+      return;
+    }
+    const translatedParts = (selectedMotion.captionTranslation || "").trim().split(/\s+/).filter(Boolean);
+    const translatedSplit = translatedParts.length > 1
+      ? Math.max(1, Math.floor(translatedParts.length * splitIndex / parts.length))
+      : 0;
+    const firstTranslation = translatedSplit ? translatedParts.slice(0, translatedSplit).join(" ") : "";
+    const secondTranslation = translatedSplit ? translatedParts.slice(translatedSplit).join(" ") : "";
+    const second: MotionGraphic = {
+      ...selectedMotion,
+      id: crypto.randomUUID(),
+      text: secondText,
+      captionEnglish: secondText,
+      captionTranslation: secondTranslation,
+      captionWords: secondWords,
+      startMs: splitAtMs,
+      endMs: selectedMotion.endMs,
+      durationMs: selectedMotion.endMs - splitAtMs,
+    };
+    setCaptions(current => [
+      ...current.map(item => item.id === selectedMotion.id
+        ? { ...item, text: firstText, captionEnglish: firstText, captionTranslation: firstTranslation, captionWords: firstWords, endMs: splitAtMs, durationMs: splitAtMs - item.startMs }
+        : item),
+      second,
+    ]);
+    setMotionOrder(current => [...current.filter(id => id !== second.id), second.id]);
+    setSelectedMotionId(second.id);
+    setPlayheadMs(splitAtMs);
+    setTranslationMessage("Legenda dividida em dois blocos.");
+    setTranslationPhase("Concluído");
+  }
+
+  function mergeSelectedCaption(direction: "previous" | "next") {
+    if (!selectedMotion?.isCaption) return;
+    const ordered = [...captions].sort((a, b) => a.startMs - b.startMs);
+    const index = ordered.findIndex(item => item.id === selectedMotion.id);
+    const neighbor = ordered[index + (direction === "previous" ? -1 : 1)];
+    if (!neighbor) return;
+    const first = direction === "previous" ? neighbor : selectedMotion;
+    const second = direction === "previous" ? selectedMotion : neighbor;
+    const firstText = (first.captionEnglish || first.text || "").trim();
+    const secondText = (second.captionEnglish || second.text || "").trim();
+    const firstTranslation = (first.captionTranslation || "").trim();
+    const secondTranslation = (second.captionTranslation || "").trim();
+    const mergedWords = [...(first.captionWords || []), ...(second.captionWords || [])].sort((a, b) => a.startMs - b.startMs);
+    const mergedText = [firstText, secondText].filter(Boolean).join(" ");
+    const mergedTranslation = [firstTranslation, secondTranslation].filter(Boolean).join(" ");
+    const startMs = Math.min(first.startMs, second.startMs);
+    const endMs = Math.max(first.endMs, second.endMs);
+    setCaptions(current => current
+      .filter(item => item.id !== neighbor.id)
+      .map(item => item.id === selectedMotion.id
+        ? { ...item, text: mergedText, captionEnglish: mergedText, captionTranslation: mergedTranslation, captionWords: mergedWords, startMs, endMs, durationMs: endMs - startMs }
+        : item));
+    setSelectedMotionId(selectedMotion.id);
+    setPlayheadMs(startMs);
+    setTranslationMessage("Legendas mescladas em um único bloco.");
+    setTranslationPhase("Concluído");
+  }
+
+  function duplicateSelectedCaption() {
+    if (!selectedMotion?.isCaption) return;
+    const duration = selectedMotion.endMs - selectedMotion.startMs;
+    const duplicate: MotionGraphic = {
+      ...selectedMotion,
+      id: crypto.randomUUID(),
+      startMs: selectedMotion.endMs,
+      endMs: selectedMotion.endMs + duration,
+      durationMs: duration,
+      captionWords: (selectedMotion.captionWords || []).map(word => ({
+        ...word,
+        startMs: word.startMs + duration,
+        endMs: word.endMs + duration,
+      })),
+    };
+    appendCaptions([duplicate]);
+    setSelectedMotionId(duplicate.id);
+    setPlayheadMs(duplicate.startMs);
+  }
+
+  function applySelectedCaptionStyleToAll() {
+    if (!selectedMotion?.isCaption) return;
+    const style: Partial<MotionGraphic> = {
+      fontFamily: selectedMotion.fontFamily,
+      fontWeight: selectedMotion.fontWeight,
+      textAlign: selectedMotion.textAlign,
+      color: selectedMotion.color,
+      accent: selectedMotion.accent,
+      fontSize: selectedMotion.fontSize,
+      captionBackgroundColor: selectedMotion.captionBackgroundColor,
+      captionBackgroundOpacity: selectedMotion.captionBackgroundOpacity,
+      captionWidth: selectedMotion.captionWidth,
+      captionPaddingEm: selectedMotion.captionPaddingEm,
+      y: selectedMotion.y,
+    };
+    setCaptions(current => current.map(item => ({ ...item, ...style })));
+    setTranslationMessage("Estilo aplicado a todas as legendas.");
+    setTranslationPhase("Concluído");
+  }
+
   async function translateSelectedCaption(targetLanguage: "English" | "Português brasileiro") {
     if (!selectedMotion?.isCaption || singleCaptionTranslationBusy || !isDesktopRuntime) return;
     const sourceText = (selectedMotion.captionEnglish || selectedMotion.text || "").trim();
@@ -1485,6 +1607,12 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
       </div>
       {selectedOverlay ? <><div className="editor-panel-head"><div><b>Imagem sobreposta</b><small>Camada independente</small></div></div><div className="properties-scroll"><div className="property-section"><b>Dimensões proporcionais</b><label>Largura <strong>{Math.round(selectedOverlay.width)} px</strong><input type="range" min="60" max="1080" value={selectedOverlay.width} onChange={event=>{const width=Number(event.target.value);updateOverlay(selectedOverlay.id,{width,height:width/(selectedOverlay.width/Math.max(1,selectedOverlay.height))});}}/></label><small>Arraste a alça no canto inferior direito para redimensionar diretamente no preview.</small></div><div className="property-section"><b>Animação de entrada</b><label>Estilo<select value={selectedOverlay.entranceAnimation||"none"} onChange={event=>updateOverlay(selectedOverlay.id,{entranceAnimation:event.target.value as ImageOverlay["entranceAnimation"]})}><option value="none">Sem animação</option><option value="fade">Aparecer suavemente</option><option value="slide-left">Entrar pela esquerda</option><option value="slide-right">Entrar pela direita</option><option value="slide-up">Entrar por baixo</option><option value="slide-down">Entrar por cima</option></select></label>{(selectedOverlay.entranceAnimation||"none")!=="none"&&<label>Duração <strong>{((selectedOverlay.entranceDurationMs??600)/1000).toFixed(1)} s</strong><input type="range" min="100" max="2000" step="100" value={selectedOverlay.entranceDurationMs??600} onChange={event=>updateOverlay(selectedOverlay.id,{entranceDurationMs:Number(event.target.value)})}/></label>}<small>A animação começa automaticamente no início da camada e também será aplicada ao MP4 exportado.</small></div><div className="property-section"><b>Tempo</b><label>Início (s)<input type="number" min="0" step="0.1" value={(selectedOverlay.startMs/1000).toFixed(1)} onChange={event=>updateOverlay(selectedOverlay.id,{startMs:Math.max(0,Number(event.target.value)*1000)})}/></label><label>Saída (s)<input type="number" min={(selectedOverlay.startMs+100)/1000} step="0.1" value={(selectedOverlay.endMs/1000).toFixed(1)} onChange={event=>{const value=Number(event.target.value);if(Number.isFinite(value))updateOverlay(selectedOverlay.id,{endMs:Math.max(selectedOverlay.startMs+100,value*1000)});}}/></label><div className="overlay-duration-actions"><button type="button" title="Diminuir saída em 0,1 segundo" disabled={selectedOverlay.endMs<=selectedOverlay.startMs+100} onClick={()=>updateOverlay(selectedOverlay.id,{endMs:Math.max(selectedOverlay.startMs+100,selectedOverlay.endMs-100)})}>− 0,1 s</button><button type="button" title="Aumentar saída em 0,1 segundo" onClick={()=>updateOverlay(selectedOverlay.id,{endMs:selectedOverlay.endMs+100})}>+ 0,1 s</button><button type="button" title="Estender a imagem até o fim do restante da timeline" onClick={()=>updateOverlay(selectedOverlay.id,{endMs:Math.max(selectedOverlay.startMs+100,timelineContentEndMs)})}>Até o fim da timeline</button></div><small>A saída pode ultrapassar a duração original da imagem e será considerada na duração total da timeline.</small></div><div className="property-section"><b>Efeito sonoro da imagem</b><label>Som<select value={selectedOverlay.soundId||""} onChange={event=>updateOverlay(selectedOverlay.id,{soundId:event.target.value})}><option value="">Sem efeito sonoro</option>{globalSounds.map(sound=><option key={sound.id} value={sound.id}>{sound.name}</option>)}</select></label><label>Volume <strong>{selectedOverlay.soundVolume}%</strong><input type="range" min="0" max="100" value={selectedOverlay.soundVolume} onChange={event=>updateOverlay(selectedOverlay.id,{soundVolume:Number(event.target.value)})}/></label></div><div className="property-section"><b>Posição</b><label>Horizontal (%)<input type="range" min="0" max="100" value={selectedOverlay.x} onChange={event=>updateOverlay(selectedOverlay.id,{x:Number(event.target.value)})}/></label><label>Vertical (%)<input type="range" min="0" max="100" value={selectedOverlay.y} onChange={event=>updateOverlay(selectedOverlay.id,{y:Number(event.target.value)})}/></label></div><button className="danger-action property-delete" onClick={()=>removeOverlay(selectedOverlay.id)}>Excluir imagem</button></div></> : selectedMotion ? <>
         <div className="editor-panel-head"><div><b>{selectedMotion.isCaption ? "Propriedades da legenda" : "Propriedades do texto"}</b><small>{selectedMotion.isCaption ? "Conteúdo falado, estilo, fundo e sincronização." : "Tipografia, composição, animação e efeitos."}</small></div></div>
+        {selectedMotion.isCaption && <div className="caption-quick-actions">
+          <button type="button" className="secondary-action" onClick={splitSelectedCaption} title="Dividir a legenda em dois blocos"><Scissors size={13}/> Dividir</button>
+          <button type="button" className="secondary-action" onClick={()=>mergeSelectedCaption("previous")} disabled={!captions.some(item=>item.id!==selectedMotion.id&&item.endMs<=selectedMotion.startMs)} title="Mesclar com a legenda anterior">Mesclar anterior</button>
+          <button type="button" className="secondary-action" onClick={()=>mergeSelectedCaption("next")} disabled={!captions.some(item=>item.id!==selectedMotion.id&&item.startMs>=selectedMotion.endMs)} title="Mesclar com a próxima legenda">Mesclar próxima</button>
+          <button type="button" className="secondary-action" onClick={duplicateSelectedCaption}><Copy size={13}/> Duplicar</button>
+        </div>}
         <div className="properties-scroll">
           {selectedMotion.isCaption ? <>
             <details open className="property-section"><summary>Conteúdo e idioma</summary>
@@ -1500,6 +1628,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
               <label>Peso<select value={selectedMotion.fontWeight || 900} onChange={event=>updateMotion(selectedMotion.id,{fontWeight:Number(event.target.value)})}><option value={400}>Normal</option><option value={600}>Semibold</option><option value={700}>Negrito</option><option value={900}>Extra negrito</option></select></label>
               <label>Alinhamento<select value={selectedMotion.textAlign || "center"} onChange={event=>updateMotion(selectedMotion.id,{textAlign:event.target.value as MotionGraphic["textAlign"]})}><option value="left">Esquerda</option><option value="center">Centralizado</option><option value="right">Direita</option></select></label>
               <div className="motion-colors"><label>Texto<input type="color" value={selectedMotion.color} onChange={event=>updateMotion(selectedMotion.id,{color:event.target.value})}/></label><label>Palavra ativa<input type="color" value={selectedMotion.accent} onChange={event=>updateMotion(selectedMotion.id,{accent:event.target.value})}/></label></div>
+              <button type="button" className="secondary-action caption-apply-all" onClick={applySelectedCaptionStyleToAll}><Copy size={13}/> Aplicar este estilo a todas as legendas</button>
               <div className="caption-style-controls"><b>Fundo e área</b>
                 <label>Cor do fundo<input type="color" value={selectedMotion.captionBackgroundColor || "#000000"} onChange={event=>updateMotion(selectedMotion.id,{captionBackgroundColor:event.target.value})}/></label>
                 <label>Opacidade <strong>{Math.round((selectedMotion.captionBackgroundOpacity ?? 0.76)*100)}%</strong><input type="range" min="0" max="100" value={Math.round((selectedMotion.captionBackgroundOpacity ?? 0.76)*100)} onChange={event=>updateMotion(selectedMotion.id,{captionBackgroundOpacity:Number(event.target.value)/100})}/></label>
