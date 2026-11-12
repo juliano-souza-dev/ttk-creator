@@ -2,7 +2,7 @@ use reqwest::{header, Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
-use super::settings::resolve_api_key;
+use super::settings::{resolve_api_endpoint, resolve_api_key};
 
 #[derive(Deserialize)]
 struct ChatCompletion { choices: Vec<Choice> }
@@ -24,8 +24,9 @@ pub struct CueTranslation { pub id: String, pub translation: String }
 #[tauri::command]
 pub async fn test_groq_connection(app: AppHandle, model: String) -> Result<String, String> {
     let key = resolve_api_key(&app)?;
+    let endpoint = format!("{}/chat/completions", resolve_api_endpoint(&app)?.trim_end_matches('/'));
     let client = Client::builder().timeout(Duration::from_secs(30)).build().map_err(|e| e.to_string())?;
-    let response = client.post("https://api.groq.com/openai/v1/chat/completions")
+    let response = client.post(endpoint)
         .bearer_auth(key).json(&serde_json::json!({
             "model": model, "messages":[{"role":"user","content":"Reply with exactly: connection_ok"}],
             "temperature":0, "max_tokens":16
@@ -51,6 +52,7 @@ pub async fn translate_groq_chunk(app: AppHandle, model: String, target_language
     if total_chars > 18000 { return Err("O lote excede o limite de 18.000 caracteres.".into()); }
     emit_translation_status(&app, "Conectando à Groq", "Solicitando autenticação e preparando o envio do lote...");
     let key = resolve_api_key(&app)?;
+    let endpoint = format!("{}/chat/completions", resolve_api_endpoint(&app)?.trim_end_matches('/'));
     let payload = cues.iter().map(|cue| serde_json::json!({"id":cue.id,"text":cue.text,"contextBefore":cue.context_before,"contextAfter":cue.context_after})).collect::<Vec<_>>();
     let system = format!(
         "You are a professional audiovisual subtitle translator. Detect the source language automatically for each text and translate it into {}. Use contextBefore and contextAfter only to understand continuity, references and tone; translate only the text field. Preserve meaning, tone, register, idioms and continuity. Keep translations concise and natural for subtitles. Do not translate names unnecessarily. Return ONLY valid JSON in this exact shape: {{\"translations\":[{{\"id\":\"same id\",\"translation\":\"translated text\"}}]}}. Include every input id exactly once. Never add commentary.",
@@ -60,7 +62,7 @@ pub async fn translate_groq_chunk(app: AppHandle, model: String, target_language
     let mut last_error = String::new();
     for attempt in 0..4 {
         emit_translation_status(&app, "Aguardando resposta da Groq", format!("Lote enviado. Tentativa {}/4. A API pode levar alguns segundos para responder.", attempt + 1).as_str());
-        let response = client.post("https://api.groq.com/openai/v1/chat/completions")
+        let response = client.post(&endpoint)
             .bearer_auth(&key).json(&serde_json::json!({
                 "model":&model,"messages":[{"role":"system","content":&system},{"role":"user","content":serde_json::to_string(&payload).map_err(|e|e.to_string())?}],
                 "temperature":0.2,"max_tokens":6000,"response_format":{"type":"json_object"}
