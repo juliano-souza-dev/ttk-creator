@@ -30,7 +30,7 @@ fn settings_path(app: &AppHandle) -> Result<PathBuf, String> {
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     Ok(dir.join("groq-settings.json"))
 }
-fn shared_manifest(app: &AppHandle) -> Result<Option<serde_json::Value>, String> {
+fn shared_manifest(app: &AppHandle) -> Result<Option<(PathBuf, serde_json::Value)>, String> {
     let mut candidates = Vec::<PathBuf>::new();
     if let Some(path) = std::env::var_os("NOVA_GENERATOR_SHARED_CONFIG") {
         candidates.push(PathBuf::from(path));
@@ -57,8 +57,8 @@ fn shared_manifest(app: &AppHandle) -> Result<Option<serde_json::Value>, String>
         }
     }
     let mut seen = std::collections::HashSet::new();
-    for path in candidates {
-        let path = if path.is_dir() { path.join("shared.config.json") } else { path };
+    for candidate in candidates {
+        let path = if candidate.is_dir() { candidate.join("shared.config.json") } else { candidate };
         if !seen.insert(path.clone()) || !path.is_file() { continue; }
         let raw = std::fs::read(&path).map_err(|error| format!("Não foi possível ler o vínculo Shared Runtime em {}: {error}", path.display()))?;
         let manifest: serde_json::Value = serde_json::from_slice(&raw)
@@ -69,20 +69,39 @@ fn shared_manifest(app: &AppHandle) -> Result<Option<serde_json::Value>, String>
         if manifest.pointer("/shared/enabled").and_then(|value| value.as_bool()) != Some(true) {
             return Err("O Shared Runtime está desativado para esta aplicação.".into());
         }
-        return Ok(Some(manifest));
+        return Ok(Some((path, manifest)));
     }
     Ok(None)
 }
 
 fn shared_provider_entry(app: &AppHandle) -> Result<Option<Entry>, String> {
-    let Some(manifest) = shared_manifest(app)? else { return Ok(None); };
+    let Some((manifest_path, mut manifest)) = shared_manifest(app)? else { return Ok(None); };
     let app_id = manifest.pointer("/application/id").and_then(|value| value.as_str())
         .ok_or("O manifesto Shared Runtime não identifica esta aplicação.")?;
-    let declared = manifest.pointer("/shared/providers").and_then(|value| value.as_array())
-        .is_some_and(|items| items.iter().any(|item| item.get("id").and_then(|value| value.as_str()) == Some("groq")));
-    if !declared {
-        return Err("O provedor Groq não está declarado em shared.providers. Atualize o vínculo desta aplicação no Shared Runtime Manager.".into());
+
+    // The application owns its provider declarations. Register Groq here when an
+    // existing Shared Runtime link predates this integration, preserving all
+    // other application-owned declarations and leaving authorization untouched.
+    let declaration_changed = {
+        let shared = manifest.get_mut("shared").and_then(|value| value.as_object_mut())
+            .ok_or("A seção 'shared' do manifesto Shared Runtime está inválida.")?;
+        let providers = shared.entry("providers").or_insert_with(|| serde_json::Value::Array(Vec::new()));
+        let providers = providers.as_array_mut()
+            .ok_or("A declaração shared.providers precisa ser uma lista. O manifesto não foi alterado.")?;
+        if providers.iter().any(|item| item.get("id").and_then(|value| value.as_str()) == Some("groq")) {
+            false
+        } else {
+            providers.push(serde_json::json!({"id":"groq","required":false}));
+            true
+        }
+    };
+    if declaration_changed {
+        let serialized = serde_json::to_vec_pretty(&manifest)
+            .map_err(|error| format!("Não foi possível atualizar a declaração da Groq: {error}"))?;
+        std::fs::write(&manifest_path, serialized)
+            .map_err(|error| format!("Não foi possível registrar Groq em shared.providers no vínculo da aplicação: {error}"))?;
     }
+
     let registry_path = manifest.pointer("/shared/files/apiProviders").and_then(|value| value.as_str())
         .ok_or("O manifesto não aponta para o registro global de APIs (shared.files.apiProviders). Execute novamente o registro da aplicação no Shared Runtime Manager.")?;
     let registry: serde_json::Value = serde_json::from_slice(&std::fs::read(registry_path)
