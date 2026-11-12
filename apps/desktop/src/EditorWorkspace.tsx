@@ -324,7 +324,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
   const selectedMotion = motion.find(item => item.id === selectedMotionId) ?? null;
   const {
     translationBusy, singleCaptionTranslationBusy, translationProgress,
-    translationMessage, translationPhase, translateCaptions,
+    translationMessage, setTranslationMessage, translationPhase, setTranslationPhase, translateCaptions,
     translateSelectedCaption, requestStopAfterCurrentBatch
   } = useCaptionTranslation({ captions, setCaptions, selectedCaption: selectedMotion, updateMotion });
   const activeMotion = motion.filter(item => item.visible!==false && playheadMs >= item.startMs && playheadMs < item.endMs);
