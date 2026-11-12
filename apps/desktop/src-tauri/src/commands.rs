@@ -261,6 +261,16 @@ pub struct ExportMotion {
     #[serde(default)]
     caption_accent: String,
     #[serde(default)]
+    caption_background_color: String,
+    #[serde(default)]
+    caption_background_opacity: f64,
+    #[serde(default)]
+    caption_width: f64,
+    #[serde(default)]
+    caption_padding_em: f64,
+    #[serde(default)]
+    caption_border_radius_em: f64,
+    #[serde(default)]
     lucide_icon_png: Option<String>,
     #[serde(default)]
     lucide_icon_anchor: String,
@@ -469,11 +479,13 @@ fn estimate_text_width(value: &str, font_size: u32) -> f64 {
 }
 
 fn wrap_text_for_export(value: &str, font_size: u32) -> String {
-    // Keep subtitle text inside the central 90% safe width (54..1026 px at 1080p).
+    wrap_text_for_export_width(value, font_size, 972.0)
+}
+
+fn wrap_text_for_export_width(value: &str, font_size: u32, max_width: f64) -> String {
     // Estimate glyph widths rather than relying on a character count, which clips
     // wide words and wastes space on narrow glyphs.
     let normalized = value.replace("\r\n", "\n").replace('\r', "\n");
-    let max_width = 972.0_f64;
     normalized.split('\n').map(|line| {
         let mut lines = Vec::new();
         let mut current = String::new();
@@ -501,6 +513,153 @@ fn wrap_text_for_export(value: &str, font_size: u32) -> String {
         if !current.is_empty() { lines.push(current); }
         if lines.is_empty() { String::new() } else { lines.join("\n") }
     }).collect::<Vec<_>>().join("\n")
+}
+
+
+fn ass_color(color: &str, alpha: u8) -> String {
+    let raw = color.trim().trim_start_matches('#');
+    let rgb = u32::from_str_radix(raw, 16).unwrap_or(0xFFFFFF);
+    let red = (rgb >> 16) & 0xFF;
+    let green = (rgb >> 8) & 0xFF;
+    let blue = rgb & 0xFF;
+    format!("&H{alpha:02X}{blue:02X}{green:02X}{red:02X}&")
+}
+
+fn ass_timestamp(milliseconds: u64) -> String {
+    let centiseconds = milliseconds / 10;
+    let total_seconds = centiseconds / 100;
+    let hours = total_seconds / 3600;
+    let minutes = (total_seconds % 3600) / 60;
+    let seconds = total_seconds % 60;
+    format!("{hours}:{minutes:02}:{seconds:02}.{:02}", centiseconds % 100)
+}
+
+fn ass_escape_text(value: &str) -> String {
+    value.replace('\\', "\\\\")
+        .replace('{', "\\{")
+        .replace('}', "\\}")
+        .replace("\r\n", "\\N")
+        .replace('\r', "\\N")
+        .replace('\n', "\\N")
+}
+
+fn ass_caption_script(item: &ExportMotion) -> String {
+    let width = (item.caption_width.clamp(60.0, 100.0) * 10.8).round();
+    let margin = ((1080.0 - width) / 2.0).round() as u32;
+    let font_size = item.font_size.clamp(18, 180);
+    let font_name = if item.font_family.trim().is_empty() { "Arial" } else { item.font_family.trim() };
+    let bold = if item.font_weight >= 700 { -1 } else { 0 };
+    let primary = ass_color(&item.color, 0);
+    let secondary = ass_color(if item.caption_accent.is_empty() { "#65d6c0" } else { &item.caption_accent }, 0);
+    let alignment = match item.text_align.as_str() { "left" => 4, "right" => 6, _ => 5 };
+    let anchor_x = match item.text_align.as_str() { "left" => margin as f64, "right" => 1080.0 - margin as f64, _ => 540.0 };
+    let anchor_y = (item.y.clamp(0.0, 100.0) / 100.0 * 1920.0).round();
+    let style = format!(
+        "Style: Caption,{font_name},{font_size},{primary},{secondary},&H00000000&,&H00000000&,{bold},0,0,0,100,100,0,0,1,0,0,{alignment},{margin},{margin},0,1"
+    );
+    let words = &item.caption_words;
+    let source = if words.is_empty() {
+        item.text.split('\n').next().unwrap_or(&item.text).to_string()
+    } else {
+        words.iter().map(|word| word.text.as_str()).collect::<Vec<_>>().join(" ")
+    };
+    let translation = item.text.split('\n').skip(1).collect::<Vec<_>>().join("\n");
+    let mut intervals: Vec<(u64, u64, Option<usize>)> = Vec::new();
+    let mut cursor = item.start_ms;
+    if words.is_empty() {
+        intervals.push((item.start_ms, item.end_ms, None));
+    } else {
+        let mut sorted: Vec<(usize, &ExportCaptionWord)> = words.iter().enumerate().collect();
+        sorted.sort_by_key(|(_, word)| word.start_ms);
+        for (word_index, word) in sorted {
+            let start = word.start_ms.max(item.start_ms).max(cursor);
+            let end = word.end_ms.min(item.end_ms);
+            if start > cursor {
+                intervals.push((cursor, start, None));
+            }
+            if end > start {
+                intervals.push((start, end, Some(word_index)));
+                cursor = end;
+            }
+        }
+        if cursor < item.end_ms {
+            intervals.push((cursor, item.end_ms, None));
+        }
+        if intervals.is_empty() && item.end_ms > item.start_ms {
+            intervals.push((item.start_ms, item.end_ms, None));
+        }
+    }
+    let mut script = String::from(
+        "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n[V4+ Styles]\nFormat: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding\n"
+    );
+    script.push_str(&style);
+    script.push_str("\n\n[Events]\nFormat: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text\n");
+    for (start_ms, end_ms, active_word) in intervals {
+        if end_ms <= start_ms { continue; }
+        let mut source_markup = String::new();
+        if words.is_empty() {
+            source_markup.push_str(&ass_escape_text(&source));
+        } else {
+            for (index, word) in words.iter().enumerate() {
+                if index > 0 { source_markup.push(' '); }
+                if Some(index) == active_word {
+                    source_markup.push_str(&format!("{{\\1c{secondary}}}{}{{\\rCaption}}", ass_escape_text(&word.text)));
+                } else {
+                    source_markup.push_str(&ass_escape_text(&word.text));
+                }
+            }
+        }
+        let translation_markup = if translation.trim().is_empty() {
+            String::new()
+        } else {
+            format!("\\N{{\\fs{}\\1c&H00D8D4DF&}}{}{{\\rCaption}}", (font_size as f64 * 0.72).round().max(12.0) as u32, ass_escape_text(&translation))
+        };
+        let text = format!("{{\\an{alignment}\\pos({anchor_x:.0},{anchor_y:.0})}}{source_markup}{translation_markup}");
+        script.push_str(&format!(
+            "Dialogue: 0,{},{},Caption,,0,0,0,,{}\n",
+            ass_timestamp(start_ms), ass_timestamp(end_ms), text
+        ));
+    }
+    script
+}
+
+fn ffmpeg_escape_filter_path(path: &std::path::Path) -> String {
+    path.to_string_lossy().replace('\\', "/").replace(':', "\\:").replace('\'', "\\'")
+}
+
+fn caption_background_geometry(item: &ExportMotion) -> Option<(f64, f64, f64, f64, String)> {
+    let opacity = item.caption_background_opacity.clamp(0.0, 1.0);
+    if opacity <= 0.0 { return None; }
+    let width = item.caption_width.clamp(60.0, 100.0) * 10.8;
+    let x = (1080.0 - width) / 2.0;
+    let font_size = item.font_size.clamp(18, 180);
+    let max_text_width = width - (item.caption_padding_em.max(0.0) * font_size as f64 * 2.0);
+    let source = if item.caption_words.is_empty() {
+        item.text.split('\n').next().unwrap_or(&item.text)
+    } else {
+        // Reconstruct the spoken line from the word timings, matching the karaoke text.
+        // The subtitle renderer uses the same word sequence.
+        ""
+    };
+    let source_owned = if item.caption_words.is_empty() { source.to_string() } else {
+        item.caption_words.iter().map(|word| word.text.as_str()).collect::<Vec<_>>().join(" ")
+    };
+    let source_lines = wrap_text_for_export_width(&source_owned, font_size, max_text_width).lines().count().max(1) as f64;
+    let translation = item.text.split('\n').skip(1).collect::<Vec<_>>().join(" ");
+    let translation_lines = if translation.trim().is_empty() { 0.0 } else {
+        wrap_text_for_export_width(&translation, (font_size as f64 * 0.72).round() as u32, max_text_width).lines().count().max(1) as f64
+    };
+    let padding = item.caption_padding_em.clamp(0.0, 1.0) * font_size as f64;
+    let height = (source_lines * font_size as f64 * 1.18 + translation_lines * font_size as f64 * 0.72 * 1.18 + padding * 2.0).max(font_size as f64);
+    let anchor_y = item.y.clamp(0.0, 100.0) / 100.0 * 1920.0;
+    let y = (anchor_y - height / 2.0).clamp(0.0, (1920.0 - height).max(0.0));
+    let raw_color = item.caption_background_color.trim().trim_start_matches('#');
+    let color = if raw_color.len() == 6 && u32::from_str_radix(raw_color, 16).is_ok() {
+        format!("0x{raw_color}@{opacity:.3}")
+    } else {
+        format!("black@{opacity:.3}")
+    };
+    Some((x, y, width, height.min(1920.0), color))
 }
 
 fn ffmpeg_escape_expression(value: &str) -> String {
