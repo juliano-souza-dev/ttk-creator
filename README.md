@@ -16,7 +16,7 @@ This is an independent application with its own project format, media library, e
 
 The desktop shell, local project persistence, project media library, multi-file local import, and YouTube import workflow are implemented.
 
-Local assets are copied into each project's `media/` directory and registered in `project.json`. YouTube imports support metadata inspection, available video-height selection, and download progress. Install yt-dlp and FFmpeg separately and make both commands available on the Windows PATH. The app also supports running yt-dlp through common Python launchers.
+Local assets are copied into each project's media/ directory and registered in project.json. YouTube imports support metadata inspection, available video-height selection, and download progress. Install yt-dlp and FFmpeg separately and make both commands available on the Windows PATH. The app also supports running yt-dlp through common Python launchers.
 
 The next milestones are media probing, asset preview, a multi-track timeline, caption editing, and MP4 export.
 
@@ -26,20 +26,18 @@ See [Architecture](docs/architecture.md) and [Roadmap](docs/roadmap.md).
 
 Install Node.js, Rust, Microsoft C++ Build Tools, and WebView2 as described in the [Tauri v2 Windows prerequisites](https://v2.tauri.app/start/prerequisites/).
 
-Then open PowerShell in `apps/desktop`:
+Then open PowerShell in apps/desktop and run:
 
-```powershell
-npm install
-npm run tauri dev
-```
+    npm install
+    npm run start-dev
+
+The start-dev command pulls the latest fast-forwardable changes from origin/main, builds the frontend, and launches the Tauri desktop app. It stops if Git cannot safely update the local branch.
 
 To build a Windows installer:
 
-```powershell
-npm run tauri build
-```
+    npm run tauri build
 
-Projects are stored in the operating system's application data directory under `projects/`.
+Projects are stored in the operating system's application data directory under projects/.
 
 ## Principles
 
