@@ -4,7 +4,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { desktopApi, isDesktopRuntime } from "./services/desktop-api";
-import type { GlobalSound, TranscriptResult } from "./services/desktop-api";
+import type { TranscriptResult } from "./services/desktop-api";
 import type { MediaAsset } from "./shared/types";
 import { defaultDuration, clipDuration, clipEnd, timeLabel } from "./features/timeline/model";
 import type { TimelineClip, TimelineGroup, TrimDrag, ClipMoveDrag, MotionTrimDrag } from "./features/timeline/model";
@@ -23,6 +23,7 @@ import { captionBackgroundRgba } from "./features/motion-graphics/caption-style"
 import { buildExportTimelinePayload } from "./features/export/payload";
 import { transcriptToCaptions } from "./features/motion-graphics/transcript-import";
 import { useCaptionTranslation } from "./features/motion-graphics/useCaptionTranslation";
+import { useGlobalSounds } from "./features/sounds/useGlobalSounds";
 export { supportedLucideIconNames } from "./features/motion-graphics/icon-library";
 
 import { AudioLines, Film, Plus, Play, Pause, Trash2, Scissors, Copy, SkipBack, SkipForward, Volume2, VolumeX, Music2, Type, WandSparkles, MousePointer2, ChevronLeft, ChevronRight, Download, LoaderCircle, PanelsTopLeft, FileJson, Upload, Eye, Search, Image, ShieldCheck, Languages, Captions, Layers } from "lucide-react";
@@ -96,11 +97,6 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
     window.addEventListener("framelab:transcription-ready", onTranscript);
     return () => window.removeEventListener("framelab:transcription-ready", onTranscript);
   }, [projectId]);
-  const [globalSounds, setGlobalSounds] = useState<GlobalSound[]>([]);
-  const [soundUrls, setSoundUrls] = useState<Record<string, string>>({});
-  const [newSoundName, setNewSoundName] = useState("");
-  const [soundBusy, setSoundBusy] = useState(false);
-  const [soundMessage, setSoundMessage] = useState("");
 
   const [selectedMotionId, setSelectedMotionId] = useState<string | null>(null);
   const [activeTool, setActiveTool] = useState<"media" | "audio" | "text" | "captions" | "effects" | "templates">("media");
@@ -257,51 +253,11 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
     lastSessionSaveAt.current = now;
   }, [sessionKey, storageKey, loadedStorageKey, playheadMs, timelineZoom, activeTool, selectedId, selectedMotionId, playing]);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function loadGlobalSounds() {
-      if (!isDesktopRuntime) return;
-      try {
-        const sounds = await desktopApi.listGlobalSounds();
-        const entries = await Promise.all(sounds.map(async sound => {
-          try { return [sound.id, convertFileSrc(await desktopApi.getGlobalSoundPath(sound.id))] as const; }
-          catch { return [sound.id, ""] as const; }
-        }));
-        if (!cancelled) { setGlobalSounds(sounds); setSoundUrls(Object.fromEntries(entries)); }
-      } catch (error) { if (!cancelled) setSoundMessage("Não foi possível carregar a biblioteca: " + String(error)); }
-    }
-    void loadGlobalSounds();
-    return () => { cancelled = true; };
-  }, []);
+  const {
+    globalSounds, soundUrls, newSoundName, setNewSoundName,
+    soundBusy, soundMessage, setSoundMessage, importGlobalSound, removeGlobalSound,
+  } = useGlobalSounds({ setMotion });
 
-
-  async function importGlobalSound() {
-    if (!isDesktopRuntime || soundBusy) return;
-    const selected = await open({ multiple: false, filters: [{ name: "Áudio", extensions: ["mp3", "wav", "ogg", "m4a", "aac", "flac"] }] });
-    if (!selected || Array.isArray(selected)) return;
-    const fallbackName = selected.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, "") || "Novo efeito";
-    const name = newSoundName.trim() || fallbackName;
-    setSoundBusy(true); setSoundMessage("");
-    try {
-      const sound = await desktopApi.importGlobalSound(selected, name);
-      const url = convertFileSrc(await desktopApi.getGlobalSoundPath(sound.id));
-      setGlobalSounds(current => [...current, sound]);
-      setSoundUrls(current => ({ ...current, [sound.id]: url }));
-      setNewSoundName(""); setSoundMessage("Efeito cadastrado na biblioteca global.");
-    } catch (error) { setSoundMessage("Não foi possível importar: " + String(error)); }
-    finally { setSoundBusy(false); }
-  }
-
-  async function removeGlobalSound(soundId: string) {
-    if (!window.confirm("Excluir este efeito da biblioteca global? Os textos que o utilizam ficarão sem áudio.")) return;
-    try {
-      await desktopApi.deleteGlobalSound(soundId);
-      setGlobalSounds(current => current.filter(sound => sound.id !== soundId));
-      setSoundUrls(current => { const next = { ...current }; delete next[soundId]; return next; });
-      setMotion(current => current.map(item => item.soundId === soundId ? { ...item, soundId: "" } : item));
-      setSoundMessage("Efeito removido da biblioteca.");
-    } catch (error) { setSoundMessage("Não foi possível excluir: " + String(error)); }
-  }
   useEffect(() => {
     let cancelled = false;
     async function loadUrls() {
