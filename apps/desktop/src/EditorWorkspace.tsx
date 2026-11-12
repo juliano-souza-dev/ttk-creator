@@ -30,7 +30,7 @@ type TrimDrag = { clipId: string; edge: "start" | "end"; startX: number; sourceS
 type ClipMoveDrag = { clipId: string; startX: number; lastX: number; timelineStartMs: number; memberKeys: string[] };
 type MotionTrimDrag = { id: string; edge: "start" | "end" | "move"; startX: number; lastX: number; startMs: number; endMs: number; memberKeys: string[] };
 type CaptionWord = { text: string; startMs: number; endMs: number; translation?: string };
-type MotionGraphic = { id: string; visible?: boolean; locked?: boolean; isCaption?: boolean; captionSourceLanguage?: string; captionTranslationLanguage?: string; captionMode?: "source" | "bilingual" | "karaoke"; captionEnglish?: string; captionTranslation?: string; captionWords?: CaptionWord[]; text: string; icon?: string; lucideIconName?: string; lucideIconAnchor?: "left" | "right" | "top" | "bottom"; lucideIconSize?: number; lucideIconColor?: string; elements?: Array<{ type: string; content: string }>; fontFamily?: string; fontWeight?: number; textAlign?: "left" | "center" | "right"; startMs: number; endMs: number; durationMs: number; preset: "pop" | "slide" | "zoom" | "typewriter" | "impact" | "composition"; typewriterDurationMs?: number; color: string; accent: string; fontSize: number; x: number; y: number; sound: "pop" | "whoosh" | "impact" | "click" | "none"; soundId?: string; soundVolume?: number };
+type MotionGraphic = { id: string; visible?: boolean; locked?: boolean; isCaption?: boolean; captionSourceLanguage?: string; captionTranslationLanguage?: string; captionMode?: "source" | "bilingual" | "karaoke"; captionEnglish?: string; captionTranslation?: string; captionWords?: CaptionWord[]; captionBackgroundColor?: string; captionBackgroundOpacity?: number; captionWidth?: number; captionBorderRadiusEm?: number; captionPaddingEm?: number; text: string; icon?: string; lucideIconName?: string; lucideIconAnchor?: "left" | "right" | "top" | "bottom"; lucideIconSize?: number; lucideIconColor?: string; elements?: Array<{ type: string; content: string }>; fontFamily?: string; fontWeight?: number; textAlign?: "left" | "center" | "right"; startMs: number; endMs: number; durationMs: number; preset: "pop" | "slide" | "zoom" | "typewriter" | "impact" | "composition"; typewriterDurationMs?: number; color: string; accent: string; fontSize: number; x: number; y: number; sound: "pop" | "whoosh" | "impact" | "click" | "none"; soundId?: string; soundVolume?: number };
 const motionPresets = [{id:"pop",label:"Pop Impact",sound:"pop"},{id:"slide",label:"Slide + Whoosh",sound:"whoosh"},{id:"zoom",label:"Zoom + Impact",sound:"impact"},{id:"typewriter",label:"Typewriter",sound:"click"},{id:"impact",label:"Big Impact",sound:"impact"}] as const;
 const lucideIconLibrary = {
   // Nomes legados preservados para não quebrar projetos já salvos.
@@ -124,6 +124,14 @@ const timeLabel = (ms: number) => {
   return String(Math.floor(total / 60)).padStart(2, "0") + ":" + String(total % 60).padStart(2, "0");
 };
 
+function captionBackgroundRgba(color: string | undefined, opacity: number | undefined) {
+  const safeOpacity = Math.max(0, Math.min(1, opacity ?? 0.76));
+  const match = /^#?([0-9a-f]{6})$/i.exec(color || "000000");
+  if (!match) return `rgba(0,0,0,${safeOpacity})`;
+  const value = Number.parseInt(match[1], 16);
+  return `rgba(${(value >> 16) & 255},${(value >> 8) & 255},${value & 255},${safeOpacity})`;
+}
+
 function imageOverlayEntranceState(item: ImageOverlay, playheadMs: number) {
   const animation = item.entranceAnimation || "none";
   const duration = Math.max(100, Math.min(3000, item.entranceDurationMs ?? 600));
@@ -140,6 +148,7 @@ function imageOverlayEntranceState(item: ImageOverlay, playheadMs: number) {
 }
 
 function motionPreviewState(item: MotionGraphic, playheadMs: number) {
+  if (item.isCaption) return { text: item.captionEnglish || item.text, transform: "none", opacity: 1 };
   const duration = Math.max(1, item.durationMs || item.endMs - item.startMs);
   const progress = Math.max(0, Math.min(1, (playheadMs - item.startMs) / duration));
   const writingDuration = Math.max(100, Math.min(duration, item.typewriterDurationMs ?? 1500));
@@ -243,6 +252,11 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
         captionTranslationLanguage: "",
         captionTranslation: "",
         captionWords: words,
+        captionBackgroundColor: "#000000",
+        captionBackgroundOpacity: 0.76,
+        captionWidth: 90,
+        captionBorderRadiusEm: 0.22,
+        captionPaddingEm: 0.32,
         text: cue.text,
         icon: "",
         fontFamily: "Arial",
@@ -931,6 +945,11 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
               captionEnglish: english,
               captionTranslation: portuguese,
               captionWords: words.map(word => ({ ...word, startMs: playheadMs + word.startMs, endMs: playheadMs + word.endMs })),
+              captionBackgroundColor: "#000000",
+              captionBackgroundOpacity: 0.76,
+              captionWidth: 90,
+              captionBorderRadiusEm: 0.22,
+              captionPaddingEm: 0.32,
               text: portuguese ? english + "\n" + portuguese : english || portuguese,
               icon: "",
               fontFamily: "Arial",
@@ -1391,10 +1410,10 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
         {activeOverlays.map(item=>{const url=mediaUrls[item.assetId];if(!url)return null;const entrance=imageOverlayEntranceState(item,playheadMs);return <div key={item.id} className={"image-overlay-preview"+(selectedOverlayId===item.id?" selected":"")} style={{left:item.x+"%",top:item.y+"%",width:item.width*previewScale,height:item.height*previewScale,transform:entrance.transform,opacity:entrance.opacity}} onPointerDown={event=>overlayPointerDown(event,item,(event.target as HTMLElement).closest(".image-overlay-handle")?"resize":"move")} onPointerMove={overlayPointerMove} onPointerUp={overlayPointerUp} onPointerCancel={overlayPointerUp}><img src={url} alt="Imagem sobreposta" draggable={false}/>{selectedOverlayId===item.id&&<span className="image-overlay-handle"/>}</div>;})}
         {activeMotion.map(item => {
           const animation = motionPreviewState(item, playheadMs);
-          return <div key={item.id} className={"motion-overlay motion-" + item.preset + (item.isCaption ? " caption-overlay" : "") + (selectedMotionId === item.id ? " motion-selected" : "")} style={{ "--motion-color": item.color, "--motion-accent": item.accent, "--motion-size": (item.fontSize * previewScale) + "px", "--motion-x": item.isCaption ? "5%" : item.x + "%", "--motion-y": item.y + "%" , width: item.isCaption ? "90%" : undefined, transform: item.isCaption ? "translateY(-50%)" : item.textAlign === "left" ? "translate(0,-50%)" : item.textAlign === "right" ? "translate(-100%,-50%)" : "translate(-50%,-50%)" } as CSSProperties}>
+          return <div key={item.id} className={"motion-overlay motion-" + item.preset + (item.isCaption ? " caption-overlay" : "") + (selectedMotionId === item.id ? " motion-selected" : "")} style={{ "--motion-color": item.color, "--motion-accent": item.accent, "--motion-size": (item.fontSize * previewScale) + "px", "--motion-x": item.isCaption ? ((100 - (item.captionWidth ?? 90)) / 2) + "%" : item.x + "%", "--motion-y": item.y + "%" , width: item.isCaption ? (item.captionWidth ?? 90) + "%" : undefined, transform: item.isCaption ? "translateY(-50%)" : item.textAlign === "left" ? "translate(0,-50%)" : item.textAlign === "right" ? "translate(-100%,-50%)" : "translate(-50%,-50%)" } as CSSProperties}>
             <span className={"motion-content-group anchor-" + (item.lucideIconAnchor || "left")} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: Math.max(4, (item.lucideIconSize ?? item.fontSize) * previewScale * 0.22), flexDirection: item.lucideIconAnchor === "top" ? "column" : item.lucideIconAnchor === "bottom" ? "column-reverse" : item.lucideIconAnchor === "right" ? "row-reverse" : "row", transform: animation.transform, opacity: animation.opacity, willChange: "transform,opacity" }} onPointerDown={event => { if(item.locked)return; setSelectedId(null); setSelectedMotionId(item.id); event.preventDefault(); event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={event => { if (!event.currentTarget.hasPointerCapture(event.pointerId)) return; const rect = event.currentTarget.closest(".preview-media-frame")?.getBoundingClientRect(); if (!rect) return; updateMotion(item.id, { x: Math.max(0, Math.min(100, ((event.clientX - rect.left) / rect.width) * 100)), y: Math.max(0, Math.min(100, ((event.clientY - rect.top) / rect.height) * 100)) }); }} onPointerUp={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); }}>
               {item.lucideIconName && lucideIconLibrary[item.lucideIconName as LucideIconName] && (() => { const IconView = lucideIconLibrary[item.lucideIconName as LucideIconName]; return <IconView size={(item.lucideIconSize ?? item.fontSize) * previewScale} color={item.lucideIconColor || item.accent} strokeWidth={2.2} aria-hidden="true"/>; })()}
-              <span className="motion-main-text" style={{fontFamily:item.fontFamily || "Arial",fontWeight:(item.fontWeight || 900) >= 700 ? 700 : 400,fontSize:item.fontSize * previewScale,textAlign:item.isCaption ? "center" : item.textAlign || "center",background:item.isCaption ? "rgba(0,0,0,.76)" : "transparent",padding:item.isCaption ? ".32em .55em" : "0",borderRadius:item.isCaption ? ".22em" : "0",boxDecorationBreak:"clone",WebkitBoxDecorationBreak:"clone",display:item.isCaption ? "block" : "inline",width:item.isCaption ? "100%" : undefined,maxWidth:item.isCaption ? "100%" : "90%",boxSizing:"border-box",whiteSpace:item.isCaption ? "pre-wrap" : undefined}}>{item.captionMode === "karaoke" && item.captionWords?.length ? <><span>{item.captionWords.map((word, index) => <span key={index} style={{ color: playheadMs >= word.startMs && playheadMs <= word.endMs ? item.accent : item.color, textShadow: playheadMs >= word.startMs && playheadMs <= word.endMs ? "0 0 12px " + item.accent : "none" }}>{word.text}{index < item.captionWords!.length - 1 ? " " : ""}</span>)}</span>{item.captionTranslation && <><br/><span style={{color:"#d8d4df",fontSize:"0.72em"}}>{item.captionTranslation}</span></>}</> : item.captionTranslation ? <>{item.captionEnglish || item.text}<br/><span style={{color:"#d8d4df",fontSize:"0.72em"}}>{item.captionTranslation}</span></> : animation.text}</span>
+              <span className="motion-main-text" style={{fontFamily:item.fontFamily || "Arial",fontWeight:(item.fontWeight || 900) >= 700 ? 700 : 400,fontSize:item.fontSize * previewScale,textAlign:item.isCaption ? "center" : item.textAlign || "center",background:item.isCaption ? captionBackgroundRgba(item.captionBackgroundColor,item.captionBackgroundOpacity) : "transparent",padding:item.isCaption ? `${item.captionPaddingEm ?? 0.32}em .55em` : "0",borderRadius:item.isCaption ? `${item.captionBorderRadiusEm ?? 0.22}em` : "0",boxDecorationBreak:"clone",WebkitBoxDecorationBreak:"clone",display:item.isCaption ? "block" : "inline",width:item.isCaption ? "100%" : undefined,maxWidth:item.isCaption ? "100%" : "90%",boxSizing:"border-box",whiteSpace:item.isCaption ? "pre-wrap" : undefined}}>{item.captionMode === "karaoke" && item.captionWords?.length ? <><span>{item.captionWords.map((word, index) => <span key={index} style={{ color: playheadMs >= word.startMs && playheadMs <= word.endMs ? item.accent : item.color, textShadow: playheadMs >= word.startMs && playheadMs <= word.endMs ? "0 0 12px " + item.accent : "none" }}>{word.text}{index < item.captionWords!.length - 1 ? " " : ""}</span>)}</span>{item.captionTranslation && <><br/><span style={{color:"#d8d4df",fontSize:"0.72em"}}>{item.captionTranslation}</span></>}</> : item.captionTranslation ? <>{item.captionEnglish || item.text}<br/><span style={{color:"#d8d4df",fontSize:"0.72em"}}>{item.captionTranslation}</span></> : animation.text}</span>
             </span>
           </div>;
         })}
