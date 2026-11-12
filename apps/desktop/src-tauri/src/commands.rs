@@ -658,7 +658,8 @@ pub async fn export_timeline(
             filter_parts.push(format!("[{input_index}:v]{transition_filter}scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,setsar=1,setpts=PTS-STARTPTS+{start:.3}/TB[{label}]"));
             let next = format!("base{}", position + 1);
             let end = (clip.timeline_start_ms + clip.source_end_ms - clip.source_start_ms) as f64 / 1000.0;
-            filter_parts.push(format!("[{previous}][{label}]overlay=0:0:eof_action=pass:shortest=0:enable='gte(t,{start:.6})*lt(t,{end:.6})'[{next}]"));
+            let enable = ffmpeg_escape_expression(&format!("gte(t,{start:.6})*lt(t,{end:.6})"));
+            filter_parts.push(format!("[{previous}][{label}]overlay=0:0:eof_action=pass:shortest=0:enable='{enable}'[{next}]"));
             previous = next;
         }
 
@@ -689,7 +690,8 @@ pub async fn export_timeline(
                 "slide-down" => format!("{y:.2}-({slide_progress})*{height}"),
                 _ => format!("{y:.2}"),
             };
-            filter_parts.push(format!("[{previous}][{source}]overlay=x='{animated_x}':y='{animated_y}':format=auto:eof_action=pass:shortest=0:enable='gte(t,{start:.6})*lt(t,{end:.6})'[{next}]"));
+            let enable = ffmpeg_escape_expression(&format!("gte(t,{start:.6})*lt(t,{end:.6})"));
+            filter_parts.push(format!("[{previous}][{source}]overlay=x='{animated_x}':y='{animated_y}':format=auto:eof_action=pass:shortest=0:enable='{enable}'[{next}]"));
             previous=next;
         }
 
@@ -746,6 +748,7 @@ pub async fn export_timeline(
                     } else {
                         format!("gte(t,{step_start:.6})*lt(t,{step_end:.6})")
                     };
+                    let enable = ffmpeg_escape_expression(&enable);
                     filter_parts.push(format!("[{current}]drawtext=fontfile='{font_file}':text='{text}':fontcolor={color}{caption_box}:fontsize={}:x='{base_x}':y='{anchor_y}-text_h/2':enable='{enable}'[{next}]", item.font_size.clamp(18, 180)));
                     current = next;
                 }
@@ -785,11 +788,16 @@ pub async fn export_timeline(
                 _ => ("1".to_string(), "1".to_string()),
             };
             let icon_stream = format!("icon_source{icon_position}_{motion_index}");
-            filter_parts.push(format!("[{input_index}:v]scale=w='max(1,{icon_size}*({scale}))':h='max(1,{icon_size}*({scale}))':eval=frame,format=rgba,colorchannelmixer=aa='{alpha}':eval=frame[{icon_stream}]"));
+            let scale_expr = ffmpeg_escape_expression(&scale);
+            let alpha_expr = ffmpeg_escape_expression(&alpha);
+            filter_parts.push(format!("[{input_index}:v]scale=w='max(1\\,{icon_size}*({scale_expr}))':h='max(1\\,{icon_size}*({scale_expr}))':eval=frame,format=rgba,colorchannelmixer=aa='{alpha_expr}':eval=frame[{icon_stream}]"));
             let x = format!("{anchor_x}+({})+({icon_size}-overlay_w)/2", item.lucide_icon_offset_x);
             let y = format!("{anchor_y}+({})+({icon_size}-overlay_h)/2", item.lucide_icon_offset_y);
             let next = format!("icon{icon_position}_{motion_index}");
-            filter_parts.push(format!("[{previous}][{icon_stream}]overlay=x='{x}':y='{y}':format=auto:eof_action=pass:shortest=0:enable='gte(t,{:.6})*lt(t,{:.6})'[{next}]", item.start_ms as f64 / 1000.0, item.end_ms as f64 / 1000.0));
+            let x_expr = ffmpeg_escape_expression(&x);
+            let y_expr = ffmpeg_escape_expression(&y);
+            let enable = ffmpeg_escape_expression(&format!("gte(t,{:.6})*lt(t,{:.6})", item.start_ms as f64 / 1000.0, item.end_ms as f64 / 1000.0));
+            filter_parts.push(format!("[{previous}][{icon_stream}]overlay=x='{x_expr}':y='{y_expr}':format=auto:eof_action=pass:shortest=0:enable='{enable}'[{next}]"));
             previous = next;
         }
         filter_parts.push(format!("[{previous}]format=yuv420p[vout]"));
