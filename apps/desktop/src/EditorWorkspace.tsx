@@ -106,8 +106,6 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
   const [activeTool, setActiveTool] = useState<"media" | "audio" | "text" | "captions" | "effects" | "templates">("media");
   const [sceneSpecMessage, setSceneSpecMessage] = useState("");
   const [iconSearch, setIconSearch] = useState("");
-  const [collapsedLayerGroups, setCollapsedLayerGroups] = useState<Record<string, boolean>>({ images: true, texts: true, captions: true });
-  const toggleLayerGroup = (group: string) => setCollapsedLayerGroups(current => ({ ...current, [group]: !current[group] }));
   const [selectedTransition, setSelectedTransition] = useState<TimelineClip["transitionType"] | null>(null);
   const [timelineZoom, setTimelineZoom] = useState(100);
   const lastMotionSounds = useRef<Record<string, number>>({});
@@ -1109,6 +1107,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
             <details open className="property-section"><summary>Texto</summary>
               <label>Conteúdo<textarea className="motion-textarea" rows={6} value={selectedMotion.text} onChange={event=>updateMotion(selectedMotion.id,{text:event.target.value})} maxLength={1200} placeholder="Digite sua frase. Use Enter para criar uma nova linha."/></label>
               <details className="lucide-library">
+                <summary>Biblioteca de ícones</summary>
                 <div className="lucide-library-heading"><b>Biblioteca Lucide SVG</b><small>Ícone vetorial ancorado ao texto</small></div>
                 <label className="lucide-search"><Search size={14}/><input value={iconSearch} onChange={event=>setIconSearch(event.target.value)} placeholder="Buscar ícone..."/></label>
                 <div className="lucide-icon-grid">{lucideIconPickerNames.filter(name=>name.toLowerCase().includes(iconSearch.trim().toLowerCase())).map(name=>{const IconView=lucideIconLibrary[name];return <button type="button" key={name} className={"lucide-icon-option"+(selectedMotion.lucideIconName===name?" selected":"")} title={name} aria-label={name} onClick={()=>updateMotion(selectedMotion.id,{lucideIconName:selectedMotion.lucideIconName===name?undefined:name})}><IconView size={19}/><small>{name}</small></button>;})}</div>
