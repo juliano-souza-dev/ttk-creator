@@ -1,5 +1,6 @@
 import type { MediaAsset } from "../../shared/types";
-import type { ImageOverlay, TimelineClip } from "../timeline/model";
+import type { TimelineClip } from "../timeline/model";
+import type { ImageOverlay } from "../image-overlays/model";
 import type { MotionGraphic } from "../motion-graphics/model";
 import { getLucideIconExportOffset } from "../motion-graphics/icon-layout";
 import { lucideIconLibrary, renderLucideIconPng } from "../motion-graphics/icon-library";
