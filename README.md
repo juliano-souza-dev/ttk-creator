@@ -22,6 +22,12 @@ The next milestones are media probing, asset preview, a multi-track timeline, ca
 
 See [Architecture](docs/architecture.md) and [Roadmap](docs/roadmap.md).
 
+## Shared Runtime and Groq
+
+Groq credentials are managed centrally by the Shared Runtime Manager. Register this application and authorize its application ID for the Groq provider in Shared Runtime Manager. The manager provisions the provider endpoint, model, and DPAPI-encrypted credential into this application's local `shared.config.json`.
+
+The TTK Creator reads that local configuration through the Shared Runtime Rust library. The manager application does not need to remain open while TTK Creator is running. The Groq settings dialog in TTK Creator only stores application preferences such as translation batch size, delay, and target language; API keys and provider model selection remain managed by Shared Runtime Manager.
+
 ## Run on Windows
 
 Install Node.js, Rust, Microsoft C++ Build Tools, and WebView2 as described in the [Tauri v2 Windows prerequisites](https://v2.tauri.app/start/prerequisites/).
