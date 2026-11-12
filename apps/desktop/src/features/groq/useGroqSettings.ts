@@ -31,7 +31,7 @@ export function useGroqSettings() {
     setGroqSettingsBusy(true);
     setGroqSettingsMessage("");
     try {
-      const saved = await desktopApi.saveGroqSettings({
+      await desktopApi.saveGroqSettings({
         maxChunkChars: groqMaxChars,
         maxCuesPerChunk: groqMaxCues,
         delayMs: groqDelay,
