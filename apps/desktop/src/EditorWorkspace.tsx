@@ -185,8 +185,33 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
   const groupKey = "ttk-creator:groups:" + projectId;
   const [groups, setGroups] = useState<TimelineGroup[]>([]);
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
+  // Text layers and captions are persisted independently. The merged list is only
+  // a timeline/rendering view, never the source of truth for either domain.
   const motionKey = "ttk-creator:motion:" + projectId;
-  const [motion, setMotion] = useState<MotionGraphic[]>([]);
+  const textLayersKey = "ttk-creator:text-layers:" + projectId;
+  const captionsKey = "ttk-creator:captions:" + projectId;
+  const motionOrderKey = "ttk-creator:motion-order:" + projectId;
+  const [textLayers, setTextLayers] = useState<MotionGraphic[]>([]);
+  const [captions, setCaptions] = useState<MotionGraphic[]>([]);
+  const [motionOrder, setMotionOrder] = useState<string[]>([]);
+  const [loadedMotionKey, setLoadedMotionKey] = useState<string | null>(null);
+  const motion = useMemo(() => {
+    const byId = new Map([...textLayers, ...captions].map(item => [item.id, item]));
+    const ordered = motionOrder.map(id => byId.get(id)).filter((item): item is MotionGraphic => !!item);
+    const known = new Set(ordered.map(item => item.id));
+    return [...ordered, ...textLayers, ...captions].filter((item, index, all) =>
+      !known.has(item.id) && all.findIndex(candidate => candidate.id === item.id) === index
+    );
+  }, [textLayers, captions, motionOrder]);
+  const setMotion = useCallback((updater: MotionGraphic[] | ((current: MotionGraphic[]) => MotionGraphic[])) => {
+    const current = [...textLayers, ...captions];
+    const next = typeof updater === "function" ? updater(motion) : updater;
+    const nextTextLayers = next.filter(item => !item.isCaption);
+    const nextCaptions = next.filter(item => !!item.isCaption);
+    setTextLayers(nextTextLayers);
+    setCaptions(nextCaptions);
+    setMotionOrder(next.map(item => item.id));
+  }, [textLayers, captions, motion]);
   const overlayKey = `ttk-creator:image-overlays:${projectId}`;
   const [imageOverlays,setImageOverlays]=useState<ImageOverlay[]>([]);
   const [selectedOverlayId,setSelectedOverlayId]=useState<string|null>(null);
@@ -356,10 +381,44 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
     }
   }, [storageKey, groupKey, clips, groups, loadedStorageKey]);
   useEffect(() => {
-    try { const raw = window.localStorage.getItem(motionKey); const value = raw ? JSON.parse(raw) : []; setMotion(Array.isArray(value) ? value.map((item: MotionGraphic) => { const startMs = Math.max(0, Number(item.startMs) || 0); const legacyDuration = Math.max(300, Number(item.durationMs) || 1800); const endMs = Number.isFinite(item.endMs) ? Math.max(startMs + 300, Number(item.endMs)) : startMs + legacyDuration; const legacyComposition = item.preset === "composition"; const legacyIcon = item.icon || (legacyComposition ? item.elements?.find(element => element.type === "icon")?.content : ""); return { ...item, preset: legacyComposition ? "pop" : item.preset, typewriterDurationMs: Math.max(100, Number(item.typewriterDurationMs) || 1500), icon: legacyIcon || "", fontFamily: item.fontFamily || "Arial", fontWeight: item.fontWeight || 900, textAlign: item.textAlign || "center", startMs, endMs, durationMs: endMs - startMs, x: Number.isFinite(item.x) ? item.x : 50, y: Number.isFinite(item.y) ? item.y : 50 }; }) : []); }
-    catch { setMotion([]); }
-  }, [motionKey]);
-  useEffect(() => { if (loadedStorageKey === storageKey) window.localStorage.setItem(motionKey, JSON.stringify(motion)); }, [motionKey, motion, loadedStorageKey, storageKey]);
+    try {
+      const textRaw = window.localStorage.getItem(textLayersKey);
+      const captionsRaw = window.localStorage.getItem(captionsKey);
+      const orderRaw = window.localStorage.getItem(motionOrderKey);
+      const legacyRaw = window.localStorage.getItem(motionKey);
+      const hasSeparatedData = textRaw !== null || captionsRaw !== null;
+      const storedText = textRaw ? JSON.parse(textRaw) : [];
+      const storedCaptions = captionsRaw ? JSON.parse(captionsRaw) : [];
+      const legacy = legacyRaw ? JSON.parse(legacyRaw) : [];
+      const source = hasSeparatedData
+        ? [...(Array.isArray(storedText) ? storedText : []), ...(Array.isArray(storedCaptions) ? storedCaptions : [])]
+        : (Array.isArray(legacy) ? legacy : []);
+      const normalized = source.map((item: MotionGraphic) => {
+        const startMs = Math.max(0, Number(item.startMs) || 0);
+        const legacyDuration = Math.max(300, Number(item.durationMs) || 1800);
+        const endMs = Number.isFinite(item.endMs) ? Math.max(startMs + 300, Number(item.endMs)) : startMs + legacyDuration;
+        const legacyComposition = item.preset === "composition";
+        const legacyIcon = item.icon || (legacyComposition ? item.elements?.find(element => element.type === "icon")?.content : "");
+        return { ...item, preset: legacyComposition ? "pop" : item.preset, typewriterDurationMs: Math.max(100, Number(item.typewriterDurationMs) || 1500), icon: legacyIcon || "", fontFamily: item.fontFamily || "Arial", fontWeight: item.fontWeight || 900, textAlign: item.textAlign || "center", startMs, endMs, durationMs: endMs - startMs, x: Number.isFinite(item.x) ? item.x : 50, y: Number.isFinite(item.y) ? item.y : 50 };
+      });
+      setTextLayers(normalized.filter(item => !item.isCaption));
+      setCaptions(normalized.filter(item => !!item.isCaption));
+      const savedOrder = orderRaw ? JSON.parse(orderRaw) : null;
+      setMotionOrder(Array.isArray(savedOrder) ? savedOrder.filter((id: unknown) => typeof id === "string") : normalized.map(item => item.id));
+    } catch {
+      setTextLayers([]);
+      setCaptions([]);
+      setMotionOrder([]);
+    } finally {
+      setLoadedMotionKey(motionKey);
+    }
+  }, [motionKey, textLayersKey, captionsKey, motionOrderKey]);
+  useEffect(() => {
+    if (loadedMotionKey !== motionKey || loadedStorageKey !== storageKey) return;
+    window.localStorage.setItem(textLayersKey, JSON.stringify(textLayers));
+    window.localStorage.setItem(captionsKey, JSON.stringify(captions));
+    window.localStorage.setItem(motionOrderKey, JSON.stringify(motionOrder));
+  }, [motionKey, textLayersKey, captionsKey, motionOrderKey, textLayers, captions, motionOrder, loadedMotionKey, loadedStorageKey, storageKey]);
   useEffect(()=>{try{const raw=localStorage.getItem(overlayKey);const parsed=raw?JSON.parse(raw):[];setImageOverlays(Array.isArray(parsed)?parsed:[]);}catch{setImageOverlays([]);}},[overlayKey]);
   useEffect(()=>{if(loadedStorageKey===storageKey)localStorage.setItem(overlayKey,JSON.stringify(imageOverlays));},[overlayKey,imageOverlays,loadedStorageKey,storageKey]);
   const lastSessionSaveAt = useRef(0);
