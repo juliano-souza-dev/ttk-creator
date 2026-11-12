@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import type { Dispatch, RefObject, SetStateAction } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import { desktopApi } from "../../services/desktop-api";
 import type { DownloadProgress, MediaAsset, Project, YoutubeCacheEntry, YoutubeInspection } from "../../shared/types";
 
