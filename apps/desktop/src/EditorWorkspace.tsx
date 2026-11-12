@@ -8,6 +8,7 @@ import type { GlobalSound, TranscriptResult } from "./services/desktop-api";
 import type { MediaAsset } from "./shared/types";
 import { defaultDuration, clipDuration, clipEnd, timeLabel, captionBackgroundRgba, imageOverlayEntranceState } from "./features/timeline/model";
 import type { TimelineClip, TimelineGroup, ImageOverlay, TrimDrag, ClipMoveDrag, MotionTrimDrag } from "./features/timeline/model";
+import { createTimelineClip, duplicateTimelineClip, groupMembersFor, memberKeyForClip, memberKeyForMotion, reorderVisualClips, splitTimelineClipAt } from "./features/timeline/operations";
 import { motionPreviewState } from "./features/motion-graphics/model";
 import type { CaptionWord, MotionGraphic } from "./features/motion-graphics/model";
 import { getLucideIconExportOffset } from "./features/motion-graphics/icon-layout";
@@ -928,9 +929,6 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
     trimDragRef.current = null;
   }
 
-  function memberKeyForClip(id: string) { return "clip:" + id; }
-  function memberKeyForMotion(id: string) { return "motion:" + id; }
-  function groupMembersFor(key: string) { return groups.find(group => group.members.includes(key))?.members ?? [key]; }
   function toggleMemberSelection(key: string) { setSelectedMembers(current => current.includes(key) ? current.filter(item => item !== key) : [...current, key]); }
   function createGroup() {
     const members = [...new Set(selectedMembers)];
@@ -1033,12 +1031,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
   }
 
   function addToTimeline(asset: MediaAsset, atMs?: number) {
-    const duration = defaultDuration(asset);
-    const clip: TimelineClip = {
-      id: crypto.randomUUID(), assetId: asset.id, sourceStartMs: 0, sourceEndMs: duration,
-      timelineStartMs: Math.max(0, atMs ?? timelineInsertAtMs ?? (asset.kind === "audio" ? 0 : visualClips.reduce((max, item) => Math.max(max, clipEnd(item)), 0))),
-      volume: 100, muted: false
-    };
+    const clip = createTimelineClip(asset, atMs, timelineInsertAtMs, visualClips);
     setClips(current => [...current, clip]);
     setSelectedId(clip.id);
     setTimelineInsertAtMs(null);
@@ -1071,18 +1064,9 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
   }
 
   function moveVisualClip(id: string, direction: -1 | 1) {
-    const ordered = [...visualClips].sort((a, b) => a.timelineStartMs - b.timelineStartMs);
-    const index = ordered.findIndex(clip => clip.id === id);
-    const target = index + direction;
-    if (index < 0 || target < 0 || target >= ordered.length) return;
-    [ordered[index], ordered[target]] = [ordered[target], ordered[index]];
-    let cursor = ordered[0]?.timelineStartMs ?? 0;
-    const repositioned = ordered.map(clip => {
-      const next = { ...clip, timelineStartMs: cursor };
-      cursor += clipDuration(clip);
-      return next;
-    });
-    const byId = new Map(repositioned.map(clip => [clip.id, clip]));
+    const reordered = reorderVisualClips(visualClips, id, direction);
+    if (!reordered) return;
+    const byId = new Map(reordered.map(clip => [clip.id, clip]));
     setClips(current => current.map(clip => byId.get(clip.id) ?? clip));
     setSelectedId(id);
     setSelectedMotionId(null);
@@ -1090,7 +1074,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
   }
 
   function duplicateClip(clip: TimelineClip) {
-    const copy = { ...clip, id: crypto.randomUUID(), timelineStartMs: clipEnd(clip) };
+    const copy = duplicateTimelineClip(clip);
     setClips(current => [...current, copy]);
     setSelectedId(copy.id);
     stopPlayback();
@@ -1112,17 +1096,10 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
 
     // Non-destructive split: both segments keep the same source asset and
     // retain their original timeline positions. Only source ranges change.
-    const sourceSplit = clip.sourceStartMs + playheadMs - clip.timelineStartMs;
-    if (sourceSplit <= clip.sourceStartMs || sourceSplit >= clip.sourceEndMs) return;
-    const left = { ...clip, sourceEndMs: sourceSplit };
-    const right = {
-      ...clip,
-      id: crypto.randomUUID(),
-      sourceStartMs: sourceSplit,
-      timelineStartMs: playheadMs,
-    };
-    setClips(current => current.flatMap(item => item.id === clip.id ? [left, right] : [item]));
-    setSelectedId(right.id);
+    const split = splitTimelineClipAt(clip, playheadMs);
+    if (!split) return;
+    setClips(current => current.flatMap(item => item.id === clip.id ? [split.left, split.right] : [item]));
+    setSelectedId(split.right.id);
     setSelectedMotionId(null);
     setSelectedMembers([]);
     stopPlayback();
