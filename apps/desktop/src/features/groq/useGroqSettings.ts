@@ -1,10 +1,8 @@
 import { useState } from "react";
 import { desktopApi, isDesktopRuntime } from "../../services/desktop-api";
-import type { GroqSettings } from "../../services/desktop-api";
 
 export function useGroqSettings() {
   const [groqSettingsOpen, setGroqSettingsOpen] = useState(false);
-  const [groqSettings, setGroqSettings] = useState<GroqSettings | null>(null);
   const [groqModel, setGroqModel] = useState("llama-3.3-70b-versatile");
   const [groqMaxChars, setGroqMaxChars] = useState(7000);
   const [groqMaxCues, setGroqMaxCues] = useState(25);
@@ -19,7 +17,6 @@ export function useGroqSettings() {
     if (!isDesktopRuntime) return;
     try {
       const settings = await desktopApi.getGroqSettings();
-      setGroqSettings(settings);
       setGroqModel(settings.model);
       setGroqMaxChars(settings.maxChunkChars);
       setGroqMaxCues(settings.maxCuesPerChunk);
@@ -40,7 +37,6 @@ export function useGroqSettings() {
         delayMs: groqDelay,
         targetLanguage: groqLanguage
       });
-      setGroqSettings(saved);
       setGroqSettingsMessage("Preferências salvas. Testando a conexão com a credencial do Shared Runtime...");
       const result = await desktopApi.testGroqConnection(groqModel);
       setGroqSettingsMessage("Preferências salvas. " + result);
@@ -53,8 +49,7 @@ export function useGroqSettings() {
 
   return {
     groqSettingsOpen, setGroqSettingsOpen,
-    groqSettings,
-    groqModel, setGroqModel,
+    groqModel,
     groqMaxChars, setGroqMaxChars,
     groqMaxCues, setGroqMaxCues,
     groqDelay, setGroqDelay,
