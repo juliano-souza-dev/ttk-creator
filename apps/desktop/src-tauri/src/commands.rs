@@ -486,7 +486,7 @@ fn ffmpeg_escape_expression(value: &str) -> String {
 fn ffmpeg_escape_text(value: &str) -> String {
     value
         .replace('\\', "\\\\")
-        .replace('\'', "\\'")
+        .replace('\'', "'\\''")
         .replace(':', "\\:")
         .replace('%', "\\%")
         .replace(',', "\\,")
