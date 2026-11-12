@@ -245,6 +245,8 @@ pub struct ExportMotion {
     #[serde(default)]
     duration_ms: u64,
     #[serde(default)]
+    typewriter_duration_ms: u64,
+    #[serde(default)]
     is_caption: bool,
     #[serde(default)]
     lucide_icon_png: Option<String>,
@@ -713,6 +715,7 @@ pub async fn export_timeline(
             let end = item.end_ms as f64 / 1000.0;
             let duration_ms = if item.duration_ms > 0 { item.duration_ms.min(item.end_ms.saturating_sub(item.start_ms)) } else { item.end_ms.saturating_sub(item.start_ms) };
             let duration = (duration_ms.max(1) as f64) / 1000.0;
+            let writing_duration = (if item.typewriter_duration_ms > 0 { item.typewriter_duration_ms.min(duration_ms) } else { 1500.min(duration_ms.max(100)) }.max(100) as f64) / 1000.0;
             let caption_box = if item.is_caption { format!(":box=1:boxcolor=black@0.76:boxborderw={}", (item.font_size.clamp(18, 180) / 3).max(6)) } else { String::new() };
 
             if item.preset == "typewriter" {
@@ -725,15 +728,15 @@ pub async fn export_timeline(
                 // character can make late slices shorter than a frame, so FFmpeg
                 // may never evaluate the final prefixes. Reveal at most one prefix
                 // per output frame, grouping characters when the text is longer.
-                let frame_count = ((duration * 30.0).floor() as usize).max(1);
+                let frame_count = ((writing_duration * 30.0).floor() as usize).max(1);
                 let steps = characters.len().min(frame_count).max(1);
                 let mut current = previous.clone();
                 for step in 0..steps {
                     let visible_count = ((step + 1) * characters.len() + steps - 1) / steps;
                     let prefix: String = characters[..visible_count].iter().collect();
                     let text = ffmpeg_escape_text(&prefix);
-                    let step_start = start + duration * (step as f64 / steps as f64);
-                    let step_end = start + duration * ((step + 1) as f64 / steps as f64);
+                    let step_start = start + writing_duration * (step as f64 / steps as f64);
+                    let step_end = start + writing_duration * ((step + 1) as f64 / steps as f64);
                     let next = format!("typewriter{index}_{step}");
                     // The preview removes the element exactly at endMs. Keep
                     // the final prefix bounded by that same lifetime instead of
