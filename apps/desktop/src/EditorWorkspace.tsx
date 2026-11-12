@@ -611,7 +611,9 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
   if (!playing && selectedMotion && selectedMotion.visible !== false && !activeMotion.some(item => item.id === selectedMotion.id)) {
     activeMotion.push(selectedMotion);
   }
-  const selectedClip = clips.find(clip => clip.id === selectedId) ?? clips[0] ?? null;
+  // Do not silently fall back to the first clip: that leaves stale video controls
+  // visible after the user clears the selection or selects a different layer type.
+  const selectedClip = selectedId ? clips.find(clip => clip.id === selectedId) ?? null : null;
   const selectedAsset = selectedClip ? assets.find(asset => asset.id === selectedClip.assetId) ?? null : null;
   const visualClips = useMemo(() => clips.filter(clip => assets.find(asset => asset.id === clip.assetId)?.kind !== "audio"), [clips, assets]);
   const audioClips = useMemo(() => clips.filter(clip => assets.find(asset => asset.id === clip.assetId)?.kind === "audio"), [clips, assets]);
