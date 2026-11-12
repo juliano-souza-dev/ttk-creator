@@ -22,6 +22,7 @@ import { captionStyleFrom, duplicateCaption, mergeCaptions, splitCaption } from 
 import { captionBackgroundRgba } from "./features/motion-graphics/caption-style";
 import { buildExportTimelinePayload } from "./features/export/payload";
 import { transcriptToCaptions } from "./features/motion-graphics/transcript-import";
+import { useCaptionTranslation } from "./features/motion-graphics/useCaptionTranslation";
 export { supportedLucideIconNames } from "./features/motion-graphics/icon-library";
 
 import { AudioLines, Film, Plus, Play, Pause, Trash2, Scissors, Copy, SkipBack, SkipForward, Volume2, VolumeX, Music2, Type, WandSparkles, MousePointer2, ChevronLeft, ChevronRight, Download, LoaderCircle, PanelsTopLeft, FileJson, Upload, Eye, Search, Image, ShieldCheck, Languages, Captions, Layers } from "lucide-react";
@@ -100,12 +101,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
   const [newSoundName, setNewSoundName] = useState("");
   const [soundBusy, setSoundBusy] = useState(false);
   const [soundMessage, setSoundMessage] = useState("");
-  const [translationBusy, setTranslationBusy] = useState(false);
-  const [singleCaptionTranslationBusy, setSingleCaptionTranslationBusy] = useState(false);
-  const [translationProgress, setTranslationProgress] = useState({ done: 0, total: 0 });
-  const [translationMessage, setTranslationMessage] = useState("");
-  const [translationPhase, setTranslationPhase] = useState("Aguardando comando");
-  const translationStopRef = useRef(false);
+
   const [selectedMotionId, setSelectedMotionId] = useState<string | null>(null);
   const [activeTool, setActiveTool] = useState<"media" | "audio" | "text" | "captions" | "effects" | "templates">("media");
   const [sceneSpecMessage, setSceneSpecMessage] = useState("");
@@ -279,87 +275,6 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
   }, []);
 
 
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    void listen<{ stage: string; message: string }>("groq-translation-status", event => {
-      if (!cancelled) { setTranslationPhase(event.payload.stage); setTranslationMessage(event.payload.message); }
-    }).then(stop => { if (cancelled) stop(); else unlisten = stop; }).catch(error => {
-      if (!cancelled) setTranslationMessage("Não foi possível acompanhar o status da Groq: " + String(error));
-    });
-    return () => { cancelled = true; unlisten?.(); };
-  }, []);
-
-  async function translateCaptions() {
-    if (!isDesktopRuntime || translationBusy) return;
-    const captionSequence = captions.slice().sort((a,b) => a.startMs - b.startMs);
-    const pending = captionSequence.filter(item => !(item.captionTranslation || "").trim() && (item.captionEnglish || item.text || "").trim());
-    if (!pending.length) { setTranslationMessage("Todas as legendas já possuem tradução."); return; }
-    setTranslationBusy(true); setTranslationMessage("Verificando as configurações e a chave armazenada..."); setTranslationPhase("Preparando"); translationStopRef.current = false;
-    try {
-      const settings = await desktopApi.getGroqSettings();
-      if (!settings.configured) throw new Error("Configure sua chave Groq em Configurações antes de traduzir.");
-      setTranslationPhase("Preparando lotes"); setTranslationMessage("Chave encontrada. Organizando as legendas em lotes para envio.");
-      const chunks: Array<Array<{id:string;text:string}>> = [];
-      let chunk: Array<{id:string;text:string}> = []; let chars = 0;
-      for (const item of pending) {
-        const cueIndex = captionSequence.findIndex(caption => caption.id === item.id);
-        const cueText = (item.captionEnglish || item.text).trim();
-        const cueBytes = new TextEncoder().encode(cueText).length;
-        if (cueBytes > settings.maxChunkChars || cueBytes > 18000) throw new Error("A legenda " + item.id + " excede o limite configurado para um lote. Reduza o texto antes de traduzir.");
-        const cue = {
-          id: item.id, text: cueText,
-          contextBefore: cueIndex > 0 ? (captionSequence[cueIndex - 1].captionEnglish || captionSequence[cueIndex - 1].text).slice(-240) : undefined,
-          contextAfter: cueIndex >= 0 && cueIndex < captionSequence.length - 1 ? (captionSequence[cueIndex + 1].captionEnglish || captionSequence[cueIndex + 1].text).slice(0, 240) : undefined,
-        };
-        if (chunk.length && (chunk.length >= settings.maxCuesPerChunk || chars + cueBytes > settings.maxChunkChars)) {
-          chunks.push(chunk); chunk = []; chars = 0;
-        }
-        chunk.push(cue); chars += cueBytes;
-      }
-      if (chunk.length) chunks.push(chunk);
-      setTranslationProgress({ done: 0, total: pending.length });
-      let completed = 0;
-      setTranslationPhase("Pronto para enviar");
-      setTranslationMessage(chunks.length + " lote(s) preparado(s). Iniciando comunicação com a Groq.");
-      for (let index = 0; index < chunks.length; index++) {
-        if (translationStopRef.current) break;
-        setTranslationPhase("Enviando para a Groq");
-        setTranslationMessage("Lote " + (index + 1) + " de " + chunks.length + ": solicitação enviada. Aguardando a resposta da IA...");
-        const result = await desktopApi.translateGroqChunk(settings.model, settings.targetLanguage, chunks[index]);
-        setTranslationPhase("Aplicando traduções");
-        setTranslationMessage("Resposta recebida para o lote " + (index + 1) + ". Aplicando traduções ao projeto...");
-        const byId = new Map(result.map(item => [item.id, item.translation]));
-        setCaptions(current => current.map(item => {
-          const translated = byId.get(item.id);
-          if (!translated) return item;
-          const words = item.captionWords?.map(word => ({ ...word }));
-          return { ...item, captionTranslation: translated, captionMode: words?.length ? "karaoke" : "bilingual", ...(words ? { captionWords: words } : {}) };
-        }));
-        completed += chunks[index].length;
-        setTranslationProgress({ done: completed, total: pending.length });
-        setTranslationMessage("Lote " + (index + 1) + " de " + chunks.length + " concluído. O progresso foi salvo no projeto.");
-        if (index < chunks.length - 1 && settings.delayMs > 0) {
-          setTranslationPhase("Pausa entre lotes");
-          setTranslationMessage("Lote " + (index + 1) + " concluído. Aguardando " + (settings.delayMs / 1000).toFixed(1) + "s antes do próximo envio.");
-          await new Promise(resolve => window.setTimeout(resolve, settings.delayMs));
-        }
-      }
-      if (completed === pending.length) { setTranslationPhase("Concluído"); setTranslationMessage("Tradução concluída: " + completed + " legenda(s). Revise o resultado no painel de propriedades."); }
-      else { setTranslationPhase("Interrompido"); setTranslationMessage("Processamento interrompido após " + completed + " legenda(s). As traduções concluídas foram preservadas. Execute novamente para continuar."); }
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      let category = "Falha durante a tradução";
-      if (/Falha de rede|conexão|timed out|timeout|dns|connect error/i.test(detail)) category = "Falha de conexão com a Groq";
-      else if (/HTTP 401|HTTP 403|chave|unauthorized|forbidden/i.test(detail)) category = "Problema de autenticação da API";
-      else if (/HTTP 429|rate_limit|quota|limite/i.test(detail)) category = "Limite de uso da API atingido";
-      else if (/HTTP 5\d\d|server error|temporariamente indisponível/i.test(detail)) category = "Instabilidade no serviço da Groq";
-      else if (/JSON inválido|resposta inesperada|resposta vazia|traduz[iu] .* de/i.test(detail)) category = "Resposta inválida ou incompleta da IA";
-      setTranslationPhase("Falha identificada");
-      setTranslationMessage(category + ". " + detail + " As legendas já concluídas foram preservadas.");
-    } finally { setTranslationBusy(false); }
-  }
-
   async function importGlobalSound() {
     if (!isDesktopRuntime || soundBusy) return;
     const selected = await open({ multiple: false, filters: [{ name: "Áudio", extensions: ["mp3", "wav", "ogg", "m4a", "aac", "flac"] }] });
@@ -407,6 +322,11 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
   const selectedOverlay=!selectedId&&!selectedMotionId?(imageOverlays.find(item=>item.id===selectedOverlayId)??null):null;
   const activeOverlays=imageOverlays.filter(item=>item.visible!==false&&playheadMs>=item.startMs&&playheadMs<item.endMs);
   const selectedMotion = motion.find(item => item.id === selectedMotionId) ?? null;
+  const {
+    translationBusy, singleCaptionTranslationBusy, translationProgress,
+    translationMessage, translationPhase, translateCaptions,
+    translateSelectedCaption, requestStopAfterCurrentBatch
+  } = useCaptionTranslation({ captions, setCaptions, selectedCaption: selectedMotion, updateMotion });
   const activeMotion = motion.filter(item => item.visible!==false && playheadMs >= item.startMs && playheadMs < item.endMs);
   // Keep the selected layer visible while editing, even when its timing is adjusted.
   if (!playing && selectedMotion && selectedMotion.visible !== false && !activeMotion.some(item => item.id === selectedMotion.id)) {
@@ -688,36 +608,6 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
     setCaptions(current => current.map(item => ({ ...item, ...style })));
     setTranslationMessage("Estilo aplicado a todas as legendas.");
     setTranslationPhase("Concluído");
-  }
-
-  async function translateSelectedCaption(targetLanguage: "English" | "Português brasileiro") {
-    if (!selectedMotion?.isCaption || singleCaptionTranslationBusy || !isDesktopRuntime) return;
-    const sourceText = (selectedMotion.captionEnglish || selectedMotion.text || "").trim();
-    if (!sourceText) return;
-    setSingleCaptionTranslationBusy(true);
-    setTranslationMessage("");
-    try {
-      const settings = await desktopApi.getGroqSettings();
-      if (!settings.configured) throw new Error("Configure sua chave Groq nas configurações antes de traduzir.");
-      const result = await desktopApi.translateGroqChunk(settings.model, targetLanguage, [{
-        id: selectedMotion.id,
-        text: sourceText,
-      }]);
-      const translated = result.find(item => item.id === selectedMotion.id)?.translation;
-      if (!translated) throw new Error("A tradução não foi retornada para esta legenda.");
-      updateMotion(selectedMotion.id, {
-        captionTranslation: translated,
-        captionTranslationLanguage: targetLanguage === "English" ? "en" : "pt-BR",
-        captionMode: selectedMotion.captionWords?.length ? "karaoke" : "bilingual",
-      });
-      setTranslationPhase("Concluído");
-      setTranslationMessage("Legenda traduzida para " + targetLanguage + ".");
-    } catch (error) {
-      setTranslationPhase("Falha identificada");
-      setTranslationMessage(error instanceof Error ? error.message : String(error));
-    } finally {
-      setSingleCaptionTranslationBusy(false);
-    }
   }
 
   function applySceneTemplate(templateId: string) {
@@ -1124,7 +1014,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
         <section className="translation-panel">
           <div className="translation-panel-heading"><div><b><Languages size={15}/> Tradução de legendas</b><small>Traduza apenas as legendas, preservando a sincronização.</small></div><span className="preview-live">{captions.filter(item=>!(item.captionTranslation||"").trim()).length} PENDENTE(S)</span></div>
           <button className="primary translation-action" type="button" onClick={()=>void translateCaptions()} disabled={translationBusy || !captions.some(item => !(item.captionTranslation||"").trim())}>{translationBusy?<><LoaderCircle className="spin" size={14}/> Traduzindo...</>:<><Languages size={14}/> Traduzir legendas sem tradução</>}</button>
-          {translationBusy && <button className="secondary-action" type="button" onClick={()=>{translationStopRef.current=true;setTranslationMessage("Aguardando o lote atual terminar para interromper com segurança...");}}>Parar após o lote atual</button>}
+          {translationBusy && <button className="secondary-action" type="button" onClick={requestStopAfterCurrentBatch}>Parar após o lote atual</button>}
           {translationBusy && <div className="translation-live-status" role="status" aria-live="polite"><LoaderCircle className="spin" size={17}/><div><b>{translationPhase}</b><span>{translationMessage}</span></div></div>}
           {translationBusy && <div className="translation-progress"><div><span>Legendas traduzidas</span><b>{translationProgress.done}/{translationProgress.total}</b></div><div className="progress-track"><i style={{width:(translationProgress.total?translationProgress.done/translationProgress.total*100:0)+"%"}}/></div></div>}
           {!translationBusy && translationMessage && <p className={"translation-message" + (translationPhase === "Falha identificada" ? " is-error" : translationPhase === "Concluído" ? " is-success" : "")} role="status">{translationMessage}</p>}
