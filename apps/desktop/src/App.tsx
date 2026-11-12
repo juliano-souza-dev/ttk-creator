@@ -7,6 +7,7 @@ import TaskCenter from "./TaskCenter";
 import type { DownloadProgress, MediaAsset, Project, YoutubeInspection, YoutubeCacheEntry } from "./shared/types";
 import type { GroqSettings, TranscriptionProgress } from "./services/desktop-api";
 import { validateSceneSpec, type SceneSpec } from "./shared/scene-spec";
+import { buildSceneSpecProjectData, getSceneSpecMediaSources } from "./features/scene-spec/project-import";
 import { Clapperboard, LayoutGrid, Film, GraduationCap, Settings2, Plus, Search, FolderOpen, FolderPlus, Clock3, Video, Sparkles, Play, X, ArrowUpRight, Upload, Youtube, CheckCircle2, LoaderCircle, ShieldCheck, Link2, Download, Undo2, Redo2, ArrowLeft, FileJson, Mic, Captions, Info } from "lucide-react"
 
 const formatDuration = (n?:number|null) => !n ? "Duração não informada" : Math.floor(n/60000)+":"+String(Math.floor(n/1000)%60).padStart(2,"0");
@@ -210,66 +211,10 @@ export default function App() {
       }
       const projectName = spec.project?.title?.trim() || file.name.replace(/\.json$/i, "") || "Projeto Scene Spec";
       createdProject = await desktopApi.createProject(projectName);
-      const sceneOffsetById = new Map<string, number>();
-      let sceneCursor = 0;
-      for (const scene of spec.scenes) { sceneOffsetById.set(scene.id, sceneCursor); sceneCursor += scene.durationMs; }
-
-      const motion = spec.scenes.flatMap(scene => {
-        const sceneStart = sceneOffsetById.get(scene.id) ?? 0;
-        const blocks = scene.blocks.map(block => {
-          const startMs = sceneStart + (block.startOffsetMs ?? 0);
-          const blockDuration = block.durationMs ?? Math.max(300, scene.durationMs - (block.startOffsetMs ?? 0));
-          const endMs = Math.min(sceneStart + scene.durationMs, startMs + blockDuration);
-          return {
-            id: crypto.randomUUID(), text: block.text, icon: block.icon ?? "",
-            lucideIconName: block.iconName ?? "", lucideIconAnchor: block.iconAnchor ?? "left",
-            lucideIconSize: block.iconSize, lucideIconColor: block.iconColor,
-            fontFamily: "Arial", fontWeight: 900, textAlign: block.align ?? "center",
-            startMs, endMs: Math.max(startMs + 300, endMs), durationMs: Math.max(300, endMs - startMs),
-            preset: "pop" as const, color: block.color, accent: block.accent ?? "#65d6c0",
-            fontSize: block.fontSize, x: block.x, y: block.y, sound: "none" as const,
-            soundId: "", soundVolume: 80,
-          };
-        });
-        const captionConfig = scene.captions;
-        const captions = !captionConfig || !captionConfig.enabled || captionConfig.mode === "off" ? [] :
-          (captionConfig.lines ?? []).flatMap(line => {
-            const startMs = sceneStart + line.startMs;
-            const endMs = sceneStart + line.endMs;
-            const words = (line.words ?? []).map(word => ({
-              text: word.text, startMs: sceneStart + word.startMs, endMs: sceneStart + word.endMs,
-            }));
-            const translation = line.translation ?? "";
-            return [{
-              id: crypto.randomUUID(), isCaption: true,
-              captionMode: (captionConfig.mode === "karaoke" && words.length ? "karaoke" : captionConfig.mode === "bilingual" && translation ? "bilingual" : "source") as "source" | "bilingual" | "karaoke",
-              captionEnglish: line.text, captionTranslation: translation, captionWords: words,
-              text: translation ? line.text + "\\n" + translation : line.text, icon: "",
-              fontFamily: "Arial", fontWeight: 900, textAlign: "center" as const,
-              startMs, endMs, durationMs: endMs - startMs, preset: "pop" as const,
-              color: "#ffffff", accent: "#65d6c0", fontSize: 48, x: 50, y: 82,
-              sound: "none" as const, soundId: "", soundVolume: 80,
-            }];
-          });
-        return [...blocks, ...captions];
-      });
-
-      const projectMediaSources = [...new Set(spec.scenes.flatMap(scene => [scene.audio?.source?.trim(), scene.character?.asset?.trim()]).filter((source): source is string => !!source))];
+      const projectMediaSources = getSceneSpecMediaSources(spec);
       let importedAssets: MediaAsset[] = [];
       if (projectMediaSources.length) importedAssets = await desktopApi.importMediaFiles(createdProject.id, projectMediaSources);
-      const clips = spec.scenes.flatMap(scene => {
-        const source = scene.audio?.source?.trim();
-        if (!source) return [];
-        const asset = importedAssets.find(item => item.originalName === source.split(/[\\/]/).pop() || item.name === source.split(/[\\/]/).pop());
-        if (!asset || asset.kind !== "audio") return [];
-        const duration = Math.max(1000, asset.durationMs ?? scene.durationMs);
-        const start = (sceneOffsetById.get(scene.id) ?? 0) + (scene.audio?.startMs ?? 0);
-        return [{
-          id: crypto.randomUUID(), assetId: asset.id, sourceStartMs: 0, sourceEndMs: duration,
-          sourceDurationMs: asset.durationMs ?? duration, timelineStartMs: start,
-          volume: Math.max(0, Math.min(100, scene.audio?.volume ?? 100)), muted: false,
-        }];
-      });
+      const { motion, clips, captionCount, characterRefs } = buildSceneSpecProjectData(spec, importedAssets);
 
       window.localStorage.setItem("ttk-creator:motion:" + createdProject.id, JSON.stringify(motion));
       window.localStorage.setItem("ttk-creator:timeline:" + createdProject.id, JSON.stringify(clips));
@@ -283,8 +228,6 @@ export default function App() {
       window.localStorage.setItem("ttk-creator:last-open-project", createdProject.id);
       setView("project");
       const audioCount = clips.length;
-      const captionCount = spec.scenes.reduce((total, scene) => total + (scene.captions?.enabled && scene.captions.mode !== "off" ? (scene.captions.lines?.length ?? 0) : 0), 0);
-      const characterRefs = spec.scenes.filter(scene => scene.character?.asset).length;
       setNotice("Projeto criado pelo Scene Spec: " + spec.scenes.length + " cenas, " + motion.length + " elementos gráficos, " + captionCount + " legendas e " + audioCount + " faixa(s) de áudio." + (characterRefs ? " " + characterRefs + " mídia(s) de personagem foram importadas para a biblioteca, mas ainda não são exibidas como camada sobre o vídeo." : ""));
     } catch (error) {
       if (createdProject) {
