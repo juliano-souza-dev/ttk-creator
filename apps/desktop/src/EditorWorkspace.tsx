@@ -10,7 +10,7 @@ import { defaultDuration, clipDuration, clipEnd, timeLabel, captionBackgroundRgb
 import type { TimelineClip, TimelineGroup, ImageOverlay, TrimDrag, ClipMoveDrag, MotionTrimDrag } from "./features/timeline/model";
 import { createTimelineClip, duplicateTimelineClip, groupMembersFor, memberKeyForClip, memberKeyForMotion, reorderVisualClips, splitTimelineClipAt } from "./features/timeline/operations";
 import { motionPreviewState } from "./features/motion-graphics/model";
-import type { CaptionWord, MotionGraphic } from "./features/motion-graphics/model";
+import type { MotionGraphic } from "./features/motion-graphics/model";
 import { getLucideIconExportOffset } from "./features/motion-graphics/icon-layout";
 import { mergeMotionLayers, splitMotionLayers } from "./features/motion-graphics/collection";
 import { parseSuperJsonCues, sceneSpecToMotionGraphics } from "./features/motion-graphics/super-json-import";
