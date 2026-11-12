@@ -74,12 +74,16 @@ fn resolve_media_shared_directory(app: &tauri::App) -> Result<Option<PathBuf>, S
             return Err("A versão do shared.config.json não é compatível. Atualize o vínculo pelo Shared Runtime Manager.".into());
         }
         if manifest.pointer("/shared/enabled").and_then(|value| value.as_bool()) != Some(true) {
-            return Err("O Shared Runtime está desativado para esta aplicação.".into());
+            tracing::warn!("Shared Runtime está desativado para esta aplicação. Cache do YouTube indisponível.");
+            return Ok(None);
         }
 
-        let directory = manifest.pointer("/shared/directories/mediaShared")
+        let Some(directory) = manifest.pointer("/shared/directories/mediaShared")
             .and_then(|value| value.as_str())
-            .ok_or("O manifesto Shared Runtime não informa shared.directories.mediaShared. Sincronize a aplicação pelo Shared Runtime Manager.")?;
+        else {
+            tracing::warn!("O manifesto Shared Runtime não informa shared.directories.mediaShared. Cache do YouTube indisponível até sincronizar a aplicação pelo Shared Runtime Manager.");
+            return Ok(None);
+        };
         let directory = PathBuf::from(directory);
         if !directory.is_absolute() {
             return Err("O caminho shared.directories.mediaShared precisa ser absoluto.".into());
@@ -104,13 +108,20 @@ pub fn run() {
             let log_guard = logging::initialize(&app_data_directory.join("logs"))
                 .map_err(std::io::Error::other)?;
             let projects_directory = app_data_directory.join("projects");
-            let media_shared_directory = resolve_media_shared_directory(app)
-                .map_err(std::io::Error::other)?;
-            if media_shared_directory.is_none() {
-                tracing::warn!("Shared Runtime não está vinculado. O cache de vídeos do YouTube ficará indisponível até sincronizar shared.config.json.");
+            let media_shared_directory = match resolve_media_shared_directory(app) {
+                Ok(directory) => directory,
+                Err(error) => {
+                    tracing::error!("Não foi possível resolver o diretório mediaShared: {error}. O aplicativo continuará sem o cache compartilhado de vídeos.");
+                    None
+                }
+            };
+            if media_shared_directory.is_some() {
+                let cleanup_cache = YoutubeCache::new(media_shared_directory.clone());
+                if let Err(error) = cleanup_cache.cleanup_expired() {
+                    tracing::warn!("Não foi possível limpar o cache compartilhado de vídeos: {error}");
+                }
             }
             let youtube_cache = YoutubeCache::new(media_shared_directory);
-            youtube_cache.cleanup_expired().map_err(std::io::Error::other)?;
 
             let sound_library_directory = app_data_directory.join("sound-library");
             std::fs::create_dir_all(&sound_library_directory)?;
