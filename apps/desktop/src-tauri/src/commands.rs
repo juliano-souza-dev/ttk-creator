@@ -715,6 +715,7 @@ pub async fn export_timeline(
         let mut sound_inputs: Vec<(usize, &ExportSoundEffect)> = Vec::new();
         let mut overlay_inputs: Vec<(usize, &ExportImageOverlay)> = Vec::new();
         let mut icon_temp_files: Vec<PathBuf> = Vec::new();
+        let mut caption_temp_files: Vec<PathBuf> = Vec::new();
         let mut icon_inputs: Vec<(usize, usize, &ExportMotion)> = Vec::new();
         let mut total_ms = 0u64;
 
@@ -881,6 +882,29 @@ pub async fn export_timeline(
         }
 
         for (index, item) in request.motion.iter().enumerate() {
+            if item.is_caption {
+                let start = item.start_ms as f64 / 1000.0;
+                let end = item.end_ms as f64 / 1000.0;
+                if end <= start { continue; }
+                if let Some((x, y, width, height, color)) = caption_background_geometry(item) {
+                    let background_label = format!("caption_background{index}");
+                    filter_parts.push(format!(
+                        "[{previous}]drawbox=x={x:.2}:y={y:.2}:w={width:.2}:h={height:.2}:color={color}:t=fill:enable='between(t\\,{start:.6}\\,{end:.6})'[{background_label}]"
+                    ));
+                    previous = background_label;
+                }
+                let subtitle_path = std::env::temp_dir().join(format!("framelab-caption-{}.ass", uuid::Uuid::new_v4()));
+                std::fs::write(&subtitle_path, ass_caption_script(item).as_bytes())
+                    .map_err(|error| format!("Não foi possível preparar a legenda karaoke: {error}"))?;
+                caption_temp_files.push(subtitle_path.clone());
+                let subtitle_label = format!("caption_ass{index}");
+                filter_parts.push(format!(
+                    "[{previous}]ass=filename='{}'[{subtitle_label}]",
+                    ffmpeg_escape_filter_path(&subtitle_path)
+                ));
+                previous = subtitle_label;
+                continue;
+            }
             let color = if item.color.starts_with('#') && item.color.len() == 7 { format!("0x{}", &item.color[1..]) } else { "white".into() };
             let (font_name, bold_suffix) = match item.font_family.as_str() {
                 "Georgia" => ("georgia", "bd"), "Impact" => ("impact", ""),
@@ -1095,8 +1119,11 @@ pub async fn export_timeline(
         let mut required_filters = vec![
             "color", "scale", "crop", "fps", "setsar", "setpts", "overlay", "format", "fade",
         ];
-        if !request.motion.is_empty() {
+        if request.motion.iter().any(|item| !item.is_caption) {
             required_filters.push("drawtext");
+        }
+        if request.motion.iter().any(|item| item.is_caption) {
+            required_filters.extend(["ass", "drawbox"]);
         }
         if !icon_inputs.is_empty() {
             required_filters.push("colorchannelmixer");
@@ -1106,6 +1133,7 @@ pub async fn export_timeline(
         }
         if let Err(error) = ensure_ffmpeg_capabilities(&ffmpeg_path, &required_filters) {
             for path in &icon_temp_files { let _ = std::fs::remove_file(path); }
+            for path in &caption_temp_files { let _ = std::fs::remove_file(path); }
             return Err(error);
         }
 
@@ -1116,8 +1144,11 @@ pub async fn export_timeline(
         let filter_script_path = std::env::temp_dir()
             .join(format!("framelab-filter-{}.txt", uuid::Uuid::new_v4()));
         let filter_script = filter_parts.join(";\n");
-        std::fs::write(&filter_script_path, filter_script.as_bytes())
-            .map_err(|error| format!("Não foi possível preparar os filtros de exportação: {error}"))?;
+        if let Err(error) = std::fs::write(&filter_script_path, filter_script.as_bytes()) {
+            for path in &icon_temp_files { let _ = std::fs::remove_file(path); }
+            for path in &caption_temp_files { let _ = std::fs::remove_file(path); }
+            return Err(format!("Não foi possível preparar os filtros de exportação: {error}"));
+        }
 
         // FFmpeg 8.0 removed the deprecated -filter_complex_script option.
         // Newer versions load option values from files with the /option syntax.
@@ -1164,6 +1195,7 @@ pub async fn export_timeline(
             Err(error) => {
                 let _ = std::fs::remove_file(&filter_script_path);
                 for path in &icon_temp_files { let _ = std::fs::remove_file(path); }
+                for path in &caption_temp_files { let _ = std::fs::remove_file(path); }
                 return Err(format!(
                     "Não foi possível iniciar o FFmpeg em {}: {error}",
                     ffmpeg_path.display()
@@ -1197,6 +1229,7 @@ pub async fn export_timeline(
         let status_result = child.wait();
         let _ = std::fs::remove_file(&filter_script_path);
         for path in &icon_temp_files { let _ = std::fs::remove_file(path); }
+        for path in &caption_temp_files { let _ = std::fs::remove_file(path); }
         let status = status_result
             .map_err(|error| format!("Não foi possível aguardar o FFmpeg: {error}"))?;
         let stderr = stderr_reader.join().unwrap_or_else(|_| "Não foi possível ler o diagnóstico do FFmpeg.".into());
