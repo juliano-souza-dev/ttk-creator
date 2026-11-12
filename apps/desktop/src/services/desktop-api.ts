@@ -27,7 +27,7 @@ export const desktopApi = {
     runTrackedTask("transcription", "Transcrição de mídia", () => invoke<TranscriptResult>("transcribe_media", { projectId, assetId, mode, language: language || null, localModel })),
   checkLocalAsr: () => invoke<boolean>("check_local_asr"),
   installLocalAsr: () => runTrackedTask("installation", "Instalação do suporte de transcrição local", () => invoke<string>("install_local_asr")),
-  saveGroqSettings: (settings: { apiKey: string; model: string; maxChunkChars: number; maxCuesPerChunk: number; delayMs: number; targetLanguage: string }) =>
+  saveGroqSettings: (settings: { maxChunkChars: number; maxCuesPerChunk: number; delayMs: number; targetLanguage: string }) =>
     invoke<GroqSettings>("save_groq_settings", settings),
   testGroqConnection: (model: string) => invoke<string>("test_groq_connection", { model }),
   translateGroqChunk: (model: string, targetLanguage: string, cues: TranslationCue[]) =>
