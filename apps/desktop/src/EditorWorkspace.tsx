@@ -26,9 +26,9 @@ type TimelineClip = {
 type TimelineGroup = { id: string; name: string; members: string[] };
 type ImageOverlay = { id:string; assetId:string; startMs:number; endMs:number; x:number; y:number; width:number; height:number; soundId?:string; soundVolume:number; visible?:boolean; locked?:boolean; entranceAnimation?: "none" | "fade" | "slide-left" | "slide-right" | "slide-up" | "slide-down"; entranceDurationMs?:number };
 type Props = { projectId: string; assets: MediaAsset[]; onAddMedia: () => void; onOpenTranscription?: (assetId?: string, context?: { clipId: string; timelineStartMs: number; sourceStartMs: number; sourceEndMs: number }) => void };
-type TrimDrag = { clipId: string; edge: "start" | "end"; startX: number; sourceStartMs: number; sourceEndMs: number; timelineStartMs: number; scaleMs: number };
-type ClipMoveDrag = { clipId: string; startX: number; lastX: number; timelineStartMs: number; memberKeys: string[] };
-type MotionTrimDrag = { id: string; edge: "start" | "end" | "move"; startX: number; lastX: number; startMs: number; endMs: number; memberKeys: string[] };
+type TrimDrag = { clipId: string; edge: "start" | "end"; startX: number; sourceStartMs: number; sourceEndMs: number; timelineStartMs: number; scaleMs: number; didMove?: boolean };
+type ClipMoveDrag = { clipId: string; startX: number; lastX: number; timelineStartMs: number; memberKeys: string[]; didMove?: boolean };
+type MotionTrimDrag = { id: string; edge: "start" | "end" | "move"; startX: number; lastX: number; startMs: number; endMs: number; memberKeys: string[]; didMove?: boolean };
 type CaptionWord = { text: string; startMs: number; endMs: number; translation?: string };
 type MotionGraphic = { id: string; visible?: boolean; locked?: boolean; isCaption?: boolean; captionSourceLanguage?: string; captionTranslationLanguage?: string; captionMode?: "source" | "bilingual" | "karaoke"; captionEnglish?: string; captionTranslation?: string; captionWords?: CaptionWord[]; captionBackgroundColor?: string; captionBackgroundOpacity?: number; captionWidth?: number; captionPaddingEm?: number; text: string; icon?: string; lucideIconName?: string; lucideIconAnchor?: "left" | "right" | "top" | "bottom"; lucideIconSize?: number; lucideIconColor?: string; elements?: Array<{ type: string; content: string }>; fontFamily?: string; fontWeight?: number; textAlign?: "left" | "center" | "right"; startMs: number; endMs: number; durationMs: number; preset: "pop" | "slide" | "zoom" | "typewriter" | "impact" | "composition"; typewriterDurationMs?: number; color: string; accent: string; fontSize: number; x: number; y: number; sound: "pop" | "whoosh" | "impact" | "click" | "none"; soundId?: string; soundVolume?: number };
 const motionPresets = [{id:"pop",label:"Pop Impact",sound:"pop"},{id:"slide",label:"Slide + Whoosh",sound:"whoosh"},{id:"zoom",label:"Zoom + Impact",sound:"impact"},{id:"typewriter",label:"Typewriter",sound:"click"},{id:"impact",label:"Big Impact",sound:"impact"}] as const;
@@ -780,24 +780,30 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
   function beginOverlayTimelineTrim(event:ReactPointerEvent<HTMLSpanElement>,item:ImageOverlay,edge:"start"|"end"){
     if(item.locked)return;
     event.preventDefault();event.stopPropagation();event.currentTarget.closest("button")?.setPointerCapture(event.pointerId);overlayTimelineDidMoveRef.current=false;
-    overlayTimelineDragRef.current={id:item.id,edge,startX:event.clientX,lastX:event.clientX,startMs:item.startMs,endMs:item.endMs,memberKeys:[item.id]};
+    overlayTimelineDragRef.current={id:item.id,edge,startX:event.clientX,lastX:event.clientX,startMs:item.startMs,endMs:item.endMs,memberKeys:[item.id],didMove:false};
     setSelectedOverlayId(item.id);setSelectedMotionId(null);setSelectedId(null);
   }
   function beginOverlayTimelineMove(event:ReactPointerEvent<HTMLButtonElement>,item:ImageOverlay){
     if(item.locked||(event.target as HTMLElement).closest(".image-overlay-trim-edge"))return;
     event.preventDefault();event.stopPropagation();event.currentTarget.setPointerCapture(event.pointerId);overlayTimelineDidMoveRef.current=false;
-    overlayTimelineDragRef.current={id:item.id,edge:"move",startX:event.clientX,lastX:event.clientX,startMs:item.startMs,endMs:item.endMs,memberKeys:[item.id]};
+    overlayTimelineDragRef.current={id:item.id,edge:"move",startX:event.clientX,lastX:event.clientX,startMs:item.startMs,endMs:item.endMs,memberKeys:[item.id],didMove:false};
     setSelectedOverlayId(item.id);setSelectedMotionId(null);setSelectedId(null);
   }
   function moveOverlayOnTimeline(event:ReactPointerEvent<HTMLElement>){
     const drag=overlayTimelineDragRef.current;if(!drag||!event.currentTarget.hasPointerCapture(event.pointerId))return;
+    if (!drag.didMove) {
+      if (Math.abs(event.clientX - drag.startX) < 4) return;
+      drag.didMove = true;
+      overlayTimelineDidMoveRef.current = true;
+      drag.lastX = event.clientX;
+      return;
+    }
     const rect=event.currentTarget.closest(".timeline-canvas")?.getBoundingClientRect();if(!rect?.width)return;
     if(drag.edge==="move"){
-      const pixelDelta=Math.abs(event.clientX-drag.startX);if(pixelDelta>2)overlayTimelineDidMoveRef.current=true;
       const delta=(event.clientX-drag.lastX)/rect.width*scale;drag.lastX=event.clientX;
       setImageOverlays(current=>current.map(item=>{if(item.id!==drag.id)return item;const safeDelta=Math.max(-item.startMs,delta);return {...item,startMs:item.startMs+safeDelta,endMs:item.endMs+safeDelta};}));
     }else{
-      const delta=(event.clientX-drag.startX)/rect.width*scale;if(Math.abs(event.clientX-drag.startX)>2)overlayTimelineDidMoveRef.current=true;
+      const delta=(event.clientX-drag.startX)/rect.width*scale;
       if(drag.edge==="start")updateOverlay(drag.id,{startMs:Math.max(0,Math.min(drag.endMs-100,drag.startMs+delta))});
       else updateOverlay(drag.id,{endMs:Math.max(drag.startMs+100,drag.endMs+delta)});
     }
@@ -1076,11 +1082,15 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
     event.preventDefault();
     event.stopPropagation();
     event.currentTarget.setPointerCapture(event.pointerId);
-    trimDragRef.current = { clipId: clip.id, edge, startX: event.clientX, sourceStartMs: clip.sourceStartMs, sourceEndMs: clip.sourceEndMs, timelineStartMs: clip.timelineStartMs, scaleMs: scale };
+    trimDragRef.current = { clipId: clip.id, edge, startX: event.clientX, sourceStartMs: clip.sourceStartMs, sourceEndMs: clip.sourceEndMs, timelineStartMs: clip.timelineStartMs, scaleMs: scale, didMove: false };
   }
   function moveClipTrim(event: ReactPointerEvent<HTMLSpanElement>) {
     const drag = trimDragRef.current;
     if (!drag || !event.currentTarget.hasPointerCapture(event.pointerId)) return;
+    if (!drag.didMove) {
+      if (Math.abs(event.clientX - drag.startX) < 4) return;
+      drag.didMove = true;
+    }
     const canvas = event.currentTarget.closest(".timeline-canvas");
     const rect = canvas?.getBoundingClientRect();
     if (!rect || !rect.width) return;
@@ -1125,12 +1135,18 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
     if (event.ctrlKey || event.metaKey || event.shiftKey) { toggleMemberSelection(key); setSelectedId(clip.id); setSelectedMotionId(null); return; }
     const memberKeys = groupMembersFor(key);
     event.currentTarget.setPointerCapture(event.pointerId);
-    clipMoveDragRef.current = { clipId: clip.id, startX: event.clientX, lastX: event.clientX, timelineStartMs: clip.timelineStartMs, memberKeys };
+    clipMoveDragRef.current = { clipId: clip.id, startX: event.clientX, lastX: event.clientX, timelineStartMs: clip.timelineStartMs, memberKeys, didMove: false };
     setSelectedId(clip.id); setSelectedMotionId(null); setSelectedMembers(memberKeys); stopPlayback();
   }
   function moveClipOnTimeline(event: ReactPointerEvent<HTMLDivElement>) {
     const drag = clipMoveDragRef.current;
     if (!drag || !event.currentTarget.hasPointerCapture(event.pointerId)) return;
+    if (!drag.didMove) {
+      if (Math.abs(event.clientX - drag.startX) < 4) return;
+      drag.didMove = true;
+      drag.lastX = event.clientX;
+      return;
+    }
     const rect = event.currentTarget.closest(".timeline-canvas")?.getBoundingClientRect();
     if (!rect?.width) return;
     const deltaMs = (event.clientX - drag.lastX) / rect.width * scale;
@@ -1159,7 +1175,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
     if(item.locked)return;
     event.preventDefault(); event.stopPropagation();
     event.currentTarget.setPointerCapture(event.pointerId);
-    motionTrimDragRef.current = { id: item.id, edge, startX: event.clientX, lastX: event.clientX, startMs: item.startMs, endMs: item.endMs, memberKeys: [memberKeyForMotion(item.id)] };
+    motionTrimDragRef.current = { id: item.id, edge, startX: event.clientX, lastX: event.clientX, startMs: item.startMs, endMs: item.endMs, memberKeys: [memberKeyForMotion(item.id)], didMove: false };
     selectMotionItem(item);
   }
   function beginMotionMove(event: ReactPointerEvent<HTMLButtonElement>, item: MotionGraphic) {
@@ -1169,12 +1185,17 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
     const key = memberKeyForMotion(item.id);
     if (event.ctrlKey || event.metaKey || event.shiftKey) { toggleMemberSelection(key); setSelectedMotionId(item.id); setSelectedId(null); return; }
     const memberKeys = groupMembersFor(key);
-    motionTrimDragRef.current = { id: item.id, edge: "move", startX: event.clientX, lastX: event.clientX, startMs: item.startMs, endMs: item.endMs, memberKeys };
+    motionTrimDragRef.current = { id: item.id, edge: "move", startX: event.clientX, lastX: event.clientX, startMs: item.startMs, endMs: item.endMs, memberKeys, didMove: false };
     selectMotionItem(item); setSelectedMembers(memberKeys);
   }
   function moveMotionOnTimeline(event: ReactPointerEvent<HTMLElement>) {
     const drag = motionTrimDragRef.current;
     if (!drag || !event.currentTarget.hasPointerCapture(event.pointerId)) return;
+    if (!drag.didMove) {
+      if (Math.abs(event.clientX - drag.startX) < 4) return;
+      drag.didMove = true;
+      if (drag.edge === "move") { drag.lastX = event.clientX; return; }
+    }
     const rect = event.currentTarget.closest(".timeline-canvas")?.getBoundingClientRect();
     if (!rect?.width) return;
     const deltaMs = drag.edge === "move" ? (event.clientX - drag.lastX) / rect.width * scale : (event.clientX - drag.startX) / rect.width * scale;
