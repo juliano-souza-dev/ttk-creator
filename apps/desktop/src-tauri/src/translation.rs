@@ -30,21 +30,104 @@ fn settings_path(app: &AppHandle) -> Result<PathBuf, String> {
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     Ok(dir.join("groq-settings.json"))
 }
+fn shared_manifest(app: &AppHandle) -> Result<Option<serde_json::Value>, String> {
+    let mut candidates = Vec::<PathBuf>::new();
+    if let Some(path) = std::env::var_os("NOVA_GENERATOR_SHARED_CONFIG") {
+        candidates.push(PathBuf::from(path));
+    }
+    if let Ok(cwd) = std::env::current_dir() {
+        let mut current = Some(cwd.as_path());
+        while let Some(path) = current {
+            candidates.push(path.join("shared.config.json"));
+            current = path.parent();
+        }
+    }
+    if let Ok(executable) = std::env::current_exe() {
+        let mut current = executable.parent();
+        while let Some(path) = current {
+            candidates.push(path.join("shared.config.json"));
+            current = path.parent();
+        }
+    }
+    if let Ok(resource_dir) = app.path().resource_dir() {
+        let mut current = Some(resource_dir.as_path());
+        while let Some(path) = current {
+            candidates.push(path.join("shared.config.json"));
+            current = path.parent();
+        }
+    }
+    let mut seen = std::collections::HashSet::new();
+    for path in candidates {
+        let path = if path.is_dir() { path.join("shared.config.json") } else { path };
+        if !seen.insert(path.clone()) || !path.is_file() { continue; }
+        let raw = std::fs::read(&path).map_err(|error| format!("Não foi possível ler o vínculo Shared Runtime em {}: {error}", path.display()))?;
+        let manifest: serde_json::Value = serde_json::from_slice(&raw)
+            .map_err(|error| format!("Manifesto Shared Runtime inválido em {}: {error}", path.display()))?;
+        if manifest.get("schemaVersion").and_then(|value| value.as_str()) != Some("1.0") {
+            return Err("A versão do shared.config.json não é compatível. Atualize o vínculo pelo Shared Runtime Manager.".into());
+        }
+        if manifest.pointer("/shared/enabled").and_then(|value| value.as_bool()) != Some(true) {
+            return Err("O Shared Runtime está desativado para esta aplicação.".into());
+        }
+        return Ok(Some(manifest));
+    }
+    Ok(None)
+}
+
+fn shared_provider_entry(app: &AppHandle) -> Result<Option<Entry>, String> {
+    let Some(manifest) = shared_manifest(app)? else { return Ok(None); };
+    let app_id = manifest.pointer("/application/id").and_then(|value| value.as_str())
+        .ok_or("O manifesto Shared Runtime não identifica esta aplicação.")?;
+    let declared = manifest.pointer("/shared/providers").and_then(|value| value.as_array())
+        .is_some_and(|items| items.iter().any(|item| item.get("id").and_then(|value| value.as_str()) == Some("groq")));
+    if !declared {
+        return Err("O provedor Groq não está declarado em shared.providers. Atualize o vínculo desta aplicação no Shared Runtime Manager.".into());
+    }
+    let registry_path = manifest.pointer("/shared/files/apiProviders").and_then(|value| value.as_str())
+        .ok_or("O manifesto não aponta para o registro global de APIs (shared.files.apiProviders). Execute novamente o registro da aplicação no Shared Runtime Manager.")?;
+    let registry: serde_json::Value = serde_json::from_slice(&std::fs::read(registry_path)
+        .map_err(|error| format!("Não foi possível acessar o registro global de APIs: {error}"))?)
+        .map_err(|error| format!("O registro global de APIs está inválido: {error}"))?;
+    let provider = registry.pointer("/providers/groq")
+        .ok_or("O provedor Groq não está configurado no Shared Runtime Manager.")?;
+    let authorized = provider.get("authorized_apps").and_then(|value| value.as_array())
+        .is_some_and(|apps| apps.iter().any(|item| item.as_str() == Some(app_id)));
+    if !authorized {
+        return Err(format!("A aplicação '{app_id}' ainda não está autorizada a usar a API Groq. Autorize-a no Shared Runtime Manager."));
+    }
+    #[cfg(windows)]
+    {
+        let entry = Entry::new("JulianoDev.SharedRuntime.Api", "api:groq")
+            .map_err(|error| format!("Não foi possível acessar a credencial global da Groq: {error}"))?;
+        Ok(Some(entry))
+    }
+    #[cfg(not(windows))]
+    {
+        Err("O armazenamento seguro de credenciais do Shared Runtime está disponível nesta integração apenas no Windows.".into())
+    }
+}
+
 fn read_settings(app: &AppHandle) -> Result<GroqSettings, String> {
     let path = settings_path(app)?;
     let mut settings = if path.exists() {
         serde_json::from_slice::<GroqSettings>(&std::fs::read(path).map_err(|e| e.to_string())?).unwrap_or_default()
     } else { GroqSettings::default() };
-    settings.configured = Entry::new(SERVICE, USER).ok().and_then(|entry| entry.get_password().ok()).is_some() || session_key().lock().map(|key| key.is_some()).unwrap_or(false);
+    settings.configured = resolve_api_key(app).is_ok();
     Ok(settings)
 }
-pub(crate) fn api_key() -> Result<String, String> {
+
+pub(crate) fn resolve_api_key(app: &AppHandle) -> Result<String, String> {
+    if let Some(entry) = shared_provider_entry(app)? {
+        return entry.get_password()
+            .map_err(|error| format!("A credencial Groq não foi encontrada no Shared Runtime. Cadastre-a uma única vez pelo Shared Runtime Manager. Detalhe: {error}"));
+    }
     if let Ok(entry) = Entry::new(SERVICE, USER) {
         if let Ok(key) = entry.get_password() { return Ok(key); }
     }
     session_key().lock().ok().and_then(|key| key.clone())
-        .ok_or_else(|| "A chave Groq não foi encontrada no Gerenciador de Credenciais do Windows nem na sessão atual. Abra Configurações da Groq e salve a chave novamente.".into())
+        .ok_or_else(|| "A chave Groq não foi encontrada no Shared Runtime nem nas credenciais legadas desta sessão.".into())
 }
+
 #[tauri::command]
 pub fn get_groq_settings(app: AppHandle) -> Result<GroqSettings, String> { read_settings(&app) }
 
@@ -53,8 +136,8 @@ pub fn save_groq_settings(app: AppHandle, api_key: String, model: String, max_ch
     if !api_key.trim().is_empty() && (api_key.trim().len() < 20 || !api_key.trim().starts_with("gsk_")) {
         return Err("Informe uma chave Groq válida (ela normalmente começa com gsk_).".into());
     }
-    if api_key.trim().is_empty() && Entry::new(SERVICE, USER).ok().and_then(|entry| entry.get_password().ok()).is_none() {
-        return Err("Informe sua chave Groq para configurar a primeira conexão.".into());
+    if api_key.trim().is_empty() && resolve_api_key(&app).is_err() {
+        return Err("A chave Groq não está disponível no Shared Runtime. Cadastre-a no Gerenciador Global de APIs.".into());
     }
     let model = model.trim();
     if model.is_empty() || model.len() > 120 { return Err("Informe um identificador de modelo válido.".into()); }
@@ -66,10 +149,15 @@ pub fn save_groq_settings(app: AppHandle, api_key: String, model: String, max_ch
         target_language: if target_language.trim().is_empty() { "Português brasileiro".into() } else { target_language.trim().chars().take(80).collect() },
     };
     if !api_key.trim().is_empty() {
-        let normalized_key = api_key.trim().to_string();
-        Entry::new(SERVICE, USER).map_err(|e| format!("Não foi possível acessar o Gerenciador de Credenciais do Windows: {e}"))?
-            .set_password(&normalized_key).map_err(|e| format!("Não foi possível salvar a chave no Gerenciador de Credenciais do Windows: {e}"))?;
-        if let Ok(mut cached) = session_key().lock() { *cached = Some(normalized_key); }
+        if let Some(entry) = shared_provider_entry(&app)? {
+            entry.set_password(api_key.trim())
+                .map_err(|error| format!("Não foi possível atualizar a credencial global da Groq: {error}"))?;
+        } else {
+            let normalized_key = api_key.trim().to_string();
+            Entry::new(SERVICE, USER).map_err(|e| format!("Não foi possível acessar o Gerenciador de Credenciais do Windows: {e}"))?
+                .set_password(&normalized_key).map_err(|e| format!("Não foi possível salvar a chave no Gerenciador de Credenciais do Windows: {e}"))?;
+            if let Ok(mut cached) = session_key().lock() { *cached = Some(normalized_key); }
+        }
     }
     let path = settings_path(&app)?;
     std::fs::write(path, serde_json::to_vec_pretty(&settings).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
@@ -95,7 +183,7 @@ pub struct CueTranslation { pub id: String, pub translation: String }
 
 #[tauri::command]
 pub async fn test_groq_connection(app: AppHandle, model: String) -> Result<String, String> {
-    let key = api_key()?;
+    let key = resolve_api_key(&app)?;
     let client = Client::builder().timeout(Duration::from_secs(30)).build().map_err(|e| e.to_string())?;
     let response = client.post("https://api.groq.com/openai/v1/chat/completions")
         .bearer_auth(key).json(&serde_json::json!({
@@ -122,7 +210,7 @@ pub async fn translate_groq_chunk(app: AppHandle, model: String, target_language
     let total_chars: usize = cues.iter().map(|c| c.text.len()).sum();
     if total_chars > 18000 { return Err("O lote excede o limite de 18.000 caracteres.".into()); }
     emit_translation_status(&app, "Conectando à Groq", "Solicitando autenticação e preparando o envio do lote...");
-    let key = api_key()?;
+    let key = resolve_api_key(&app)?;
     let payload = cues.iter().map(|cue| serde_json::json!({"id":cue.id,"text":cue.text,"contextBefore":cue.context_before,"contextAfter":cue.context_after})).collect::<Vec<_>>();
     let system = format!(
         "You are a professional audiovisual subtitle translator. Detect the source language automatically for each text and translate it into {}. Use contextBefore and contextAfter only to understand continuity, references and tone; translate only the text field. Preserve meaning, tone, register, idioms and continuity. Keep translations concise and natural for subtitles. Do not translate names unnecessarily. Return ONLY valid JSON in this exact shape: {{\"translations\":[{{\"id\":\"same id\",\"translation\":\"translated text\"}}]}}. Include every input id exactly once. Never add commentary.",

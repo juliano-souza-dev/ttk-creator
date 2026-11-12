@@ -175,7 +175,7 @@ fn transcribe_cloud(app: &AppHandle, project_id: &str, audio: &Path, directory: 
     let chunks = chunk_audio(&ffmpeg()?, audio, directory, duration)?;
     let total = chunks.len();
     let client = Client::builder().timeout(Duration::from_secs(180)).build().map_err(|e| e.to_string())?;
-    let key = crate::translation::api_key()?;
+    let key = crate::translation::resolve_api_key(app)?;
     let mut cues: Vec<TranscriptCue> = Vec::new();
     let mut detected_language = language.map(str::to_string);
     for (index, (path, offset)) in chunks.iter().enumerate() {
