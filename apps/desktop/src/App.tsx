@@ -36,8 +36,8 @@ export default function App() {
   } = useYoutubeImport({ project: activeProject, setAssets, setBusy, setError, setNotice, setMediaModal });
   const sceneSpecProjectInput = useRef<HTMLInputElement|null>(null);
   const {
-    groqSettingsOpen, setGroqSettingsOpen, groqSettings,
-    groqModel, setGroqModel, groqMaxChars, setGroqMaxChars, groqMaxCues, setGroqMaxCues,
+    groqSettingsOpen, setGroqSettingsOpen,
+    groqModel, groqMaxChars, setGroqMaxChars, groqMaxCues, setGroqMaxCues,
     groqDelay, setGroqDelay, groqLanguage, setGroqLanguage, groqSettingsBusy,
     groqSettingsMessage, openGroqSettings, saveAndTestGroq
   } = useGroqSettings();
