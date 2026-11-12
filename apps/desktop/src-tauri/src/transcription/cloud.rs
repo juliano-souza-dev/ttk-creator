@@ -27,7 +27,7 @@ struct GroqWord {
     word: String,
 }
 
-fn groq_chunk(client: &Client, key: &str, path: &Path, language: Option<&str>) -> Result<GroqResponse, String> {
+fn groq_chunk(client: &Client, key: &str, endpoint: &str, path: &Path, language: Option<&str>) -> Result<GroqResponse, String> {
     let bytes = std::fs::read(path).map_err(|e| format!("Não foi possível ler bloco de áudio: {e}"))?;
     if bytes.len() > 25 * 1024 * 1024 { return Err("Um bloco ultrapassou o limite de 25 MB da API. Reduza a duração dos blocos.".into()); }
     let part = multipart::Part::bytes(bytes).file_name("audio.flac").mime_str("audio/flac").map_err(|e| e.to_string())?;
@@ -57,7 +57,7 @@ pub(super) fn transcribe_cloud(app: &AppHandle, project_id: &str, audio: &Path, 
         let mut last = String::new();
         let mut response = None;
         for attempt in 0..4 {
-            match groq_chunk(&client, &key, path, language) {
+            match groq_chunk(&client, &key, &endpoint, path, language) {
                 Ok(value) => { response = Some(value); break; }
                 Err(error) => {
                     last = error;
