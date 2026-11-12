@@ -61,3 +61,39 @@ export function parseSuperJsonCues(rawCues: unknown[], playheadMs: number): Moti
             }];
   });
 }
+
+
+import type { SceneSpec } from "../../shared/scene-spec";
+
+export function sceneSpecToMotionGraphics(parsed: SceneSpec, playheadMs: number): MotionGraphic[] {
+  return parsed.scenes.flatMap(scene =>
+        scene.blocks.map(block => {
+          const startMs = playheadMs + (block.startOffsetMs ?? 0);
+          const endMs = startMs + (block.durationMs ?? scene.durationMs);
+          return {
+            id: crypto.randomUUID(),
+            text: block.text,
+            icon: block.icon ?? "",
+            lucideIconName: block.iconName ?? "",
+            lucideIconAnchor: block.iconAnchor ?? "left",
+            lucideIconSize: block.iconSize,
+            lucideIconColor: block.iconColor,
+            fontFamily: "Arial",
+            fontWeight: 900,
+            textAlign: block.align ?? "center",
+            startMs,
+            endMs,
+            durationMs: endMs - startMs,
+            preset: "pop" as const,
+            color: block.color,
+            accent: block.accent ?? "#65d6c0",
+            fontSize: block.fontSize,
+            x: block.x,
+            y: block.y,
+            sound: "none" as const,
+            soundId: "",
+            soundVolume: 80,
+          };
+        }),
+  );
+}
