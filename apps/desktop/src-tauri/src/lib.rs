@@ -77,10 +77,10 @@ pub fn run() {
             commands::transcription::check_local_asr,
             commands::transcription::install_local_asr,
             commands::export::export_timeline,
-            translation::get_groq_settings,
-            translation::save_groq_settings,
-            translation::test_groq_connection,
-            translation::translate_groq_chunk
+            translation::settings::get_groq_settings,
+            translation::settings::save_groq_settings,
+            translation::groq::test_groq_connection,
+            translation::groq::translate_groq_chunk
         ])
         .run(tauri::generate_context!())
         .expect("error while running TikTok Media Creator");
