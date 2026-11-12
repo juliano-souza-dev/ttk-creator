@@ -744,7 +744,9 @@ pub async fn export_timeline(
             let duration_ms = if item.duration_ms > 0 { item.duration_ms.min(item.end_ms.saturating_sub(item.start_ms)) } else { item.end_ms.saturating_sub(item.start_ms) };
             let duration = (duration_ms.max(1) as f64) / 1000.0;
             let writing_duration = (if item.typewriter_duration_ms > 0 { item.typewriter_duration_ms.min(duration_ms) } else { 1500.min(duration_ms.max(100)) }.max(100) as f64) / 1000.0;
-            let caption_box = if item.is_caption { format!(":box=1:boxcolor=black@0.76:boxborderw={}", (item.font_size.clamp(18, 180) / 3).max(6)) } else { String::new() };
+            let caption_box = if item.is_caption { format!(":box=1:boxcolor=black@0.76:boxborderw={}:boxw=972:text_align=MC", (item.font_size.clamp(18, 180) / 3).max(6)) } else { String::new() };
+            // Captions occupy the full 90% safe width (x=54..1026 at 1080p).
+            let caption_x = if item.is_caption { "54".to_string() } else { base_x.clone() };
 
             // Karaoke captions are exported as a stable full-text base plus timed
             // accent overlays for each transcribed word. The word timestamps are
@@ -753,7 +755,7 @@ pub async fn export_timeline(
                 let wrapped = wrap_text_for_export(&item.text, item.font_size);
                 let base_label = format!("caption_base{index}");
                 filter_parts.push(format!(
-                    "[{previous}]drawtext=fontfile='{font_file}':text='{}':fontcolor={color}{caption_box}:fontsize={}:x='{base_x}':y='{anchor_y}-text_h/2':enable='between(t\\,{start:.6}\\,{end:.6})'[{base_label}]",
+                    "[{previous}]drawtext=fontfile='{font_file}':text='{}':fontcolor={color}{caption_box}:fontsize={}:x='{caption_x}':y='{anchor_y}-text_h/2':enable='between(t\\,{start:.6}\\,{end:.6})'[{base_label}]",
                     ffmpeg_escape_text(&wrapped),
                     item.font_size.clamp(18, 180)
                 ));
@@ -834,7 +836,7 @@ pub async fn export_timeline(
                         format!("gte(t,{step_start:.6})*lt(t,{step_end:.6})")
                     };
                     let enable = ffmpeg_escape_expression(&enable);
-                    filter_parts.push(format!("[{current}]drawtext=fontfile='{font_file}':text='{text}':fontcolor={color}{caption_box}:fontsize={}:x='{base_x}':y='{anchor_y}-text_h/2':enable='{enable}'[{next}]", item.font_size.clamp(18, 180)));
+                    filter_parts.push(format!("[{current}]drawtext=fontfile='{font_file}':text='{text}':fontcolor={color}{caption_box}:fontsize={}:x='{caption_x}':y='{anchor_y}-text_h/2':enable='{enable}'[{next}]", item.font_size.clamp(18, 180)));
                     current = next;
                 }
                 previous = current;
@@ -854,6 +856,7 @@ pub async fn export_timeline(
             let next = format!("text{index}");
             let scale_expr = ffmpeg_escape_expression(&scale);
             let alpha_expr = ffmpeg_escape_expression(&alpha);
+            let x = if item.is_caption { caption_x.clone() } else { x };
             let x_expr = ffmpeg_escape_expression(&x);
             filter_parts.push(format!("[{previous}]drawtext=fontfile='{font_file}':text='{}':fontcolor={color}{caption_box}:fontsize='max(1\\,{}*({scale_expr}))':alpha='{alpha_expr}':x='{x_expr}':y='{anchor_y}-text_h/2':enable='between(t\\,{start:.3}\\,{end:.3})'[{next}]", ffmpeg_escape_text(&wrap_text_for_export(&item.text, item.font_size)), item.font_size.clamp(18, 180)));
             previous = next;
