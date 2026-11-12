@@ -3,8 +3,8 @@ use serde::Deserialize;
 use std::{path::{Path, PathBuf}, time::Duration};
 use tauri::{AppHandle, Emitter};
 use super::{chunk_audio, emit, ffmpeg, TranscriptCue, TranscriptResult, TranscriptWord};
+use crate::translation::{resolve_api_endpoint, resolve_api_key};
 
-const GROQ_URL: &str = "https://api.groq.com/openai/v1/audio/transcriptions";
 const GROQ_MODEL: &str = "whisper-large-v3-turbo";
 
 #[derive(Deserialize)]
@@ -35,7 +35,7 @@ fn groq_chunk(client: &Client, key: &str, path: &Path, language: Option<&str>) -
         .text("temperature", "0").text("timestamp_granularities[]", "word")
         .text("timestamp_granularities[]", "segment").part("file", part);
     if let Some(lang) = language { if !lang.trim().is_empty() { form = form.text("language", lang.to_string()); } }
-    let response = client.post(GROQ_URL).bearer_auth(key).multipart(form).send()
+    let response = client.post(endpoint).bearer_auth(key).multipart(form).send()
         .map_err(|e| format!("Falha de conexão com a Groq: {e}"))?;
     if !response.status().is_success() {
         let status = response.status();
@@ -48,7 +48,8 @@ pub(super) fn transcribe_cloud(app: &AppHandle, project_id: &str, audio: &Path, 
     let chunks = chunk_audio(&ffmpeg()?, audio, directory, duration)?;
     let total = chunks.len();
     let client = Client::builder().timeout(Duration::from_secs(180)).build().map_err(|e| e.to_string())?;
-    let key = crate::translation::resolve_api_key(app)?;
+    let key = resolve_api_key(app)?;
+    let endpoint = format!("{}/audio/transcriptions", resolve_api_endpoint(app)?.trim_end_matches('/'));
     let mut cues: Vec<TranscriptCue> = Vec::new();
     let mut detected_language = language.map(str::to_string);
     for (index, (path, offset)) in chunks.iter().enumerate() {
