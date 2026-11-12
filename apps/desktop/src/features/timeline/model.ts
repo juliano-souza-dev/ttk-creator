@@ -1,27 +1,41 @@
 import type { MediaAsset } from "../../shared/types";
 
-type TimelineClip = {
+export type TimelineClip = {
   id: string;
+  assetId: string;
+  sourceStartMs: number;
+  sourceEndMs: number;
+  sourceDurationMs?: number;
+  timelineStartMs: number;
+  volume: number;
+  muted?: boolean;
+  cameraMotion?: "none" | "zoom-in" | "zoom-out" | "pan-left" | "pan-right" | "pan-up" | "pan-down";
+  transitionMs?: number;
+  transitionType?: "fade-black" | "fade-white" | "flash";
+};
 
-type TimelineGroup = { id: string; name: string; members: string[] };
+export type TimelineGroup = { id: string; name: string; members: string[] };
 
-type ImageOverlay = { id:string; assetId:string; startMs:number; endMs:number; x:number; y:number; width:number; height:number; soundId?:string; soundVolume:number; visible?:boolean; locked?:boolean; entranceAnimation?: "none" | "fade" | "slide-left" | "slide-right" | "slide-up" | "slide-down"; entranceDurationMs?:number };
+export type ImageOverlay = { id:string; assetId:string; startMs:number; endMs:number; x:number; y:number; width:number; height:number; soundId?:string; soundVolume:number; visible?:boolean; locked?:boolean; entranceAnimation?: "none" | "fade" | "slide-left" | "slide-right" | "slide-up" | "slide-down"; entranceDurationMs?:number };
 
-type TrimDrag = { clipId: string; edge: "start" | "end"; startX: number; sourceStartMs: number; sourceEndMs: number; timelineStartMs: number; scaleMs: number; didMove?: boolean };
+export type TrimDrag = { clipId: string; edge: "start" | "end"; startX: number; sourceStartMs: number; sourceEndMs: number; timelineStartMs: number; scaleMs: number; didMove?: boolean };
 
-type ClipMoveDrag = { clipId: string; startX: number; lastX: number; timelineStartMs: number; memberKeys: string[]; didMove?: boolean };
+export type ClipMoveDrag = { clipId: string; startX: number; lastX: number; timelineStartMs: number; memberKeys: string[]; didMove?: boolean };
 
-type MotionTrimDrag = { id: string; edge: "start" | "end" | "move"; startX: number; lastX: number; startMs: number; endMs: number; memberKeys: string[]; didMove?: boolean };
+export type MotionTrimDrag = { id: string; edge: "start" | "end" | "move"; startX: number; lastX: number; startMs: number; endMs: number; memberKeys: string[]; didMove?: boolean };
 
-const defaultDuration = (asset: MediaAsset) => asset.durationMs && asset.durationMs > 0 ? asset.durationMs : asset.kind === "image" ? 5000 : 30000;
-const clipDuration = (clip: TimelineClip) => Math.max(0, clip.sourceEndMs - clip.sourceStartMs);
-const clipEnd = (clip: TimelineClip) => clip.timelineStartMs + clipDuration(clip);
-const timeLabel = (ms: number) => {
+export const defaultDuration = (asset: MediaAsset) => asset.durationMs && asset.durationMs > 0 ? asset.durationMs : asset.kind === "image" ? 5000 : 30000;
+
+export const clipDuration = (clip: TimelineClip) => Math.max(0, clip.sourceEndMs - clip.sourceStartMs);
+
+export const clipEnd = (clip: TimelineClip) => clip.timelineStartMs + clipDuration(clip);
+
+export const timeLabel = (ms: number) => {
   const total = Math.max(0, Math.floor(ms / 1000));
   return String(Math.floor(total / 60)).padStart(2, "0") + ":" + String(total % 60).padStart(2, "0");
 };
 
-function captionBackgroundRgba(color: string | undefined, opacity: number | undefined) {
+export function captionBackgroundRgba(color: string | undefined, opacity: number | undefined) {
   const safeOpacity = Math.max(0, Math.min(1, opacity ?? 0.76));
   const match = /^#?([0-9a-f]{6})$/i.exec(color || "000000");
   if (!match) return `rgba(0,0,0,${safeOpacity})`;
@@ -29,7 +43,7 @@ function captionBackgroundRgba(color: string | undefined, opacity: number | unde
   return `rgba(${(value >> 16) & 255},${(value >> 8) & 255},${value & 255},${safeOpacity})`;
 }
 
-function imageOverlayEntranceState(item: ImageOverlay, playheadMs: number) {
+export function imageOverlayEntranceState(item: ImageOverlay, playheadMs: number) {
   const animation = item.entranceAnimation || "none";
   const duration = Math.max(100, Math.min(3000, item.entranceDurationMs ?? 600));
   const progress = Math.max(0, Math.min(1, (playheadMs - item.startMs) / duration));
