@@ -164,7 +164,7 @@ export function useCaptionTranslation({ captions, setCaptions, selectedCaption, 
 
   return {
     translationBusy, singleCaptionTranslationBusy, translationProgress,
-    translationMessage, translationPhase, translateCaptions,
+    translationMessage, setTranslationMessage, translationPhase, setTranslationPhase, translateCaptions,
     translateSelectedCaption, requestStopAfterCurrentBatch
   };
 }
