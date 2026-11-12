@@ -1,8 +1,5 @@
 import type { CaptionWord, MotionGraphic } from "./model";
 
-const asNumber = (value: unknown, fallback: number) =>
-  typeof value === "number" && Number.isFinite(value) ? value : fallback;
-
 export function parseSuperJsonCues(rawCues: unknown[], playheadMs: number): MotionGraphic[] {
   return rawCues.flatMap(rawCue => {
             if (!rawCue || typeof rawCue !== "object") return [];
