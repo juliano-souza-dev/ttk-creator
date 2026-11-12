@@ -877,7 +877,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
           soundVolume: 80,
         };
       });
-      setMotion(current => [...current, ...created]);
+      appendTextLayers(created);
       setSelectedMotionId(created[0]?.id ?? null);
       setActiveTool("text");
       setSceneSpecMessage(`Template "${scene.name}" aplicado: ${created.length} elementos adicionados.`);
