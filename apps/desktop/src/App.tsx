@@ -4,9 +4,10 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { desktopApi, isDesktopRuntime } from "./services/desktop-api";
 import EditorWorkspace, { supportedLucideIconNames } from "./EditorWorkspace";
 import TaskCenter from "./TaskCenter";
-import type { DownloadProgress, MediaAsset, Project, YoutubeInspection, YoutubeCacheEntry } from "./shared/types";
+import type { MediaAsset, Project } from "./shared/types";
 import { useTranscription } from "./features/transcription/useTranscription";
 import { useGroqSettings } from "./features/groq/useGroqSettings";
+import { useYoutubeImport } from "./features/youtube/useYoutubeImport";
 import { validateSceneSpec, type SceneSpec } from "./shared/scene-spec";
 import { buildSceneSpecProjectData, getSceneSpecMediaSources } from "./features/scene-spec/project-import";
 import { Clapperboard, LayoutGrid, Film, GraduationCap, Settings2, Plus, Search, FolderOpen, FolderPlus, Clock3, Video, Sparkles, Play, X, ArrowUpRight, Upload, Youtube, CheckCircle2, LoaderCircle, ShieldCheck, Link2, Download, Undo2, Redo2, ArrowLeft, FileJson, Mic, Captions, Info } from "lucide-react"
@@ -26,16 +27,13 @@ export default function App() {
   const [assets,setAssets] = useState<MediaAsset[]>([]);
   const [mediaModal,setMediaModal] = useState(false);
   const [mediaTab,setMediaTab] = useState<"local"|"youtube">("local");
-  const [youtubeUrl,setYoutubeUrl] = useState("");
-  const [youtubeInfo,setYoutubeInfo] = useState<YoutubeInspection|null>(null);
-  const [quality,setQuality] = useState(1080);
-  const [progress,setProgress] = useState<DownloadProgress|null>(null);
   const [notice,setNotice] = useState("");
-  const [youtubeCache,setYoutubeCache] = useState<YoutubeCacheEntry|null>(null);
-  const [trimStartMs,setTrimStartMs] = useState(0);
-  const [trimEndMs,setTrimEndMs] = useState(0);
-  const [trimBusy,setTrimBusy] = useState(false);
-  const trimVideoRef = useRef<HTMLVideoElement|null>(null);
+  const {
+    youtubeUrl, setYoutubeUrl, youtubeInfo, setYoutubeInfo, quality, setQuality,
+    progress, setProgress, youtubeCache, setYoutubeCache, trimStartMs, setTrimStartMs,
+    trimEndMs, setTrimEndMs, trimBusy, trimVideoRef,
+    inspectYoutube, downloadYoutube, confirmYoutubeTrim
+  } = useYoutubeImport({ project: activeProject, setAssets, setBusy, setError, setNotice, setMediaModal });
   const sceneSpecProjectInput = useRef<HTMLInputElement|null>(null);
   const {
     groqSettingsOpen, setGroqSettingsOpen, groqSettings, groqApiKey, setGroqApiKey,
@@ -122,39 +120,6 @@ export default function App() {
       const imported=await desktopApi.importMediaFiles(activeProject.id,paths);
       setAssets(current=>[...imported,...current]); setNotice(imported.length+" arquivo(s) importado(s)."); setMediaModal(false);
     } catch(e) { setError(String(e)); } finally { setBusy(false); }
-  }
-  async function inspectYoutube() {
-    if(!youtubeUrl.trim()) return;
-    setBusy(true); setError(""); setYoutubeInfo(null); setProgress(null);
-    try {
-      const info=await desktopApi.inspectYoutube(youtubeUrl.trim());
-      setYoutubeInfo(info);
-      const preferred=info.qualities.find(item=>item.height<=1080)??info.qualities[0];
-      setQuality(preferred?.height??0);
-    } catch(e) { setError(String(e)); } finally { setBusy(false); }
-  }
-  async function downloadYoutube() {
-    if(!youtubeInfo) return;
-    setBusy(true); setError(""); setProgress({projectId:activeProject?.id??"",percent:0,status:"starting"});
-    try {
-      const cached=await desktopApi.prepareYoutubeCache(youtubeInfo.url,quality);
-      setYoutubeCache(cached);
-      setTrimStartMs(0);
-      setTrimEndMs(cached.durationMs??youtubeInfo.durationMs??0);
-      setMediaModal(false);
-      setProgress(null);
-    } catch(e) { setError(String(e)); setProgress(null); } finally { setBusy(false); }
-  }
-
-  async function confirmYoutubeTrim() {
-    if(!activeProject||!youtubeCache) return;
-    setTrimBusy(true); setError("");
-    try {
-      const asset=await desktopApi.trimYoutubeCache(activeProject.id,youtubeCache.videoId,trimStartMs,trimEndMs);
-      setAssets(current=>[asset,...current]);
-      setNotice("Trecho importado para a biblioteca. O vídeo original permanece no cache temporário por até 7 dias.");
-      setYoutubeCache(null); setYoutubeUrl(""); setYoutubeInfo(null); setProgress(null);
-    } catch(e) { setError(String(e)); } finally { setTrimBusy(false); }
   }
 
   async function createProject(e:FormEvent) {
