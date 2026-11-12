@@ -243,7 +243,7 @@ with contextlib.redirect_stdout(sys.stderr):
         words=[{"text":clean_unicode(w.word),"startMs":round(w.start*1000),"endMs":round(w.end*1000)} for w in (s.words or [])]
         out.append({"id":"","text":clean_unicode(s.text.strip()),"startMs":round(s.start*1000),"endMs":round(s.end*1000),"words":words})
 payload=json.dumps({"language":clean_unicode(info.language or ""),"cues":out},ensure_ascii=True,separators=(",",":"))
-sys.stdout.buffer.write(payload.encode("ascii"))
+sys.stdout.buffer.write(b"FRAMELAB_ASR_JSON\\n"+payload.encode("ascii"))
 sys.stdout.buffer.flush()
 "#;
     let lang = language.unwrap_or("");
@@ -252,7 +252,12 @@ sys.stdout.buffer.flush()
         .map_err(|error| format!("Falha no Faster-Whisper local. Instale Python 3.10+ e o suporte local: {error}"))?;
     #[derive(Deserialize)] #[serde(rename_all="camelCase")]
     struct LocalOutput { language: Option<String>, cues: Vec<TranscriptCue> }
-    let mut parsed: LocalOutput = serde_json::from_slice(&output.stdout).map_err(|e| format!("O mecanismo local retornou dados inválidos: {e}"))?;
+    const JSON_MARKER: &[u8] = b"FRAMELAB_ASR_JSON\\n";
+    let marker_at = output.stdout.windows(JSON_MARKER.len()).rposition(|window| window == JSON_MARKER)
+        .ok_or("O mecanismo local não retornou o bloco de resultado esperado.")?;
+    let json_payload = &output.stdout[marker_at + JSON_MARKER.len()..];
+    let mut parsed: LocalOutput = serde_json::from_slice(json_payload)
+        .map_err(|e| format!("O mecanismo local retornou dados inválidos após normalizar a saída Unicode: {e}"))?;
     for cue in &mut parsed.cues { cue.id = uuid::Uuid::new_v4().to_string(); }
     Ok(TranscriptResult { engine:"faster-whisper".into(), model:model.into(), language:parsed.language, duration_ms:duration_ms(&ffprobe(&ffmpeg()?)?,audio)?, cues:parsed.cues })
 }
