@@ -12,7 +12,7 @@ fn sound_manifest_path(directory: &std::path::Path) -> std::path::PathBuf {
     directory.join("library.json")
 }
 
-fn read_sound_manifest(directory: &std::path::Path) -> Result<Vec<GlobalSound>, String> {
+pub(crate) fn read_sound_manifest(directory: &std::path::Path) -> Result<Vec<GlobalSound>, String> {
     let path = sound_manifest_path(directory);
     if !path.exists() { return Ok(Vec::new()); }
     let raw = std::fs::read_to_string(path).map_err(|error| error.to_string())?;
