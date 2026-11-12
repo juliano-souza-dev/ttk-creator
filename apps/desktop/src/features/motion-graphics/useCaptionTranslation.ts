@@ -86,7 +86,7 @@ export function useCaptionTranslation({ captions, setCaptions, selectedCaption, 
         if (translationStopRef.current) break;
         setTranslationPhase("Enviando para a Groq");
         setTranslationMessage("Lote " + (index + 1) + " de " + chunks.length + ": solicitação enviada. Aguardando a resposta da IA...");
-        const result = await desktopApi.translateGroqChunk(settings.model, settings.targetLanguage, chunks[index]);
+        const result = await desktopApi.translateGroqChunk(settings.targetLanguage, chunks[index]);
         setTranslationPhase("Aplicando traduções");
         setTranslationMessage("Resposta recebida para o lote " + (index + 1) + ". Aplicando traduções ao projeto...");
         const byId = new Map(result.map(item => [item.id, item.translation]));
@@ -136,7 +136,7 @@ export function useCaptionTranslation({ captions, setCaptions, selectedCaption, 
     try {
       const settings = await desktopApi.getGroqSettings();
       if (!settings.configured) throw new Error("Configure sua chave Groq nas configurações antes de traduzir.");
-      const result = await desktopApi.translateGroqChunk(settings.model, targetLanguage, [{
+      const result = await desktopApi.translateGroqChunk(targetLanguage, [{
         id: selectedCaption.id,
         text: sourceText,
       }]);
