@@ -76,7 +76,7 @@ fn shared_manifest(app: &AppHandle) -> Result<Option<(PathBuf, serde_json::Value
 
 fn shared_provider_entry(app: &AppHandle) -> Result<Option<Entry>, String> {
     let Some((manifest_path, mut manifest)) = shared_manifest(app)? else { return Ok(None); };
-    let app_id = manifest.pointer("/application/id").and_then(|value| value.as_str())
+    let app_id = manifest.pointer("/application/id").and_then(|value| value.as_str()).map(str::to_owned)
         .ok_or("O manifesto Shared Runtime não identifica esta aplicação.")?;
 
     // The application owns its provider declarations. Register Groq here when an
@@ -110,7 +110,7 @@ fn shared_provider_entry(app: &AppHandle) -> Result<Option<Entry>, String> {
     let provider = registry.pointer("/providers/groq")
         .ok_or("O provedor Groq não está configurado no Shared Runtime Manager.")?;
     let authorized = provider.get("authorized_apps").and_then(|value| value.as_array())
-        .is_some_and(|apps| apps.iter().any(|item| item.as_str() == Some(app_id)));
+        .is_some_and(|apps| apps.iter().any(|item| item.as_str() == Some(app_id.as_str())));
     if !authorized {
         return Err(format!("A aplicação '{app_id}' ainda não está autorizada a usar a API Groq. Autorize-a no Shared Runtime Manager."));
     }
