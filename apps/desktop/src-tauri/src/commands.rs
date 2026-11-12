@@ -551,7 +551,7 @@ fn ass_caption_script(item: &ExportMotion) -> String {
     let primary = ass_color(&item.color, 0);
     let secondary = ass_color(if item.caption_accent.is_empty() { "#65d6c0" } else { &item.caption_accent }, 0);
     let alignment = match item.text_align.as_str() { "left" => 4, "right" => 6, _ => 5 };
-    let anchor_x = match item.text_align.as_str() { "left" => margin as f64, "right" => 1080.0 - margin as f64, _ => 540.0 };
+    let anchor_x = match item.text_align.as_str() { "left" => text_margin as f64, "right" => 1080.0 - text_margin as f64, _ => 540.0 };
     let anchor_y = (item.y.clamp(0.0, 100.0) / 100.0 * 1920.0).round();
     let style = format!(
         "Style: Caption,{font_name},{font_size},{primary},{secondary},&H00000000&,&H00000000&,{bold},0,0,0,100,100,0,0,1,0,0,{alignment},{text_margin},{text_margin},0,1"
@@ -627,7 +627,7 @@ fn ass_caption_script(item: &ExportMotion) -> String {
         } else {
             let translation_size = (font_size as f64 * 0.72).round().max(12.0) as u32;
             let wrapped_translation = wrap_text_for_export_width(&translation, translation_size, max_text_width);
-            format!("\\N{{\\fs{translation_size}\\1c&H00D8D4DF&}}{}{{\\rCaption}}", ass_escape_text(&wrapped_translation))
+            format!("\\N{{\\fs{translation_size}\\1c&H00DFD4D8&}}{}{{\\rCaption}}", ass_escape_text(&wrapped_translation))
         };
         let text = format!("{{\\an{alignment}\\pos({anchor_x:.0},{anchor_y:.0})}}{source_markup}{translation_markup}");
         script.push_str(&format!(
