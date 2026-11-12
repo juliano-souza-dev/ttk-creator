@@ -597,23 +597,39 @@ fn ass_caption_script(item: &ExportMotion) -> String {
     script.push_str("\n\n[Events]\nFormat: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text\n");
     for (start_ms, end_ms, active_word) in intervals {
         if end_ms <= start_ms { continue; }
+        let max_text_width = (width - font_size as f64 * 1.1).max(font_size as f64);
         let mut source_markup = String::new();
         if words.is_empty() {
-            source_markup.push_str(&ass_escape_text(&source));
+            let wrapped = wrap_text_for_export_width(&source, font_size, max_text_width);
+            source_markup.push_str(&ass_escape_text(&wrapped));
         } else {
+            let mut current_width = 0.0_f64;
             for (index, word) in words.iter().enumerate() {
-                if index > 0 { source_markup.push(' '); }
+                let word_width = estimate_text_width(&word.text, font_size);
+                let next_width = if current_width <= 0.0 { word_width } else {
+                    current_width + estimate_text_width(" ", font_size) + word_width
+                };
+                if current_width > 0.0 && next_width > max_text_width {
+                    source_markup.push_str("\\N");
+                    current_width = 0.0;
+                } else if current_width > 0.0 {
+                    source_markup.push(' ');
+                    current_width += estimate_text_width(" ", font_size);
+                }
                 if Some(index) == active_word {
                     source_markup.push_str(&format!("{{\\1c{secondary}}}{}{{\\rCaption}}", ass_escape_text(&word.text)));
                 } else {
                     source_markup.push_str(&ass_escape_text(&word.text));
                 }
+                current_width += word_width;
             }
         }
         let translation_markup = if translation.trim().is_empty() {
             String::new()
         } else {
-            format!("\\N{{\\fs{}\\1c&H00D8D4DF&}}{}{{\\rCaption}}", (font_size as f64 * 0.72).round().max(12.0) as u32, ass_escape_text(&translation))
+            let translation_size = (font_size as f64 * 0.72).round().max(12.0) as u32;
+            let wrapped_translation = wrap_text_for_export_width(&translation, translation_size, max_text_width);
+            format!("\\N{{\\fs{translation_size}\\1c&H00D8D4DF&}}{}{{\\rCaption}}", ass_escape_text(&wrapped_translation))
         };
         let text = format!("{{\\an{alignment}\\pos({anchor_x:.0},{anchor_y:.0})}}{source_markup}{translation_markup}");
         script.push_str(&format!(
