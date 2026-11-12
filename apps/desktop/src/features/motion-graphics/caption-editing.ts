@@ -6,7 +6,7 @@ export type CaptionSplitResult =
 
 export function splitCaption(item: MotionGraphic, createId: () => string = () => crypto.randomUUID()): CaptionSplitResult {
   const sourceText = (item.captionEnglish || item.text || "").trim();
-  const parts = sourceText.split(/\\s+/).filter(Boolean);
+  const parts = sourceText.split(/\s+/).filter(Boolean);
   if (parts.length < 2) return { ok: false, reason: "too-few-words" };
 
   const splitIndex = Math.max(1, Math.floor(parts.length / 2));
@@ -21,7 +21,7 @@ export function splitCaption(item: MotionGraphic, createId: () => string = () =>
     : item.startMs + Math.round((item.endMs - item.startMs) * splitIndex / parts.length);
   if (splitAtMs >= item.endMs - 150) return { ok: false, reason: "too-short" };
 
-  const translatedParts = (item.captionTranslation || "").trim().split(/\\s+/).filter(Boolean);
+  const translatedParts = (item.captionTranslation || "").trim().split(/\s+/).filter(Boolean);
   const translatedSplit = translatedParts.length > 1
     ? Math.max(1, Math.floor(translatedParts.length * splitIndex / parts.length))
     : 0;
