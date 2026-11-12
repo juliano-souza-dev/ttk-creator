@@ -6,7 +6,7 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import { desktopApi, isDesktopRuntime } from "./services/desktop-api";
 import type { GlobalSound, TranscriptResult } from "./services/desktop-api";
 import type { MediaAsset } from "./shared/types";
-import { defaultDuration, clipDuration, clipEnd, timeLabel, captionBackgroundRgba } from "./features/timeline/model";
+import { defaultDuration, clipDuration, clipEnd, timeLabel } from "./features/timeline/model";
 import type { TimelineClip, TimelineGroup, TrimDrag, ClipMoveDrag, MotionTrimDrag } from "./features/timeline/model";
 import { imageOverlayEntranceState } from "./features/image-overlays/model";
 import type { ImageOverlay } from "./features/image-overlays/model";
@@ -18,6 +18,7 @@ import { parseSuperJsonCues, sceneSpecToMotionGraphics, sceneTemplateToMotionGra
 import { lucideIconLibrary, lucideIconNames, lucideIconPickerNames } from "./features/motion-graphics/icon-library";
 import type { LucideIconName } from "./features/motion-graphics/icon-library";
 import { captionStyleFrom, duplicateCaption, mergeCaptions, splitCaption } from "./features/motion-graphics/caption-editing";
+import { captionBackgroundRgba } from "./features/motion-graphics/caption-style";
 import { buildExportTimelinePayload } from "./features/export/payload";
 import { transcriptToCaptions } from "./features/motion-graphics/transcript-import";
 export { supportedLucideIconNames } from "./features/motion-graphics/icon-library";
