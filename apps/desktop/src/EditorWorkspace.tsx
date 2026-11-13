@@ -618,10 +618,8 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
         throw new Error("Contrato incompatível. Selecione o JSON editorial exportado pelo Nova Generator (1.3).");
       }
       const suggestions = payload.suggestions as Array<Record<string, unknown>>;
-      const orderedCaptions = captions.slice().sort((a, b) => a.startMs - b.startMs);
       const used = new Set<string>();
       let applied = 0;
-      let unmatched = 0;
       let wordCount = 0;
 
       const nextCaptions = captions.map(caption => {
@@ -701,7 +699,6 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
         }
         const approvedPt = String(suggestion.approved_pt ?? "").trim();
         if (!approvedPt && !mappedWords.some(word => word.pt?.trim())) {
-          unmatched++;
           return caption;
         }
         applied++;
