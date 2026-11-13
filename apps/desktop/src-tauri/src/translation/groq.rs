@@ -40,6 +40,33 @@ fn word_groups_cover_all(groups: &[TranslationWordGroup], word_count: usize) -> 
     covered.into_iter().all(|value| value)
 }
 
+#[cfg(test)]
+mod semantic_group_tests {
+    use super::{word_groups_cover_all, TranslationWordGroup};
+
+    fn group(start_word: usize, end_word: usize, pt: &str) -> TranslationWordGroup {
+        TranslationWordGroup { start_word, end_word, pt: pt.to_string() }
+    }
+
+    #[test]
+    fn accepts_complete_non_overlapping_semantic_groups() {
+        let groups = vec![group(0, 1, "por favor"), group(2, 2, "espere")];
+        assert!(word_groups_cover_all(&groups, 3));
+    }
+
+    #[test]
+    fn rejects_gaps_and_overlaps() {
+        assert!(!word_groups_cover_all(&[group(0, 0, "eu"), group(2, 2, "vou")], 3));
+        assert!(!word_groups_cover_all(&[group(0, 1, "eu vou"), group(1, 2, "vou agora")], 3));
+    }
+
+    #[test]
+    fn rejects_invalid_ranges_and_empty_phrases() {
+        assert!(!word_groups_cover_all(&[group(0, 3, "frase")], 3));
+        assert!(!word_groups_cover_all(&[group(0, 0, " ")], 1));
+    }
+}
+
 #[tauri::command]
 pub async fn test_groq_connection(app: AppHandle) -> Result<String, String> {
     let key = resolve_api_key(&app)?;
