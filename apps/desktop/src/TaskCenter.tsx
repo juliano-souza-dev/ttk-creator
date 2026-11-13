@@ -60,7 +60,7 @@ export default function TaskCenter() {
         const index = current.findIndex(task => task.kind === kind && task.status === "running");
         const now = Date.now();
         if (index < 0) {
-          const title: Record<TaskKind,string> = { download:"Download de mídia", export:"Exportação de vídeo", transcription:"Transcrição", installation:"Instalação de dependência", translation:"Tradução" };
+          const title: Record<TaskKind,string> = { download:"Download de mídia", trim:"Recorte de vídeo", export:"Exportação de vídeo", transcription:"Transcrição", installation:"Instalação de dependência" };
           const created: TaskRecord = { id: crypto.randomUUID(), kind, title: title[kind], status: done ? "completed" : "running", progress: progress == null ? (done ? 100 : null) : Math.max(0,Math.min(100,progress)), message, logs:[clock()+"  "+message], updatedAt:now };
           return [created,...current].slice(0,15);
         }
