@@ -7,6 +7,8 @@ export type CaptionWord = {
 };
 export type CaptionSemanticGroup = { id: string; text: string; startMs: number; endMs: number; firstWordIndex: number; lastWordIndex: number };
 export function captionSemanticGroups(words: CaptionWord[]): CaptionSemanticGroup[] {
+  const completeMapping = words.every(word => !!word.ptGroup?.trim() || !!word.pt?.trim() || !!word.translation?.trim());
+  if (!completeMapping) return [];
   const grouped = new Map<string, CaptionSemanticGroup>();
   words.forEach((word, index) => {
     const text = (word.pt || word.translation || "").trim();
