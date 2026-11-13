@@ -42,19 +42,20 @@ export function parseSuperJsonCues(rawCues: unknown[], playheadMs: number): Moti
     const explicitStart = cue.start_ms !== undefined ? asNumber(cue.start_ms, Number.NaN) : asNumber(cue.start, Number.NaN) * 1000;
     const explicitEnd = cue.end_ms !== undefined ? asNumber(cue.end_ms, Number.NaN) : asNumber(cue.end, Number.NaN) * 1000;
     const cueStart = Number.isFinite(explicitStart) ? explicitStart : parsedWords[0]?.startMs ?? 0;
+    const rawWordMaxEnd = parsedWords.length ? Math.max(...parsedWords.map(word => word.endMs)) : 0;
+    const wordTimesAreRelative = Number.isFinite(explicitStart)
+      && parsedWords.some(word => word.startMs < cueStart - 500)
+      && rawWordMaxEnd <= (Number.isFinite(explicitEnd) ? explicitEnd - cueStart : 10000);
     const cueEnd = Number.isFinite(explicitEnd) && explicitEnd > cueStart
       ? explicitEnd
-      : parsedWords.length ? Math.max(...parsedWords.map(word => word.endMs)) : cueStart + 1500;
+      : parsedWords.length ? rawWordMaxEnd + (wordTimesAreRelative ? cueStart : 0) : cueStart + 1500;
     if (cueEnd <= cueStart) return [];
 
     const english = String(cue.approved_en ?? cue.en ?? cue.text_en ?? cue.text ?? "").trim();
     const portuguese = String(cue.approved_pt ?? cue.pt ?? cue.translation_pt ?? cue.text_pt ?? "").trim();
     if (!english && !portuguese) return [];
 
-    const hasRelativeWordTimes = parsedWords.length > 0
-      && Number.isFinite(explicitStart)
-      && parsedWords.some(word => word.startMs < cueStart - 500)
-      && Math.max(...parsedWords.map(word => word.endMs)) <= cueEnd - cueStart + 500;
+    const hasRelativeWordTimes = wordTimesAreRelative;
     const normalizedWords = hasRelativeWordTimes
       ? parsedWords.map(word => ({ ...word, startMs: word.startMs + cueStart, endMs: word.endMs + cueStart }))
       : parsedWords;
