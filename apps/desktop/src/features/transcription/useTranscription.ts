@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { MediaAsset, Project } from "../../shared/types";
 import type { TranscriptionProgress } from "../../services/desktop-api";
 import { desktopApi } from "../../services/desktop-api";
+import { runTrackedTask } from "../../services/task-center";
 
 type TranscriptionContext = {
   clipId: string;
@@ -45,7 +46,7 @@ export function useTranscription(project: Project | null, assets: MediaAsset[]) 
     setLocalAsrInstalling(true);
     setTranscriptionMessage("");
     try {
-      const message = await desktopApi.installLocalAsr();
+      const message = await runTrackedTask("installation", "Instalando mecanismo de transcrição local", () => desktopApi.installLocalAsr());
       setLocalAsrInstalled(await desktopApi.checkLocalAsr());
       setTranscriptionMessage(message);
     } catch (error) {
@@ -61,13 +62,13 @@ export function useTranscription(project: Project | null, assets: MediaAsset[]) 
     setTranscriptionMessage("");
     setTranscriptionProgress(null);
     try {
-      const result = await desktopApi.transcribeMedia(
+      const result = await runTrackedTask("transcription", "Transcrevendo mídia", () => desktopApi.transcribeMedia(
         project.id,
         transcriptionAssetId,
         transcriptionMode,
         transcriptionLanguage,
         transcriptionModel
-      );
+      ));
       window.dispatchEvent(new CustomEvent("framelab:transcription-ready", {
         detail: { projectId: project.id, result, context: transcriptionContext }
       }));
