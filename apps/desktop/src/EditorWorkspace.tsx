@@ -623,22 +623,27 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
       const parsed: unknown = JSON.parse(await file.text());
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
         const payload = parsed as Record<string, unknown>;
-        const rawCues = Array.isArray(payload.cues) ? payload.cues : Array.isArray(payload.lyrics) ? payload.lyrics : null;
+        const isEditorialSuggestions = payload.contract === "nova-generator-editorial-suggestions/1.3"
+          && Array.isArray(payload.suggestions);
+        const rawCues = isEditorialSuggestions
+          ? payload.suggestions
+          : Array.isArray(payload.cues) ? payload.cues : Array.isArray(payload.lyrics) ? payload.lyrics : null;
         const isSuperJson = !!rawCues && (
-          payload.schema === "immersionhub-super-json"
+          isEditorialSuggestions
+          || payload.schema === "immersionhub-super-json"
           || payload.schema_version !== undefined
           || payload.project !== undefined
           || payload.kit !== undefined
         );
         if (isSuperJson && rawCues) {
           const created = parseSuperJsonCues(rawCues, playheadMs);
-          if (!created.length) throw new Error("O Super JSON foi reconhecido, mas não contém falas válidas para importar.");
+          if (!created.length) throw new Error("O JSON editorial foi reconhecido, mas não contém falas válidas para importar.");
           setCaptions(current => [...current, ...created]);
           setSelectedMotionId(created[0]?.id ?? null);
           setActiveTool("captions");
           const withWords = created.filter(item => item.captionWords?.length).length;
           const withTranslation = created.filter(item => item.captionTranslation).length;
-          setSceneSpecMessage(`Super JSON importado: ${created.length} legendas, ${withWords} com sincronização por palavra e ${withTranslation} bilíngues.`);
+          setSceneSpecMessage(`${isEditorialSuggestions ? "JSON editorial" : "Super JSON"} importado: ${created.length} legendas, ${withWords} com sincronização por palavra e ${withTranslation} bilíngues.`);
           stopPlayback();
           return;
         }
