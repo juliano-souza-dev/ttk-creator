@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { Activity, CheckCircle2, ChevronDown, CircleAlert, Clock3, LoaderCircle, Terminal, X } from "lucide-react";
 import { isDesktopRuntime, type TranscriptionProgress } from "./services/desktop-api";
@@ -23,6 +23,8 @@ function clock() {
 export default function TaskCenter() {
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
   const [open, setOpen] = useState(false);
+  const openRef = useRef(false);
+  useEffect(()=>{openRef.current=open;},[open]);
   const activeCount = useMemo(() => tasks.filter(task => task.status === "running").length, [tasks]);
 
   useEffect(() => {
@@ -53,36 +55,35 @@ export default function TaskCenter() {
     if (!isDesktopRuntime) return;
     let disposed = false;
     let unlisteners: Array<() => void> = [];
-    const updateRunningTask = (kind: TaskKind, progress: number | null, message: string, logKey?: string) => {
+    const updateRunningTask = (kind: TaskKind, progress: number | null, message: string, logKey?: string, done = false) => {
       setTasks(current => {
         const index = current.findIndex(task => task.kind === kind && task.status === "running");
-        if (index < 0) return current;
-        const task = current[index];
-        const shouldLog = !!message && (logKey ? !task.logs.some(line => line.endsWith("  " + logKey)) : task.message !== message);
-        const logs = shouldLog ? [...task.logs, clock() + "  " + (logKey || message)].slice(-80) : task.logs;
-        return current.map((item, itemIndex) => itemIndex !== index ? item : {
-          ...item,
-          progress: progress == null ? item.progress : Math.max(0, Math.min(100, progress)),
-          message: message || item.message,
-          logs,
-          updatedAt: Date.now(),
-        });
+        const now = Date.now();
+        if (index < 0) {
+          const title: Record<TaskKind,string> = { download:"Download de mídia", export:"Exportação de vídeo", transcription:"Transcrição", installation:"Instalação de dependência", translation:"Tradução" };
+          const created: TaskRecord = { id: crypto.randomUUID(), kind, title: title[kind], status: done ? "completed" : "running", progress: progress == null ? (done ? 100 : null) : Math.max(0,Math.min(100,progress)), message, logs:[clock()+"  "+message], updatedAt:now };
+          return [created,...current].slice(0,15);
+        }
+        const task=current[index];
+        const logs=message && (logKey ? !task.logs.some(line=>line.endsWith("  "+logKey)) : task.message!==message) ? [...task.logs,clock()+"  "+(logKey||message)].slice(-80) : task.logs;
+        return current.map((item,itemIndex)=>itemIndex!==index?item:{...item,status:done?"completed":item.status,progress:done?100:progress==null?item.progress:Math.max(0,Math.min(100,progress)),message:message||item.message,logs,updatedAt:now});
       });
+      if (!openRef.current) setOpen(true);
     };
     Promise.all([
       listen<DownloadProgress>("youtube-download-progress", event => {
         const value = event.payload;
         const message = [value.status === "completed" ? "Download finalizado." : "Baixando vídeo...", value.speed, value.eta ? "Restante: " + value.eta : ""].filter(Boolean).join(" · ");
         const logKey = value.percent != null ? "Download em " + Math.floor(value.percent / 10) * 10 + "%" : message;
-        updateRunningTask("download", value.percent ?? null, message, logKey);
+        updateRunningTask("download", value.percent ?? null, message, logKey, value.status === "completed" || value.percent === 100);
       }),
       listen<{ percent: number }>("export-progress", event => {
         const percent = Math.max(0, Math.min(100, event.payload.percent));
-        updateRunningTask("export", percent, "Renderizando vídeo...", "Renderização em " + Math.floor(percent / 10) * 10 + "%");
+        updateRunningTask("export", percent, percent >= 100 ? "Exportação concluída." : "Renderizando vídeo...", "Renderização em " + Math.floor(percent / 10) * 10 + "%", percent >= 100);
       }),
       listen<TranscriptionProgress>("transcription-progress", event => {
         const value = event.payload;
-        updateRunningTask("transcription", value.percent, value.message, value.message);
+        updateRunningTask("transcription", value.percent, value.message, value.message, value.percent >= 100);
       }),
     ]).then(items => {
       if (disposed) items.forEach(unlisten => unlisten());
