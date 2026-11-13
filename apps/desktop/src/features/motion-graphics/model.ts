@@ -5,6 +5,15 @@ export type CaptionWord = {
   reviewStatus?: "pending" | "aligned" | "approved" | "flagged";
   alignmentSource?: "auto" | "manual" | "estimated" | "none" | "translation_timing";
 };
+export function captionWordsForTimeline(words: CaptionWord[], captionStartMs: number, captionEndMs: number): CaptionWord[] {
+  if (!words.length || captionStartMs <= 0) return words;
+  const duration = Math.max(0, captionEndMs - captionStartMs);
+  const hasRelativeTimes = words.some(word => word.startMs < captionStartMs - 250)
+    && Math.max(...words.map(word => word.endMs)) <= duration + 500;
+  if (!hasRelativeTimes) return words;
+  return words.map(word => ({ ...word, startMs: word.startMs + captionStartMs, endMs: word.endMs + captionStartMs }));
+}
+
 export type CaptionSemanticGroup = { id: string; text: string; startMs: number; endMs: number; firstWordIndex: number; lastWordIndex: number };
 export function captionSemanticGroups(words: CaptionWord[]): CaptionSemanticGroup[] {
   const completeMapping = words.every(word => !!word.ptGroup?.trim() || !!word.pt?.trim() || !!word.translation?.trim());
