@@ -101,7 +101,7 @@ export function useCaptionTranslation({ captions, setCaptions, selectedCaption, 
             if (!Number.isInteger(group.startWord) || !Number.isInteger(group.endWord) || group.startWord < 0 || group.endWord < group.startWord || group.endWord >= words.length || !group.pt?.trim()) return false;
             for (let index = group.startWord; index <= group.endWord; index++) { if (assigned.has(index)) return false; assigned.add(index); }
             return true;
-          });
+          }) && assigned.size === words.length;
           if (validGroups) groups.forEach((group, groupIndex) => {
             const groupId = `${item.id}:pt:${groupIndex}`;
             for (let index = group.startWord; index <= group.endWord; index++) words[index] = {
@@ -166,7 +166,7 @@ export function useCaptionTranslation({ captions, setCaptions, selectedCaption, 
         if (!Number.isInteger(group.startWord) || !Number.isInteger(group.endWord) || group.startWord < 0 || group.endWord < group.startWord || group.endWord >= words.length || !group.pt?.trim()) return false;
         for (let index = group.startWord; index <= group.endWord; index++) { if (assigned.has(index)) return false; assigned.add(index); }
         return true;
-      });
+      }) && assigned.size === words.length;
       if (validGroups) groups.forEach((group, groupIndex) => {
         const groupId = `${selectedCaption.id}:pt:${groupIndex}`;
         for (let index = group.startWord; index <= group.endWord; index++) words[index] = {
