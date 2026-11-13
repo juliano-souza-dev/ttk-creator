@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { desktopApi } from "../../services/desktop-api";
+import { runTrackedTask } from "../../services/task-center";
 import type { DownloadProgress, MediaAsset, Project, YoutubeCacheEntry, YoutubeInspection } from "../../shared/types";
 
 type Options = {
@@ -47,7 +48,7 @@ export function useYoutubeImport({ project, setAssets, setBusy, setError, setNot
     setError("");
     setProgress({ projectId: project?.id ?? "", percent: 0, status: "starting" });
     try {
-      const cached = await desktopApi.prepareYoutubeCache(youtubeInfo.url, quality);
+      const cached = await runTrackedTask("download", "Preparando vídeo do YouTube", () => desktopApi.prepareYoutubeCache(youtubeInfo.url, quality));
       setYoutubeCache(cached);
       setTrimStartMs(0);
       setTrimEndMs(cached.durationMs ?? youtubeInfo.durationMs ?? 0);
@@ -66,7 +67,7 @@ export function useYoutubeImport({ project, setAssets, setBusy, setError, setNot
     setTrimBusy(true);
     setError("");
     try {
-      const asset = await desktopApi.trimYoutubeCache(project.id, youtubeCache.videoId, trimStartMs, trimEndMs);
+      const asset = await runTrackedTask("trim", "Recortando vídeo", () => desktopApi.trimYoutubeCache(project.id, youtubeCache.videoId, trimStartMs, trimEndMs));
       setAssets(current => [asset, ...current]);
       setNotice("Trecho importado para a biblioteca. O vídeo original permanece no cache temporário por até 7 dias.");
       setYoutubeCache(null);
