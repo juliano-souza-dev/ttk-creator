@@ -1069,7 +1069,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
                 return <><span>{previewWords.map((word, index) => {
                   const active = captionPlayheadMs >= word.startMs && captionPlayheadMs < word.endMs;
                   return <span key={index} style={{ color: active ? item.accent : item.color, textShadow: active ? "0 0 12px " + item.accent : "none" }}>{word.text}{index < previewWords.length - 1 ? " " : ""}</span>;
-                })}</span>{item.captionTranslation && <><br/><span style={{color:"#d8d4df",fontSize:"0.72em"}}>{semanticGroups.length ? semanticGroups.map((group,index) => <span key={group.id} style={{color:group.id===activeGroupId?item.accent:"#d8d4df",textShadow:group.id===activeGroupId?"0 0 10px "+item.accent:"none"}}>{group.text}{index<semanticGroups.length-1?" ":""}</span>) : item.captionTranslation}</span></>}</>;
+                })}</span>{(semanticGroups.length > 0 || item.captionTranslation) && <><br/><span style={{color:"#d8d4df",fontSize:"0.72em"}}>{semanticGroups.length ? semanticGroups.map((group,index) => <span key={group.id} style={{color:group.id===activeGroupId?item.accent:"#d8d4df",textShadow:group.id===activeGroupId?"0 0 10px "+item.accent:"none"}}>{group.text}{index<semanticGroups.length-1?" ":""}</span>) : item.captionTranslation}</span></>}</>;
               })() : item.captionTranslation && item.captionMode !== "source" ? <>{item.captionEnglish || item.text}<br/><span style={{color:"#d8d4df",fontSize:"0.72em"}}>{item.captionTranslation}</span></> : animation.text}</span>
             </span>
           </div>;
