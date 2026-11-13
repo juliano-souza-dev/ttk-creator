@@ -36,6 +36,12 @@ struct ExportCaptionWord {
     text: String,
     start_ms: u64,
     end_ms: u64,
+    #[serde(default)]
+    pt: String,
+    #[serde(default)]
+    pt_group: String,
+    #[serde(default)]
+    pt_group_role: String,
 }
 
 #[derive(serde::Deserialize)]
