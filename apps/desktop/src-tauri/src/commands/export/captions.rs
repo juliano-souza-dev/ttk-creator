@@ -21,33 +21,40 @@ pub(super) fn wrap_text_for_export(value: &str, font_size: u32) -> String {
 
 pub(super) fn wrap_text_for_export_width(value: &str, font_size: u32, max_width: f64) -> String {
     let normalized = value.replace("\r\n", "\n").replace('\r', "\n");
+    let max_width = max_width.max(1.0);
+
     normalized.split('\n').map(|line| {
-        if line.is_empty() { return String::new(); }
         let mut lines = Vec::new();
         let mut current = String::new();
+
         for word in line.split_whitespace() {
-            let candidate = if current.is_empty() { word.to_string() } else { format!("{current} {word}") };
-            if current.is_empty() || estimate_text_width(&candidate, font_size) <= max_width {
-                current = candidate;
-            } else {
-                lines.push(std::mem::take(&mut current));
-                if estimate_text_width(word, font_size) <= max_width {
-                    current.push_str(word);
-                } else {
-                    let mut chunk = String::new();
-                    for character in word.chars() {
-                        let candidate = format!("{chunk}{character}");
-                        if !chunk.is_empty() && estimate_text_width(&candidate, font_size) > max_width {
-                            lines.push(std::mem::take(&mut chunk));
-                        }
-                        chunk.push(character);
-                    }
-                    current = chunk;
+            if !current.is_empty() {
+                let candidate = format!("{current} {word}");
+                if estimate_text_width(&candidate, font_size) <= max_width {
+                    current = candidate;
+                    continue;
                 }
+
+                lines.push(std::mem::take(&mut current));
+            }
+
+            // A long token must also wrap when it is the first item on a line.
+            // Previously the empty-line fast path accepted it without checking
+            // its width, which let URLs and unbroken strings overflow the frame.
+            for character in word.chars() {
+                let candidate = format!("{current}{character}");
+                if !current.is_empty() && estimate_text_width(&candidate, font_size) > max_width {
+                    lines.push(std::mem::take(&mut current));
+                }
+                current.push(character);
             }
         }
-        if !current.is_empty() { lines.push(current); }
-        if lines.is_empty() { String::new() } else { lines.join("\n") }
+
+        if !current.is_empty() {
+            lines.push(current);
+        }
+
+        lines.join("\n")
     }).collect::<Vec<_>>().join("\n")
 }
 
@@ -216,4 +223,29 @@ pub(super) fn ffmpeg_escape_text(value: &str) -> String {
         .replace('[', "\\[")
         .replace(']', "\\]")
         .replace('\r', "")
+}
+
+
+#[cfg(test)]
+mod wrapping_tests {
+    use super::wrap_text_for_export_width;
+
+    #[test]
+    fn wraps_a_long_unbroken_token_even_at_the_start_of_a_line() {
+        let wrapped = wrap_text_for_export_width("abcdefghij", 10, 20.0);
+        assert!(wrapped.contains('\n'));
+        assert!(wrapped.lines().all(|line| line.chars().count() <= 3));
+    }
+
+    #[test]
+    fn wraps_words_to_the_available_width() {
+        let wrapped = wrap_text_for_export_width("one two three", 10, 30.0);
+        assert_eq!(wrapped, "one\\ntwo\\nthree");
+    }
+
+    #[test]
+    fn preserves_explicit_and_blank_line_breaks() {
+        let wrapped = wrap_text_for_export_width("first\\n\\nsecond", 10, 500.0);
+        assert_eq!(wrapped, "first\\n\\nsecond");
+    }
 }
