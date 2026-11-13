@@ -240,12 +240,12 @@ mod wrapping_tests {
     #[test]
     fn wraps_words_to_the_available_width() {
         let wrapped = wrap_text_for_export_width("one two three", 10, 30.0);
-        assert_eq!(wrapped, "one\\ntwo\\nthree");
+        assert_eq!(wrapped, "one\ntwo\nthree");
     }
 
     #[test]
     fn preserves_explicit_and_blank_line_breaks() {
-        let wrapped = wrap_text_for_export_width("first\\n\\nsecond", 10, 500.0);
+        let wrapped = wrap_text_for_export_width("first\n\nsecond", 10, 500.0);
         assert_eq!(wrapped, "first\\n\\nsecond");
     }
 }
