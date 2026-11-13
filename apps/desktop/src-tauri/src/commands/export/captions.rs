@@ -273,13 +273,13 @@ pub(super) fn ffmpeg_escape_text(value: &str) -> String {
 
 #[cfg(test)]
 mod wrapping_tests {
-    use super::wrap_text_for_export_width;
+    use super::{estimate_text_width, wrap_text_for_export_width};
 
     #[test]
     fn wraps_a_long_unbroken_token_even_at_the_start_of_a_line() {
         let wrapped = wrap_text_for_export_width("abcdefghij", 10, 20.0);
         assert!(wrapped.contains('\n'));
-        assert!(wrapped.lines().all(|line| line.chars().count() <= 3));
+        assert!(wrapped.lines().all(|line| estimate_text_width(line, 10) <= 20.0));
     }
 
     #[test]
