@@ -3,7 +3,7 @@ pub mod ffmpeg;
 
 use captions::{
     ass_caption_script, caption_background_geometry, ffmpeg_escape_expression,
-    ffmpeg_escape_filter_path, ffmpeg_escape_text, wrap_text_for_export,
+    ffmpeg_escape_filter_path, wrap_text_for_export,
     wrap_text_for_export_width,
 };
 use ffmpeg::{ensure_ffmpeg_capabilities, media_has_audio_stream};
@@ -98,6 +98,15 @@ pub struct ExportImageOverlay {
 
 fn default_motion_entrance_duration() -> u64 { 700 }
 
+fn write_motion_text_file(value: &str, temp_files: &mut Vec<PathBuf>) -> Result<String, String> {
+    let path = std::env::temp_dir()
+        .join(format!("framelab-motion-text-{}.txt", uuid::Uuid::new_v4()));
+    std::fs::write(&path, value.as_bytes())
+        .map_err(|error| format!("Não foi possível preparar o texto para exportação: {error}"))?;
+    temp_files.push(path.clone());
+    Ok(ffmpeg_escape_filter_path(&path))
+}
+
 fn default_overlay_animation() -> String { "none".into() }
 fn default_overlay_animation_duration() -> u64 { 600 }
 
@@ -154,7 +163,7 @@ pub async fn export_timeline(
         let mut sound_inputs: Vec<(usize, &ExportSoundEffect)> = Vec::new();
         let mut overlay_inputs: Vec<(usize, &ExportImageOverlay)> = Vec::new();
         let mut icon_temp_files: Vec<PathBuf> = Vec::new();
-        let mut caption_temp_files: Vec<PathBuf> = Vec::new();
+        let mut text_temp_files: Vec<PathBuf> = Vec::new();
         let mut icon_inputs: Vec<(usize, usize, &ExportMotion)> = Vec::new();
         let mut total_ms = 0u64;
 
@@ -335,7 +344,7 @@ pub async fn export_timeline(
                 let subtitle_path = std::env::temp_dir().join(format!("framelab-caption-{}.ass", uuid::Uuid::new_v4()));
                 std::fs::write(&subtitle_path, ass_caption_script(item).as_bytes())
                     .map_err(|error| format!("Não foi possível preparar a legenda karaoke: {error}"))?;
-                caption_temp_files.push(subtitle_path.clone());
+                text_temp_files.push(subtitle_path.clone());
                 let subtitle_label = format!("caption_ass{index}");
                 filter_parts.push(format!(
                     "[{previous}]ass=filename='{}'[{subtitle_label}]",
@@ -382,7 +391,7 @@ pub async fn export_timeline(
                 for step in 0..steps {
                     let visible_count = ((step + 1) * characters.len() + steps - 1) / steps;
                     let prefix: String = characters[..visible_count].iter().collect();
-                    let text = ffmpeg_escape_text(&prefix);
+                    let text_file = write_motion_text_file(&prefix, &mut text_temp_files)?;
                     let step_start = start + writing_duration * (step as f64 / steps as f64);
                     let step_end = start + writing_duration * ((step + 1) as f64 / steps as f64);
                     let next = format!("typewriter{index}_{step}");
@@ -395,7 +404,7 @@ pub async fn export_timeline(
                         format!("gte(t,{step_start:.6})*lt(t,{step_end:.6})")
                     };
                     let enable = ffmpeg_escape_expression(&enable);
-                    filter_parts.push(format!("[{current}]drawtext=fontfile='{font_file}':text='{text}':fontcolor={color}:fontsize={}:x='{base_x}':y='{anchor_y}-text_h/2':enable='{enable}'[{next}]", item.font_size.clamp(18, 180)));
+                    filter_parts.push(format!("[{current}]drawtext=fontfile='{font_file}':textfile='{text_file}':fontcolor={color}:fontsize={}:x='{base_x}':y='{anchor_y}-text_h/2':enable='{enable}'[{next}]", item.font_size.clamp(18, 180)));
                     current = next;
                 }
                 previous = current;
@@ -416,7 +425,9 @@ pub async fn export_timeline(
             let scale_expr = ffmpeg_escape_expression(&scale);
             let alpha_expr = ffmpeg_escape_expression(&alpha);
             let x_expr = ffmpeg_escape_expression(&x);
-            filter_parts.push(format!("[{previous}]drawtext=fontfile='{font_file}':text='{}':fontcolor={color}:fontsize='max(1\\,{}*({scale_expr}))':alpha='{alpha_expr}':x='{x_expr}':y='{anchor_y}-text_h/2':enable='between(t\\,{start:.3}\\,{end:.3})'[{next}]", ffmpeg_escape_text(&wrap_text_for_export(&item.text, item.font_size)), item.font_size.clamp(18, 180)));
+            let wrapped_text = wrap_text_for_export(&item.text, item.font_size);
+            let text_file = write_motion_text_file(&wrapped_text, &mut text_temp_files)?;
+            filter_parts.push(format!("[{previous}]drawtext=fontfile='{font_file}':textfile='{text_file}':fontcolor={color}:fontsize='max(1\\,{}*({scale_expr}))':alpha='{alpha_expr}':x='{x_expr}':y='{anchor_y}-text_h/2':enable='between(t\\,{start:.3}\\,{end:.3})'[{next}]", item.font_size.clamp(18, 180)));
             previous = next;
         }
         for (icon_position, (input_index, motion_index, item)) in icon_inputs.iter().enumerate() {
@@ -499,7 +510,7 @@ pub async fn export_timeline(
         }
         if let Err(error) = ensure_ffmpeg_capabilities(&ffmpeg_path, &required_filters) {
             for path in &icon_temp_files { let _ = std::fs::remove_file(path); }
-            for path in &caption_temp_files { let _ = std::fs::remove_file(path); }
+            for path in &text_temp_files { let _ = std::fs::remove_file(path); }
             return Err(error);
         }
 
@@ -512,7 +523,7 @@ pub async fn export_timeline(
         let filter_script = filter_parts.join(";\n");
         if let Err(error) = std::fs::write(&filter_script_path, filter_script.as_bytes()) {
             for path in &icon_temp_files { let _ = std::fs::remove_file(path); }
-            for path in &caption_temp_files { let _ = std::fs::remove_file(path); }
+            for path in &text_temp_files { let _ = std::fs::remove_file(path); }
             return Err(format!("Não foi possível preparar os filtros de exportação: {error}"));
         }
 
@@ -561,7 +572,7 @@ pub async fn export_timeline(
             Err(error) => {
                 let _ = std::fs::remove_file(&filter_script_path);
                 for path in &icon_temp_files { let _ = std::fs::remove_file(path); }
-                for path in &caption_temp_files { let _ = std::fs::remove_file(path); }
+                for path in &text_temp_files { let _ = std::fs::remove_file(path); }
                 return Err(format!(
                     "Não foi possível iniciar o FFmpeg em {}: {error}",
                     ffmpeg_path.display()
@@ -595,7 +606,7 @@ pub async fn export_timeline(
         let status_result = child.wait();
         let _ = std::fs::remove_file(&filter_script_path);
         for path in &icon_temp_files { let _ = std::fs::remove_file(path); }
-        for path in &caption_temp_files { let _ = std::fs::remove_file(path); }
+        for path in &text_temp_files { let _ = std::fs::remove_file(path); }
         let status = status_result
             .map_err(|error| format!("Não foi possível aguardar o FFmpeg: {error}"))?;
         let stderr = stderr_reader.join().unwrap_or_else(|_| "Não foi possível ler o diagnóstico do FFmpeg.".into());
