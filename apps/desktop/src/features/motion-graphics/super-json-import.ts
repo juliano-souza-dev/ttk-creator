@@ -51,7 +51,14 @@ export function parseSuperJsonCues(rawCues: unknown[], playheadMs: number): Moti
     const portuguese = String(cue.approved_pt ?? cue.pt ?? cue.translation_pt ?? cue.text_pt ?? "").trim();
     if (!english && !portuguese) return [];
 
-    const words = parsedWords.flatMap(word => {
+    const hasRelativeWordTimes = parsedWords.length > 0
+      && Number.isFinite(explicitStart)
+      && parsedWords.some(word => word.startMs < cueStart - 500)
+      && Math.max(...parsedWords.map(word => word.endMs)) <= cueEnd - cueStart + 500;
+    const normalizedWords = hasRelativeWordTimes
+      ? parsedWords.map(word => ({ ...word, startMs: word.startMs + cueStart, endMs: word.endMs + cueStart }))
+      : parsedWords;
+    const words = normalizedWords.flatMap(word => {
       const start = Math.max(cueStart, word.startMs);
       const end = Math.min(cueEnd, Math.max(start + 50, word.endMs));
       return end > start ? [{ ...word, startMs: start, endMs: end }] : [];
