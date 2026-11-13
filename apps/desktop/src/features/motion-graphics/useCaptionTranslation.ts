@@ -69,7 +69,7 @@ export function useCaptionTranslation({ captions, setCaptions, selectedCaption, 
           text: cueText,
           contextBefore: cueIndex > 0 ? (captionSequence[cueIndex - 1].captionEnglish || captionSequence[cueIndex - 1].text).slice(-240) : undefined,
           contextAfter: cueIndex >= 0 && cueIndex < captionSequence.length - 1 ? (captionSequence[cueIndex + 1].captionEnglish || captionSequence[cueIndex + 1].text).slice(0, 240) : undefined,
-          words: sourceWords.length ? sourceWords : undefined,
+          words: /portugu/i.test(settings.targetLanguage) && sourceWords.length ? sourceWords : undefined,
         };
         if (chunk.length && (chunk.length >= settings.maxCuesPerChunk || chars + cueBytes > settings.maxChunkChars)) {
           chunks.push(chunk);
@@ -157,7 +157,7 @@ export function useCaptionTranslation({ captions, setCaptions, selectedCaption, 
       const result = await desktopApi.translateGroqChunk(targetLanguage, [{
         id: selectedCaption.id,
         text: sourceText,
-        words: selectedCaption.captionWords?.map(word => word.text),
+        words: /portugu/i.test(targetLanguage) ? selectedCaption.captionWords?.map(word => word.text) : undefined,
       }]);
       const translatedResult = result.find(item => item.id === selectedCaption.id);
       const translated = translatedResult?.translation;
