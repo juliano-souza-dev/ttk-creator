@@ -26,7 +26,18 @@ export function parseSuperJsonCues(rawCues: unknown[], playheadMs: number): Moti
               start = Math.max(cueStart, start);
               end = Math.min(cueEnd, Math.max(start + 50, end));
               if (end <= start) return [];
-              return [{ text: wordText, startMs: start, endMs: end, translation: String(word.pt ?? word.translation ?? "").trim() }];
+              return [{
+                text: wordText, startMs: start, endMs: end,
+                translation: String(word.pt ?? word.translation ?? "").trim(),
+                pt: String(word.pt ?? "").trim(),
+                ptGroup: String(word.pt_group ?? word.ptGroup ?? "").trim() || undefined,
+                ptGroupRole: (["lead", "member"].includes(String(word.pt_group_role ?? word.ptGroupRole ?? "")) ? String(word.pt_group_role ?? word.ptGroupRole) : "") as CaptionWord["ptGroupRole"],
+                originalStartMs: typeof word.original_start_ms === "number" ? word.original_start_ms : undefined,
+                originalEndMs: typeof word.original_end_ms === "number" ? word.original_end_ms : undefined,
+                confidenceScore: typeof word.confidence_score === "number" ? word.confidence_score : null,
+                reviewStatus: ["pending", "aligned", "approved", "flagged"].includes(String(word.review_status)) ? word.review_status as CaptionWord["reviewStatus"] : undefined,
+                alignmentSource: ["auto", "manual", "estimated", "none", "translation_timing"].includes(String(word.alignment_source)) ? word.alignment_source as CaptionWord["alignmentSource"] : undefined,
+              }];
             }).sort((a,b) => a.startMs - b.startMs);
             const startMs = playheadMs + cueStart;
             const endMs = playheadMs + cueEnd;
