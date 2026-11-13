@@ -4,12 +4,12 @@ pub mod ffmpeg;
 use captions::{
     ass_caption_script, caption_background_geometry, ffmpeg_escape_expression,
     ffmpeg_escape_filter_path, wrap_text_for_export,
-    wrap_text_for_export_width,
 };
 use ffmpeg::{ensure_ffmpeg_capabilities, media_has_audio_stream};
 pub use ffmpeg::check_ffmpeg;
 pub(crate) use ffmpeg::resolve_ffmpeg_executable;
 
+use std::path::PathBuf;
 use tauri::{AppHandle, Emitter, State};
 use crate::{infrastructure::sound_library::read_sound_manifest, state::AppState};
 
