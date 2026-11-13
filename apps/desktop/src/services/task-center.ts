@@ -1,4 +1,4 @@
-export type TaskKind = "download" | "export" | "transcription" | "installation";
+export type TaskKind = "download" | "trim" | "export" | "transcription" | "installation";
 export type TaskStatus = "running" | "completed" | "failed";
 export type TaskEvent = {
   type: "started" | "completed" | "failed";
