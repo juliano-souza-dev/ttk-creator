@@ -121,6 +121,9 @@ pub(super) fn ass_caption_script(item: &ExportMotion) -> String {
         }
     }
     semantic_groups.retain(|group| !group.1.is_empty());
+    if !words.iter().all(|word| !word.pt_group.trim().is_empty() || !word.pt.trim().is_empty()) {
+        semantic_groups.clear();
+    }
     semantic_groups.sort_by_key(|group| group.2);
     let mut boundaries = vec![item.start_ms, item.end_ms];
     for word in words {
