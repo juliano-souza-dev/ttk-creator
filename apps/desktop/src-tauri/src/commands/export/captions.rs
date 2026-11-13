@@ -246,6 +246,6 @@ mod wrapping_tests {
     #[test]
     fn preserves_explicit_and_blank_line_breaks() {
         let wrapped = wrap_text_for_export_width("first\n\nsecond", 10, 500.0);
-        assert_eq!(wrapped, "first\\n\\nsecond");
+        assert_eq!(wrapped, "first\n\nsecond");
     }
 }
