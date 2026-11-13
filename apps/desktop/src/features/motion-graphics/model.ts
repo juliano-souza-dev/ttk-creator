@@ -1,4 +1,31 @@
-export type CaptionWord = { text: string; startMs: number; endMs: number; translation?: string };
+export type CaptionWord = {
+  text: string; startMs: number; endMs: number; translation?: string; pt?: string;
+  ptGroup?: string; ptGroupRole?: "lead" | "member" | "";
+  originalStartMs?: number; originalEndMs?: number; confidenceScore?: number | null;
+  reviewStatus?: "pending" | "aligned" | "approved" | "flagged";
+  alignmentSource?: "auto" | "manual" | "estimated" | "none" | "translation_timing";
+};
+export type CaptionSemanticGroup = { id: string; text: string; startMs: number; endMs: number; firstWordIndex: number; lastWordIndex: number };
+export function captionSemanticGroups(words: CaptionWord[]): CaptionSemanticGroup[] {
+  const completeMapping = words.every(word => !!word.ptGroup?.trim() || !!word.pt?.trim() || !!word.translation?.trim());
+  if (!completeMapping) return [];
+  const grouped = new Map<string, CaptionSemanticGroup>();
+  words.forEach((word, index) => {
+    const text = (word.pt || word.translation || "").trim();
+    const id = word.ptGroup?.trim() || (text ? `__word_${index}` : "");
+    if (!id) return;
+    const current = grouped.get(id);
+    if (!current) grouped.set(id, { id, text, startMs: word.startMs, endMs: word.endMs, firstWordIndex: index, lastWordIndex: index });
+    else {
+      current.startMs = Math.min(current.startMs, word.startMs);
+      current.endMs = Math.max(current.endMs, word.endMs);
+      current.firstWordIndex = Math.min(current.firstWordIndex, index);
+      current.lastWordIndex = Math.max(current.lastWordIndex, index);
+      if (!current.text && text) current.text = text;
+    }
+  });
+  return [...grouped.values()].filter(group => group.text && group.endMs > group.startMs).sort((a,b) => a.startMs-b.startMs);
+}
 
 export type MotionGraphic = { id: string; visible?: boolean; locked?: boolean; isCaption?: boolean; captionSourceLanguage?: string; captionTranslationLanguage?: string; captionMode?: "source" | "bilingual" | "karaoke"; captionEnglish?: string; captionTranslation?: string; captionWords?: CaptionWord[]; captionBackgroundColor?: string; captionBackgroundOpacity?: number; captionWidth?: number; captionPaddingEm?: number; text: string; icon?: string; lucideIconName?: string; lucideIconAnchor?: "left" | "right" | "top" | "bottom"; lucideIconSize?: number; lucideIconColor?: string; elements?: Array<{ type: string; content: string }>; fontFamily?: string; fontWeight?: number; textAlign?: "left" | "center" | "right"; startMs: number; endMs: number; durationMs: number; entranceDurationMs?: number; preset: "pop" | "slide" | "zoom" | "typewriter" | "impact" | "composition"; typewriterDurationMs?: number; color: string; accent: string; fontSize: number; x: number; y: number; sound: "pop" | "whoosh" | "impact" | "click" | "none"; soundId?: string; soundVolume?: number };
 

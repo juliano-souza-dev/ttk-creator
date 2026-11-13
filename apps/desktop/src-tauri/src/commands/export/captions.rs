@@ -107,31 +107,54 @@ pub(super) fn ass_caption_script(item: &ExportMotion) -> String {
         words.iter().map(|word| word.text.as_str()).collect::<Vec<_>>().join(" ")
     };
     let translation = item.text.split('\n').skip(1).collect::<Vec<_>>().join("\n");
-    let mut intervals: Vec<(u64, u64, Option<usize>)> = Vec::new();
-    let mut cursor = item.start_ms;
-    if words.is_empty() {
-        intervals.push((item.start_ms, item.end_ms, None));
-    } else {
-        let mut sorted: Vec<(usize, &ExportCaptionWord)> = words.iter().enumerate().collect();
-        sorted.sort_by_key(|(_, word)| word.start_ms);
-        for (word_index, word) in sorted {
-            let start = word.start_ms.max(item.start_ms).max(cursor);
-            let end = word.end_ms.min(item.end_ms);
-            if start > cursor { intervals.push((cursor, start, None)); }
-            if end > start {
-                intervals.push((start, end, Some(word_index)));
-                cursor = end;
-            }
+    let mut semantic_groups: Vec<(String, String, u64, u64)> = Vec::new();
+    for (index, word) in words.iter().enumerate() {
+        let text = word.pt.trim();
+        if word.pt_group.trim().is_empty() && text.is_empty() { continue; }
+        let id = if word.pt_group.trim().is_empty() { format!("__word_{index}") } else { word.pt_group.clone() };
+        if let Some(group) = semantic_groups.iter_mut().find(|group| group.0 == id) {
+            group.2 = group.2.min(word.start_ms);
+            group.3 = group.3.max(word.end_ms);
+            if group.1.is_empty() && !text.is_empty() { group.1 = text.to_string(); }
+        } else {
+            semantic_groups.push((id, text.to_string(), word.start_ms, word.end_ms));
         }
-        if cursor < item.end_ms { intervals.push((cursor, item.end_ms, None)); }
-        if intervals.is_empty() && item.end_ms > item.start_ms { intervals.push((item.start_ms, item.end_ms, None)); }
+    }
+    semantic_groups.retain(|group| !group.1.is_empty());
+    if !words.iter().all(|word| !word.pt_group.trim().is_empty() || !word.pt.trim().is_empty()) {
+        semantic_groups.clear();
+    }
+    semantic_groups.sort_by_key(|group| group.2);
+    let mut boundaries = vec![item.start_ms, item.end_ms];
+    for word in words {
+        boundaries.push(word.start_ms.max(item.start_ms).min(item.end_ms));
+        boundaries.push(word.end_ms.max(item.start_ms).min(item.end_ms));
+    }
+    for group in &semantic_groups {
+        boundaries.push(group.2.max(item.start_ms).min(item.end_ms));
+        boundaries.push(group.3.max(item.start_ms).min(item.end_ms));
+    }
+    boundaries.sort_unstable();
+    boundaries.dedup();
+    let mut intervals: Vec<(u64, u64, Option<usize>, Option<usize>)> = Vec::new();
+    if words.is_empty() {
+        intervals.push((item.start_ms, item.end_ms, None, None));
+    } else {
+        for pair in boundaries.windows(2) {
+            let start = pair[0];
+            let end = pair[1];
+            if end <= start { continue; }
+            let active_word = words.iter().position(|word| start >= word.start_ms && start < word.end_ms);
+            let active_group = semantic_groups.iter().position(|group| start >= group.2 && start < group.3);
+            intervals.push((start, end, active_word, active_group));
+        }
     }
     let mut script = String::from(
         "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n[V4+ Styles]\nFormat: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding\n"
     );
     script.push_str(&style);
     script.push_str("\n\n[Events]\nFormat: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text\n");
-    for (start_ms, end_ms, active_word) in intervals {
+    for (start_ms, end_ms, active_word, active_group) in intervals {
         if end_ms <= start_ms { continue; }
         let max_text_width = (width - font_size as f64 * 1.1).max(font_size as f64);
         let mut source_markup = String::new();
@@ -160,7 +183,29 @@ pub(super) fn ass_caption_script(item: &ExportMotion) -> String {
                 current_width += word_width;
             }
         }
-        let translation_markup = if translation.trim().is_empty() {
+        let translation_markup = if !semantic_groups.is_empty() {
+            let translation_size = (font_size as f64 * 0.72).round().max(12.0) as u32;
+            let mut markup = String::new();
+            let mut current_width = 0.0_f64;
+            for (index, group) in semantic_groups.iter().enumerate() {
+                let group_width = estimate_text_width(&group.1, translation_size);
+                let next_width = if current_width <= 0.0 { group_width } else { current_width + estimate_text_width(" ", translation_size) + group_width };
+                if current_width > 0.0 && next_width > max_text_width {
+                    markup.push_str("\\N");
+                    current_width = 0.0;
+                } else if current_width > 0.0 {
+                    markup.push(' ');
+                    current_width += estimate_text_width(" ", translation_size);
+                }
+                if Some(index) == active_group {
+                    markup.push_str(&format!("{{\\fs{translation_size}\\1c{secondary}}}{}{{\\rCaption}}", ass_escape_text(&group.1)));
+                } else {
+                    markup.push_str(&format!("{{\\fs{translation_size}\\1c&H00DFD4D8&}}{}{{\\rCaption}}", ass_escape_text(&group.1)));
+                }
+                current_width += group_width;
+            }
+            format!("\\N{markup}")
+        } else if translation.trim().is_empty() {
             String::new()
         } else {
             let translation_size = (font_size as f64 * 0.72).round().max(12.0) as u32;
@@ -228,13 +273,13 @@ pub(super) fn ffmpeg_escape_text(value: &str) -> String {
 
 #[cfg(test)]
 mod wrapping_tests {
-    use super::wrap_text_for_export_width;
+    use super::{estimate_text_width, wrap_text_for_export_width};
 
     #[test]
     fn wraps_a_long_unbroken_token_even_at_the_start_of_a_line() {
         let wrapped = wrap_text_for_export_width("abcdefghij", 10, 20.0);
         assert!(wrapped.contains('\n'));
-        assert!(wrapped.lines().all(|line| line.chars().count() <= 3));
+        assert!(wrapped.lines().all(|line| estimate_text_width(line, 10) <= 20.0));
     }
 
     #[test]

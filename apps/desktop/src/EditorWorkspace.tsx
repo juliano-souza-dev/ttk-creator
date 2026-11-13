@@ -12,10 +12,11 @@ import { imageOverlayEntranceState } from "./features/image-overlays/model";
 import type { ImageOverlay } from "./features/image-overlays/model";
 import { createTimelineClip, duplicateTimelineClip, groupMembersFor, memberKeyForClip, memberKeyForMotion, reorderVisualClips, splitTimelineClipAt } from "./features/timeline/operations";
 import TimelineClipItem from "./features/timeline/TimelineClipItem";
-import { motionPreviewState } from "./features/motion-graphics/model";
+import { motionPreviewState, captionSemanticGroups } from "./features/motion-graphics/model";
 import type { MotionGraphic } from "./features/motion-graphics/model";
 import { mergeMotionLayers, splitMotionLayers } from "./features/motion-graphics/collection";
 import { parseSuperJsonCues, sceneSpecToMotionGraphics, sceneTemplateToMotionGraphics } from "./features/motion-graphics/super-json-import";
+import { buildIHubSuperJson } from "./features/motion-graphics/super-json-export";
 import { lucideIconLibrary, lucideIconNames, lucideIconPickerNames } from "./features/motion-graphics/icon-library";
 import type { LucideIconName } from "./features/motion-graphics/icon-library";
 import { captionStyleFrom, duplicateCaption, mergeCaptions, splitCaption } from "./features/motion-graphics/caption-editing";
@@ -406,6 +407,18 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
       }
     }
   }, [playheadMs, previewTick, playing, visualClips, audioClips, assets]);
+
+  function exportIHubSuperJson() {
+    const payload = buildIHubSuperJson(projectId, captions);
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `ttk-creator-${projectId}-ihub-super.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    setSceneSpecMessage(`Super JSON compatível com iHubEnglish exportado com ${payload.cues.length} legendas.`);
+  }
 
   async function exportVideo() {
     if (!isDesktopRuntime || exporting) return;
@@ -1046,7 +1059,14 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
           return <div key={item.id} className={"motion-overlay motion-" + item.preset + (item.isCaption ? " caption-overlay" : "") + (selectedMotionId === item.id ? " motion-selected" : "")} style={{ "--motion-color": item.color, "--motion-accent": item.accent, "--motion-size": (item.fontSize * previewScale) + "px", "--motion-x": item.isCaption ? ((100 - (item.captionWidth ?? 90)) / 2) + "%" : item.x + "%", "--motion-y": item.y + "%" , width: item.isCaption ? (item.captionWidth ?? 90) + "%" : undefined, transform: item.isCaption ? "translateY(-50%)" : item.textAlign === "left" ? "translate(0,-50%)" : item.textAlign === "right" ? "translate(-100%,-50%)" : "translate(-50%,-50%)" } as CSSProperties}>
             <span className={"motion-content-group anchor-" + (item.lucideIconAnchor || "left")} style={{ display: item.isCaption ? "block" : "inline-flex", alignItems: "center", justifyContent: "center", gap: Math.max(4, (item.lucideIconSize ?? item.fontSize) * previewScale * 0.22), flexDirection: item.lucideIconAnchor === "top" ? "column" : item.lucideIconAnchor === "bottom" ? "column-reverse" : item.lucideIconAnchor === "right" ? "row-reverse" : "row", transform: animation.transform, transformOrigin: item.textAlign === "left" ? "left center" : item.textAlign === "right" ? "right center" : "center center", opacity: animation.opacity, willChange: "transform,opacity" }} onPointerDown={event => { if(item.locked)return; selectMotionItem(item); event.preventDefault(); event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={event => { if (!event.currentTarget.hasPointerCapture(event.pointerId)) return; const rect = event.currentTarget.closest(".preview-media-frame")?.getBoundingClientRect(); if (!rect) return; updateMotion(item.id, item.isCaption ? { y: Math.max(0, Math.min(100, ((event.clientY - rect.top) / rect.height) * 100)) } : { x: Math.max(0, Math.min(100, ((event.clientX - rect.left) / rect.width) * 100)), y: Math.max(0, Math.min(100, ((event.clientY - rect.top) / rect.height) * 100)) }); }} onPointerUp={event => { if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); }} onClick={event=>{event.stopPropagation();selectMotionItem(item);}}>
               {item.lucideIconName && lucideIconLibrary[item.lucideIconName as LucideIconName] && (() => { const IconView = lucideIconLibrary[item.lucideIconName as LucideIconName]; return <IconView size={(item.lucideIconSize ?? item.fontSize) * previewScale} color={item.lucideIconColor || item.accent} strokeWidth={2.2} aria-hidden="true"/>; })()}
-              <span className="motion-main-text" style={{fontFamily:item.fontFamily || "Arial",fontWeight:(item.fontWeight || 900) >= 700 ? 700 : 400,fontSize:item.fontSize * previewScale,textAlign:item.textAlign || "center",background:item.isCaption ? captionBackgroundRgba(item.captionBackgroundColor,item.captionBackgroundOpacity) : "transparent",padding:item.isCaption ? `${item.captionPaddingEm ?? 0.32}em .55em` : "0",borderRadius:"0",boxDecorationBreak:"clone",WebkitBoxDecorationBreak:"clone",display:item.isCaption ? "block" : "inline",width:item.isCaption ? "100%" : undefined,maxWidth:item.isCaption ? "100%" : "90%",boxSizing:"border-box",whiteSpace:"pre-wrap"}}>{item.captionMode === "karaoke" && item.captionWords?.length ? <><span>{item.captionWords.map((word, index) => <span key={index} style={{ color: playheadMs >= word.startMs && playheadMs <= word.endMs ? item.accent : item.color, textShadow: playheadMs >= word.startMs && playheadMs <= word.endMs ? "0 0 12px " + item.accent : "none" }}>{word.text}{index < item.captionWords!.length - 1 ? " " : ""}</span>)}</span>{item.captionTranslation && <><br/><span style={{color:"#d8d4df",fontSize:"0.72em"}}>{item.captionTranslation}</span></>}</> : item.captionTranslation && item.captionMode !== "source" ? <>{item.captionEnglish || item.text}<br/><span style={{color:"#d8d4df",fontSize:"0.72em"}}>{item.captionTranslation}</span></> : animation.text}</span>
+              <span className="motion-main-text" style={{fontFamily:item.fontFamily || "Arial",fontWeight:(item.fontWeight || 900) >= 700 ? 700 : 400,fontSize:item.fontSize * previewScale,textAlign:item.textAlign || "center",background:item.isCaption ? captionBackgroundRgba(item.captionBackgroundColor,item.captionBackgroundOpacity) : "transparent",padding:item.isCaption ? `${item.captionPaddingEm ?? 0.32}em .55em` : "0",borderRadius:"0",boxDecorationBreak:"clone",WebkitBoxDecorationBreak:"clone",display:item.isCaption ? "block" : "inline",width:item.isCaption ? "100%" : undefined,maxWidth:item.isCaption ? "100%" : "90%",boxSizing:"border-box",whiteSpace:"pre-wrap"}}>{item.captionMode === "karaoke" && item.captionWords?.length ? (() => {
+                const semanticGroups = captionSemanticGroups(item.captionWords);
+                const activeGroupId = semanticGroups.find(group => playheadMs >= group.startMs && playheadMs < group.endMs)?.id;
+                return <><span>{item.captionWords.map((word, index) => {
+                  const active = playheadMs >= word.startMs && playheadMs < word.endMs;
+                  return <span key={index} style={{ color: active ? item.accent : item.color, textShadow: active ? "0 0 12px " + item.accent : "none" }}>{word.text}{index < item.captionWords!.length - 1 ? " " : ""}</span>;
+                })}</span>{item.captionTranslation && <><br/><span style={{color:"#d8d4df",fontSize:"0.72em"}}>{semanticGroups.length ? semanticGroups.map((group,index) => <span key={group.id} style={{color:group.id===activeGroupId?item.accent:"#d8d4df",textShadow:group.id===activeGroupId?"0 0 10px "+item.accent:"none"}}>{group.text}{index<semanticGroups.length-1?" ":""}</span>) : item.captionTranslation}</span></>}</>;
+              })() : item.captionTranslation && item.captionMode !== "source" ? <>{item.captionEnglish || item.text}<br/><span style={{color:"#d8d4df",fontSize:"0.72em"}}>{item.captionTranslation}</span></> : animation.text}</span>
             </span>
           </div>;
         })}
@@ -1055,7 +1075,7 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
         <button className="transport-button" title="Voltar ao início" onClick={() => { stopPlayback(); seekTo(0); }}><SkipBack size={15}/></button>
         <button className="transport-play" onClick={togglePlayback} disabled={!clips.length}>{playing ? <Pause size={17}/> : <Play size={17} fill="currentColor"/>}{playing ? "Pausar" : "Reproduzir"}</button>
         <button className="transport-button" title="Avançar 5 segundos" onClick={() => seekTo(playheadMs + 5000)}><SkipForward size={15}/></button>
-        <span className="transport-time">{timeLabel(playheadMs)} / {timeLabel(totalDuration)}</span><button className="primary export-inline" onClick={() => void exportVideo()} disabled={exporting || !visualClips.length}>{exporting ? <LoaderCircle className="spin" size={15}/> : <Download size={15}/>} {exporting ? "Exportando..." : "Exportar MP4"}</button>
+        <span className="transport-time">{timeLabel(playheadMs)} / {timeLabel(totalDuration)}</span><button className="secondary-action" onClick={exportIHubSuperJson} disabled={!captions.length} title="Exportar legendas, tempos e grupos semânticos para o iHubEnglish"><FileJson size={14}/> Super JSON</button><button className="primary export-inline" onClick={() => void exportVideo()} disabled={exporting || !visualClips.length}>{exporting ? <LoaderCircle className="spin" size={15}/> : <Download size={15}/>} {exporting ? "Exportando..." : "Exportar MP4"}</button>
       </div>
       {exporting && <div className="export-progress" role="status" aria-label={`Exportando vídeo: ${Math.floor(exportProgress)}%`}><div className="export-progress-track"><div className="export-progress-fill" style={{ width: `${exportProgress}%` }}/></div><span>{Math.floor(exportProgress)}%</span></div>}{exportMessage && <div className="export-status export-error" role="alert">{exportMessage}</div>}
     </section>

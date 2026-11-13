@@ -13,13 +13,59 @@ struct Message { content: String }
 #[derive(Deserialize)]
 struct TranslationPayload { translations: Vec<TranslationItem> }
 #[derive(Deserialize)]
-struct TranslationItem { id: String, translation: String }
+#[serde(rename_all = "camelCase")]
+struct TranslationItem { id: String, translation: String, #[serde(default)] word_groups: Vec<TranslationWordGroup> }
+#[derive(Deserialize, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct TranslationWordGroup { pub start_word: usize, pub end_word: usize, pub pt: String }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CueInput { pub id: String, pub text: String, pub context_before: Option<String>, pub context_after: Option<String> }
+pub struct CueInput { pub id: String, pub text: String, pub context_before: Option<String>, pub context_after: Option<String>, #[serde(default)] pub words: Vec<String> }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CueTranslation { pub id: String, pub translation: String }
+pub struct CueTranslation { pub id: String, pub translation: String, pub word_groups: Vec<TranslationWordGroup> }
+
+fn word_groups_cover_all(groups: &[TranslationWordGroup], word_count: usize) -> bool {
+    if word_count == 0 { return groups.is_empty(); }
+    let mut covered = vec![false; word_count];
+    for group in groups {
+        if group.start_word > group.end_word || group.end_word >= word_count || group.pt.trim().is_empty() {
+            return false;
+        }
+        for index in group.start_word..=group.end_word {
+            if covered[index] { return false; }
+            covered[index] = true;
+        }
+    }
+    covered.into_iter().all(|value| value)
+}
+
+#[cfg(test)]
+mod semantic_group_tests {
+    use super::{word_groups_cover_all, TranslationWordGroup};
+
+    fn group(start_word: usize, end_word: usize, pt: &str) -> TranslationWordGroup {
+        TranslationWordGroup { start_word, end_word, pt: pt.to_string() }
+    }
+
+    #[test]
+    fn accepts_complete_non_overlapping_semantic_groups() {
+        let groups = vec![group(0, 1, "por favor"), group(2, 2, "espere")];
+        assert!(word_groups_cover_all(&groups, 3));
+    }
+
+    #[test]
+    fn rejects_gaps_and_overlaps() {
+        assert!(!word_groups_cover_all(&[group(0, 0, "eu"), group(2, 2, "vou")], 3));
+        assert!(!word_groups_cover_all(&[group(0, 1, "eu vou"), group(1, 2, "vou agora")], 3));
+    }
+
+    #[test]
+    fn rejects_invalid_ranges_and_empty_phrases() {
+        assert!(!word_groups_cover_all(&[group(0, 3, "frase")], 3));
+        assert!(!word_groups_cover_all(&[group(0, 0, " ")], 1));
+    }
+}
 
 #[tauri::command]
 pub async fn test_groq_connection(app: AppHandle) -> Result<String, String> {
@@ -55,9 +101,9 @@ pub async fn translate_groq_chunk(app: AppHandle, target_language: String, cues:
     let key = resolve_api_key(&app)?;
     let model = resolve_api_model(&app)?;
     let endpoint = format!("{}/chat/completions", resolve_api_endpoint(&app)?.trim_end_matches('/'));
-    let payload = cues.iter().map(|cue| serde_json::json!({"id":cue.id,"text":cue.text,"contextBefore":cue.context_before,"contextAfter":cue.context_after})).collect::<Vec<_>>();
+    let payload = cues.iter().map(|cue| serde_json::json!({"id":cue.id,"text":cue.text,"contextBefore":cue.context_before,"contextAfter":cue.context_after,"words":cue.words})).collect::<Vec<_>>();
     let system = format!(
-        "You are a professional audiovisual subtitle translator. Detect the source language automatically for each text and translate it into {}. Use contextBefore and contextAfter only to understand continuity, references and tone; translate only the text field. Preserve meaning, tone, register, idioms and continuity. Keep translations concise and natural for subtitles. Do not translate names unnecessarily. Return ONLY valid JSON in this exact shape: {{\"translations\":[{{\"id\":\"same id\",\"translation\":\"translated text\"}}]}}. Include every input id exactly once. Never add commentary.",
+        "You are a professional audiovisual subtitle translator. Detect the source language automatically for each text and translate it into {}. Use contextBefore and contextAfter only to understand continuity, references and tone; translate only the text field. Preserve meaning, tone, register, idioms and continuity. Keep translations concise and natural for subtitles. Do not translate names unnecessarily. When words are provided, return wordGroups: contiguous semantic groups mapping source word indexes to natural translated phrases. Use zero-based inclusive startWord/endWord indexes. Every source word index must belong to exactly one group, in order, without overlap or gaps. Keep idioms and multiword expressions together. Put each phrase in pt. If words is empty, return an empty wordGroups array. Return ONLY valid JSON in this exact shape: {{\"translations\":[{{\"id\":\"same id\",\"translation\":\"translated text\",\"wordGroups\":[{{\"startWord\":0,\"endWord\":1,\"pt\":\"frase traduzida\"}}]}}]}}. Include every input id exactly once. Never add commentary.",
         target_language
     );
     let client = Client::builder().timeout(Duration::from_secs(90)).build().map_err(|e| e.to_string())?;
@@ -80,7 +126,11 @@ pub async fn translate_groq_chunk(app: AppHandle, target_language: String, cues:
                 let mut output = Vec::new();
                 for item in parsed.translations {
                     if expected.contains(item.id.as_str()) && seen.insert(item.id.clone()) && !item.translation.trim().is_empty() {
-                        output.push(CueTranslation { id:item.id, translation:item.translation.trim().to_string() });
+                        let word_count = cues.iter().find(|cue| cue.id == item.id).map(|cue| cue.words.len()).unwrap_or(0);
+                        if word_count > 0 && !word_groups_cover_all(&item.word_groups, word_count) {
+                            return Err(format!("A Groq não conseguiu mapear todas as palavras da legenda {} em grupos semânticos completos. Reprocesse a tradução para evitar um WBW parcial.", item.id));
+                        }
+                        output.push(CueTranslation { id:item.id, translation:item.translation.trim().to_string(), word_groups:item.word_groups });
                     }
                 }
                 if output.len() != cues.len() { return Err(format!("A Groq traduziu {} de {} legendas. O lote não foi aplicado para evitar associações incompletas. Reprocesse este lote.",output.len(),cues.len())); }

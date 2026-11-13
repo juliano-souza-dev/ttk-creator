@@ -53,13 +53,14 @@ export function useCaptionTranslation({ captions, setCaptions, selectedCaption, 
       if (!settings.configured) throw new Error("Configure sua chave Groq em Configurações antes de traduzir.");
       setTranslationPhase("Preparando lotes");
       setTranslationMessage("Chave encontrada. Organizando as legendas em lotes para envio.");
-      const chunks: Array<Array<{ id: string; text: string; contextBefore?: string; contextAfter?: string }>> = [];
-      let chunk: Array<{ id: string; text: string; contextBefore?: string; contextAfter?: string }> = [];
+      const chunks: Array<Array<{ id: string; text: string; contextBefore?: string; contextAfter?: string; words?: string[] }>> = [];
+      let chunk: Array<{ id: string; text: string; contextBefore?: string; contextAfter?: string; words?: string[] }> = [];
       let chars = 0;
       for (const item of pending) {
         const cueIndex = captionSequence.findIndex(caption => caption.id === item.id);
         const cueText = (item.captionEnglish || item.text).trim();
-        const cueBytes = new TextEncoder().encode(cueText).length;
+        const sourceWords = item.captionWords?.map(word => word.text) || [];
+        const cueBytes = new TextEncoder().encode(cueText + " " + sourceWords.join(" ")).length;
         if (cueBytes > settings.maxChunkChars || cueBytes > 18000) {
           throw new Error("A legenda " + item.id + " excede o limite configurado para um lote. Reduza o texto antes de traduzir.");
         }
@@ -68,6 +69,7 @@ export function useCaptionTranslation({ captions, setCaptions, selectedCaption, 
           text: cueText,
           contextBefore: cueIndex > 0 ? (captionSequence[cueIndex - 1].captionEnglish || captionSequence[cueIndex - 1].text).slice(-240) : undefined,
           contextAfter: cueIndex >= 0 && cueIndex < captionSequence.length - 1 ? (captionSequence[cueIndex + 1].captionEnglish || captionSequence[cueIndex + 1].text).slice(0, 240) : undefined,
+          words: /portugu/i.test(settings.targetLanguage) && sourceWords.length ? sourceWords : undefined,
         };
         if (chunk.length && (chunk.length >= settings.maxCuesPerChunk || chars + cueBytes > settings.maxChunkChars)) {
           chunks.push(chunk);
@@ -89,12 +91,28 @@ export function useCaptionTranslation({ captions, setCaptions, selectedCaption, 
         const result = await desktopApi.translateGroqChunk(settings.targetLanguage, chunks[index]);
         setTranslationPhase("Aplicando traduções");
         setTranslationMessage("Resposta recebida para o lote " + (index + 1) + ". Aplicando traduções ao projeto...");
-        const byId = new Map(result.map(item => [item.id, item.translation]));
+        const byId = new Map(result.map(item => [item.id, item]));
         setCaptions(current => current.map(item => {
           const translated = byId.get(item.id);
           if (!translated) return item;
-          const words = item.captionWords?.map(word => ({ ...word }));
-          return { ...item, captionTranslation: translated, captionMode: words?.length ? "karaoke" : "bilingual", ...(words ? { captionWords: words } : {}) };
+          const words = item.captionWords?.map(word => ({ ...word })) || [];
+          const isPortugueseTarget = /portugu/i.test(settings.targetLanguage);
+          const groups = isPortugueseTarget ? (translated.wordGroups || []) : [];
+          const assigned = new Set<number>();
+          if (!isPortugueseTarget) words.forEach(word => { delete word.pt; delete word.ptGroup; delete word.ptGroupRole; delete word.translation; });
+          const validGroups = groups.length > 0 && groups.every(group => {
+            if (!Number.isInteger(group.startWord) || !Number.isInteger(group.endWord) || group.startWord < 0 || group.endWord < group.startWord || group.endWord >= words.length || !group.pt?.trim()) return false;
+            for (let index = group.startWord; index <= group.endWord; index++) { if (assigned.has(index)) return false; assigned.add(index); }
+            return true;
+          }) && assigned.size === words.length;
+          if (validGroups) groups.forEach((group, groupIndex) => {
+            const groupId = `${item.id}:pt:${groupIndex}`;
+            for (let index = group.startWord; index <= group.endWord; index++) words[index] = {
+              ...words[index], ptGroup: groupId, ptGroupRole: index === group.startWord ? "lead" : "member",
+              pt: index === group.startWord ? group.pt.trim() : "", translation: index === group.startWord ? group.pt.trim() : "",
+            };
+          });
+          return { ...item, captionTranslation: translated.translation, captionMode: words.length ? "karaoke" : "bilingual", ...(words.length ? { captionWords: words } : {}) };
         }));
         completed += chunks[index].length;
         setTranslationProgress({ done: completed, total: pending.length });
@@ -139,10 +157,30 @@ export function useCaptionTranslation({ captions, setCaptions, selectedCaption, 
       const result = await desktopApi.translateGroqChunk(targetLanguage, [{
         id: selectedCaption.id,
         text: sourceText,
+        words: /portugu/i.test(targetLanguage) ? selectedCaption.captionWords?.map(word => word.text) : undefined,
       }]);
-      const translated = result.find(item => item.id === selectedCaption.id)?.translation;
+      const translatedResult = result.find(item => item.id === selectedCaption.id);
+      const translated = translatedResult?.translation;
       if (!translated) throw new Error("A tradução não foi retornada para esta legenda.");
+      const words = selectedCaption.captionWords?.map(word => ({ ...word })) || [];
+      const isPortugueseTarget = /portugu/i.test(targetLanguage);
+      const groups = isPortugueseTarget ? (translatedResult?.wordGroups || []) : [];
+      const assigned = new Set<number>();
+      if (!isPortugueseTarget) words.forEach(word => { delete word.pt; delete word.ptGroup; delete word.ptGroupRole; delete word.translation; });
+      const validGroups = groups.length > 0 && groups.every(group => {
+        if (!Number.isInteger(group.startWord) || !Number.isInteger(group.endWord) || group.startWord < 0 || group.endWord < group.startWord || group.endWord >= words.length || !group.pt?.trim()) return false;
+        for (let index = group.startWord; index <= group.endWord; index++) { if (assigned.has(index)) return false; assigned.add(index); }
+        return true;
+      }) && assigned.size === words.length;
+      if (validGroups) groups.forEach((group, groupIndex) => {
+        const groupId = `${selectedCaption.id}:pt:${groupIndex}`;
+        for (let index = group.startWord; index <= group.endWord; index++) words[index] = {
+          ...words[index], ptGroup: groupId, ptGroupRole: index === group.startWord ? "lead" : "member",
+          pt: index === group.startWord ? group.pt.trim() : "", translation: index === group.startWord ? group.pt.trim() : "",
+        };
+      });
       updateMotion(selectedCaption.id, {
+        ...(words.length ? { captionWords: words } : {}),
         captionTranslation: translated,
         captionTranslationLanguage: targetLanguage === "English" ? "en" : "pt-BR",
         captionMode: selectedCaption.captionWords?.length ? "karaoke" : "bilingual",
