@@ -13,7 +13,7 @@ import type { ImageOverlay } from "./features/image-overlays/model";
 import { createTimelineClip, duplicateTimelineClip, groupMembersFor, memberKeyForClip, memberKeyForMotion, reorderVisualClips, splitTimelineClipAt } from "./features/timeline/operations";
 import TimelineClipItem from "./features/timeline/TimelineClipItem";
 import { motionPreviewState, captionSemanticGroups, captionWordsForTimeline } from "./features/motion-graphics/model";
-import type { MotionGraphic } from "./features/motion-graphics/model";
+import type { CaptionWord, MotionGraphic } from "./features/motion-graphics/model";
 import { mergeMotionLayers, splitMotionLayers } from "./features/motion-graphics/collection";
 import { parseSuperJsonCues, sceneSpecToMotionGraphics, sceneTemplateToMotionGraphics } from "./features/motion-graphics/super-json-import";
 import { buildIHubSuperJson } from "./features/motion-graphics/super-json-export";
@@ -599,6 +599,146 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
     }
   }
 
+  function normalizeEditorialText(value: unknown): string {
+    return String(value ?? "").toLocaleLowerCase("pt-BR").normalize("NFD")
+      .replace(/[\\u0300-\\u036f]/g, "").replace(/[^\\p{L}\\p{N}]+/gu, " ").trim();
+  }
+
+  async function importEditorialTranslations(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    try {
+      const parsed: unknown = JSON.parse(await file.text());
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error("O arquivo não contém um objeto JSON válido.");
+      }
+      const payload = parsed as Record<string, unknown>;
+      if (payload.contract !== "nova-generator-editorial-suggestions/1.3" || !Array.isArray(payload.suggestions)) {
+        throw new Error("Contrato incompatível. Selecione o JSON editorial exportado pelo Nova Generator (1.3).");
+      }
+      const suggestions = payload.suggestions as Array<Record<string, unknown>>;
+      const orderedCaptions = captions.slice().sort((a, b) => a.startMs - b.startMs);
+      const used = new Set<string>();
+      let applied = 0;
+      let unmatched = 0;
+      let wordCount = 0;
+
+      const nextCaptions = captions.map(caption => {
+        const sourceText = caption.captionEnglish || caption.text || "";
+        const normalizedSource = normalizeEditorialText(sourceText);
+        const suggestionIndex = suggestions.findIndex((suggestion, index) =>
+          !used.has(String(index)) && normalizeEditorialText(suggestion.approved_en) === normalizedSource
+        );
+        if (suggestionIndex < 0) return caption;
+        used.add(String(suggestionIndex));
+        const suggestion = suggestions[suggestionIndex];
+        const importedWords = Array.isArray(suggestion.word_translations)
+          ? suggestion.word_translations as Array<Record<string, unknown>>
+          : [];
+        const semanticUnits = Array.isArray(suggestion.semantic_units)
+          ? suggestion.semantic_units as Array<Record<string, unknown>>
+          : [];
+        const semanticText = new Map<string, string>();
+        semanticUnits.forEach(unit => {
+          const id = String(unit.semantic_group_id ?? "").trim();
+          const pt = String(unit.pt ?? "").trim();
+          if (id && pt) semanticText.set(id, pt);
+        });
+        const existingWords = caption.captionWords?.map(word => ({ ...word })) ?? [];
+        let mappedWords: CaptionWord[] = [];
+
+        if (existingWords.length && importedWords.length) {
+          const importedBySurface = importedWords.map(word => ({
+            ...word,
+            normalized: normalizeEditorialText(word.surface),
+          }));
+          let cursor = 0;
+          mappedWords = existingWords.map((word, index) => {
+            const normalized = normalizeEditorialText(word.text);
+            let match = importedBySurface[cursor]?.normalized === normalized ? cursor : -1;
+            if (match < 0) {
+              const found = importedBySurface.findIndex((item, candidateIndex) => candidateIndex >= cursor && item.normalized === normalized);
+              if (found >= 0) match = found;
+            }
+            if (match < 0 && existingWords.length === importedWords.length) match = index;
+            if (match < 0) return word;
+            cursor = match + 1;
+            const imported = importedBySurface[match];
+            const groupId = String(imported.semantic_group_id ?? "").trim();
+            const role = String(imported.semantic_group_role ?? "");
+            const individualPt = String(imported.pt ?? "").trim();
+            const pt = groupId && role === "lead" ? semanticText.get(groupId) ?? individualPt : groupId ? "" : individualPt;
+            return {
+              ...word,
+              pt,
+              translation: pt,
+              ptGroup: groupId || undefined,
+              ptGroupRole: (role === "lead" || role === "member" ? role : "") as CaptionWord["ptGroupRole"],
+            };
+          });
+        } else if (importedWords.length) {
+          const firstStart = Math.min(...importedWords.map(word => Number(word.start_ms) || 0));
+          mappedWords = importedWords.flatMap(word => {
+            const surface = String(word.surface ?? "").trim();
+            const start = Number(word.start_ms);
+            const end = Number(word.end_ms);
+            if (!surface || !Number.isFinite(start) || !Number.isFinite(end) || end <= start) return [];
+            const groupId = String(word.semantic_group_id ?? "").trim();
+            const role = String(word.semantic_group_role ?? "");
+            const individualPt = String(word.pt ?? "").trim();
+            const pt = groupId && role === "lead" ? semanticText.get(groupId) ?? individualPt : groupId ? "" : individualPt;
+            return [{
+              text: surface,
+              startMs: caption.startMs + start - firstStart,
+              endMs: caption.startMs + end - firstStart,
+              pt,
+              translation: pt,
+              ptGroup: groupId || undefined,
+              ptGroupRole: (role === "lead" || role === "member" ? role : "") as CaptionWord["ptGroupRole"],
+            }];
+          });
+        }
+        const approvedPt = String(suggestion.approved_pt ?? "").trim();
+        if (!approvedPt && !mappedWords.some(word => word.pt?.trim())) {
+          unmatched++;
+          return caption;
+        }
+        applied++;
+        wordCount += mappedWords.length;
+        return {
+          ...caption,
+          captionEnglish: String(suggestion.approved_en ?? caption.captionEnglish ?? caption.text).trim(),
+          captionTranslation: approvedPt,
+          captionMode: mappedWords.length ? "karaoke" as const : "bilingual" as const,
+          ...(mappedWords.length ? { captionWords: mappedWords } : {}),
+          text: approvedPt ? (caption.captionEnglish || caption.text) + "\\n" + approvedPt : caption.captionEnglish || caption.text,
+        };
+      });
+      setCaptions(nextCaptions);
+      setTranslationPhase("Concluído");
+      setTranslationMessage(
+        "Traduções aplicadas: " + applied + " legenda(s), " + wordCount + " palavra(s) mapeada(s). " +
+        (suggestions.length - used.size) + " sugestão(ões) sem legenda correspondente."
+      );
+      setActiveTool("captions");
+      if (applied) {
+        const firstApplied = nextCaptions.find(item => {
+          const original = captions.find(old => old.id === item.id);
+          return original && item.captionTranslation !== original.captionTranslation;
+        });
+        if (firstApplied) {
+          setSelectedMotionId(firstApplied.id);
+          setPlayheadMs(firstApplied.startMs);
+        }
+      }
+      stopPlayback();
+    } catch (error) {
+      setTranslationPhase("Falha identificada");
+      setTranslationMessage("Não foi possível aplicar o JSON de tradução: " + (error instanceof Error ? error.message : String(error)));
+    }
+  }
+
   function exportSceneSpec() {
     if (!textLayers.length) {
       setSceneSpecMessage("Adicione pelo menos um elemento de texto antes de exportar o Scene Spec.");
@@ -1002,6 +1142,10 @@ export default function EditorWorkspace({ projectId, assets, onAddMedia, onOpenT
         <section className="translation-panel">
           <div className="translation-panel-heading"><div><b><Languages size={15}/> Tradução de legendas</b><small>Traduza apenas as legendas, preservando a sincronização.</small></div><span className="preview-live">{captions.filter(item=>!(item.captionTranslation||"").trim()).length} PENDENTE(S)</span></div>
           <button className="primary translation-action" type="button" onClick={()=>void translateCaptions()} disabled={translationBusy || !captions.some(item => !(item.captionTranslation||"").trim())}>{translationBusy?<><LoaderCircle className="spin" size={14}/> Traduzindo...</>:<><Languages size={14}/> Traduzir legendas sem tradução</>}</button>
+          <label className="secondary-action translation-action" style={{display:"inline-flex",alignItems:"center",gap:8,cursor:"pointer"}}>
+            <Upload size={14}/> Aplicar JSON de tradução
+            <input type="file" accept=".json,application/json" onChange={event => void importEditorialTranslations(event)} hidden/>
+          </label>
           {translationBusy && <button className="secondary-action" type="button" onClick={requestStopAfterCurrentBatch}>Parar após o lote atual</button>}
           {translationBusy && <div className="translation-live-status" role="status" aria-live="polite"><LoaderCircle className="spin" size={17}/><div><b>{translationPhase}</b><span>{translationMessage}</span></div></div>}
           {translationBusy && <div className="translation-progress"><div><span>Legendas traduzidas</span><b>{translationProgress.done}/{translationProgress.total}</b></div><div className="progress-track"><i style={{width:(translationProgress.total?translationProgress.done/translationProgress.total*100:0)+"%"}}/></div></div>}
