@@ -1,6 +1,7 @@
 import type { MediaAsset } from "../../shared/types";
 import type { TimelineClip } from "../timeline/model";
 import type { ImageOverlay } from "../image-overlays/model";
+import { motionAnimationTiming } from "../motion-graphics/model";
 import type { MotionGraphic } from "../motion-graphics/model";
 import { getLucideIconExportOffset } from "../motion-graphics/icon-layout";
 import { lucideIconLibrary, renderLucideIconPng } from "../motion-graphics/icon-library";
@@ -38,11 +39,12 @@ export async function buildExportTimelinePayload(input: ExportTimelineInput) {
     .map(async item => {
       const iconSize = Math.max(24, Math.min(512, Math.round(item.lucideIconSize ?? item.fontSize)));
       const iconName = item.lucideIconName as LucideIconName | undefined;
+      const animationTiming = motionAnimationTiming(item);
       return {
         startMs: item.startMs,
         endMs: item.endMs,
-        durationMs: item.durationMs,
-        typewriterDurationMs: item.typewriterDurationMs ?? 1500,
+        durationMs: animationTiming.durationMs,
+        typewriterDurationMs: animationTiming.typewriterDurationMs,
         preset: item.preset,
         x: item.x,
         y: item.y,
@@ -86,7 +88,7 @@ export async function buildExportTimelinePayload(input: ExportTimelineInput) {
       soundId: item.soundId || "",
       soundVolume: item.soundVolume,
       entranceAnimation: item.entranceAnimation || "none",
-      entranceDurationMs: item.entranceDurationMs ?? 600,
+      entranceDurationMs: Math.min(Math.max(100, Math.min(3000, item.entranceDurationMs ?? 600)), Math.max(1, item.endMs - item.startMs)),
     })),
     soundEffects: [
       ...input.textLayers.filter(item => !!item.soundId).map(item => ({

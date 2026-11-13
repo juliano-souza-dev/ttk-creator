@@ -2,7 +2,8 @@ export type ImageOverlay = { id:string; assetId:string; startMs:number; endMs:nu
 
 export function imageOverlayEntranceState(item: ImageOverlay, playheadMs: number) {
   const animation = item.entranceAnimation || "none";
-  const duration = Math.max(100, Math.min(3000, item.entranceDurationMs ?? 600));
+  const configuredDuration = Math.max(100, Math.min(3000, item.entranceDurationMs ?? 600));
+  const duration = Math.min(configuredDuration, Math.max(1, item.endMs - item.startMs));
   const progress = Math.max(0, Math.min(1, (playheadMs - item.startMs) / duration));
   const eased = 1 - Math.pow(1 - progress, 3);
   let transform = "translate(-50%,-50%)";
