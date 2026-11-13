@@ -95,8 +95,10 @@ export function useCaptionTranslation({ captions, setCaptions, selectedCaption, 
           const translated = byId.get(item.id);
           if (!translated) return item;
           const words = item.captionWords?.map(word => ({ ...word })) || [];
-          const groups = translated.wordGroups || [];
+          const isPortugueseTarget = /portugu/i.test(settings.targetLanguage);
+          const groups = isPortugueseTarget ? (translated.wordGroups || []) : [];
           const assigned = new Set<number>();
+          if (!isPortugueseTarget) words.forEach(word => { delete word.pt; delete word.ptGroup; delete word.ptGroupRole; delete word.translation; });
           const validGroups = groups.length > 0 && groups.every(group => {
             if (!Number.isInteger(group.startWord) || !Number.isInteger(group.endWord) || group.startWord < 0 || group.endWord < group.startWord || group.endWord >= words.length || !group.pt?.trim()) return false;
             for (let index = group.startWord; index <= group.endWord; index++) { if (assigned.has(index)) return false; assigned.add(index); }
@@ -160,8 +162,10 @@ export function useCaptionTranslation({ captions, setCaptions, selectedCaption, 
       const translated = translatedResult?.translation;
       if (!translated) throw new Error("A tradução não foi retornada para esta legenda.");
       const words = selectedCaption.captionWords?.map(word => ({ ...word })) || [];
-      const groups = translatedResult?.wordGroups || [];
+      const isPortugueseTarget = /portugu/i.test(targetLanguage);
+      const groups = isPortugueseTarget ? (translatedResult?.wordGroups || []) : [];
       const assigned = new Set<number>();
+      if (!isPortugueseTarget) words.forEach(word => { delete word.pt; delete word.ptGroup; delete word.ptGroupRole; delete word.translation; });
       const validGroups = groups.length > 0 && groups.every(group => {
         if (!Number.isInteger(group.startWord) || !Number.isInteger(group.endWord) || group.startWord < 0 || group.endWord < group.startWord || group.endWord >= words.length || !group.pt?.trim()) return false;
         for (let index = group.startWord; index <= group.endWord; index++) { if (assigned.has(index)) return false; assigned.add(index); }
