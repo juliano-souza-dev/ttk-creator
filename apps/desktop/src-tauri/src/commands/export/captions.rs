@@ -110,16 +110,17 @@ pub(super) fn ass_caption_script(item: &ExportMotion) -> String {
     let mut semantic_groups: Vec<(String, String, u64, u64)> = Vec::new();
     for (index, word) in words.iter().enumerate() {
         let text = word.pt.trim();
-        if text.is_empty() { continue; }
+        if word.pt_group.trim().is_empty() && text.is_empty() { continue; }
         let id = if word.pt_group.trim().is_empty() { format!("__word_{index}") } else { word.pt_group.clone() };
         if let Some(group) = semantic_groups.iter_mut().find(|group| group.0 == id) {
             group.2 = group.2.min(word.start_ms);
             group.3 = group.3.max(word.end_ms);
-            if group.1.is_empty() { group.1 = text.to_string(); }
+            if group.1.is_empty() && !text.is_empty() { group.1 = text.to_string(); }
         } else {
             semantic_groups.push((id, text.to_string(), word.start_ms, word.end_ms));
         }
     }
+    semantic_groups.retain(|group| !group.1.is_empty());
     semantic_groups.sort_by_key(|group| group.2);
     let mut boundaries = vec![item.start_ms, item.end_ms];
     for word in words {
