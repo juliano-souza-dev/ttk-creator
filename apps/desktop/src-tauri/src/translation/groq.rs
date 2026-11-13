@@ -25,6 +25,21 @@ pub struct CueInput { pub id: String, pub text: String, pub context_before: Opti
 #[serde(rename_all = "camelCase")]
 pub struct CueTranslation { pub id: String, pub translation: String, pub word_groups: Vec<TranslationWordGroup> }
 
+fn word_groups_cover_all(groups: &[TranslationWordGroup], word_count: usize) -> bool {
+    if word_count == 0 { return groups.is_empty(); }
+    let mut covered = vec![false; word_count];
+    for group in groups {
+        if group.start_word > group.end_word || group.end_word >= word_count || group.pt.trim().is_empty() {
+            return false;
+        }
+        for index in group.start_word..=group.end_word {
+            if covered[index] { return false; }
+            covered[index] = true;
+        }
+    }
+    covered.into_iter().all(|value| value)
+}
+
 #[tauri::command]
 pub async fn test_groq_connection(app: AppHandle) -> Result<String, String> {
     let key = resolve_api_key(&app)?;
@@ -84,7 +99,11 @@ pub async fn translate_groq_chunk(app: AppHandle, target_language: String, cues:
                 let mut output = Vec::new();
                 for item in parsed.translations {
                     if expected.contains(item.id.as_str()) && seen.insert(item.id.clone()) && !item.translation.trim().is_empty() {
-                        output.push(CueTranslation { id:item.id, translation:item.translation.trim().to_string(), word_groups:item.word_groups.into_iter().filter(|group| group.end_word >= group.start_word && !group.pt.trim().is_empty()).collect() });
+                        let word_count = cues.iter().find(|cue| cue.id == item.id).map(|cue| cue.words.len()).unwrap_or(0);
+                        if word_count > 0 && !word_groups_cover_all(&item.word_groups, word_count) {
+                            return Err(format!("A Groq não conseguiu mapear todas as palavras da legenda {} em grupos semânticos completos. Reprocesse a tradução para evitar um WBW parcial.", item.id));
+                        }
+                        output.push(CueTranslation { id:item.id, translation:item.translation.trim().to_string(), word_groups:item.word_groups });
                     }
                 }
                 if output.len() != cues.len() { return Err(format!("A Groq traduziu {} de {} legendas. O lote não foi aplicado para evitar associações incompletas. Reprocesse este lote.",output.len(),cues.len())); }
