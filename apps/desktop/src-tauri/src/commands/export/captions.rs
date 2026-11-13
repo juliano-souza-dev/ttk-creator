@@ -22,6 +22,7 @@ pub(super) fn wrap_text_for_export(value: &str, font_size: u32) -> String {
 pub(super) fn wrap_text_for_export_width(value: &str, font_size: u32, max_width: f64) -> String {
     let normalized = value.replace("\r\n", "\n").replace('\r', "\n");
     normalized.split('\n').map(|line| {
+        if line.is_empty() { return String::new(); }
         let mut lines = Vec::new();
         let mut current = String::new();
         for word in line.split_whitespace() {

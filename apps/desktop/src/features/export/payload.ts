@@ -43,7 +43,7 @@ export async function buildExportTimelinePayload(input: ExportTimelineInput) {
       return {
         startMs: item.startMs,
         endMs: item.endMs,
-        durationMs: animationTiming.durationMs,
+        entranceDurationMs: animationTiming.entranceDurationMs,
         typewriterDurationMs: animationTiming.typewriterDurationMs,
         preset: item.preset,
         x: item.x,

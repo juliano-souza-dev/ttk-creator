@@ -56,8 +56,8 @@ pub struct ExportMotion {
     text_align: String,
     #[serde(default)]
     preset: String,
-    #[serde(default)]
-    duration_ms: u64,
+    #[serde(default = "default_motion_entrance_duration")]
+    entrance_duration_ms: u64,
     #[serde(default)]
     typewriter_duration_ms: u64,
     #[serde(default)]
@@ -95,6 +95,8 @@ pub struct ExportImageOverlay {
     #[serde(default = "default_overlay_animation_duration")]
     entrance_duration_ms: u64,
 }
+
+fn default_motion_entrance_duration() -> u64 { 700 }
 
 fn default_overlay_animation() -> String { "none".into() }
 fn default_overlay_animation_duration() -> u64 { 600 }
@@ -361,9 +363,9 @@ pub async fn export_timeline(
             };
             let start = item.start_ms as f64 / 1000.0;
             let end = item.end_ms as f64 / 1000.0;
-            let duration_ms = if item.duration_ms > 0 { item.duration_ms.min(item.end_ms.saturating_sub(item.start_ms)) } else { item.end_ms.saturating_sub(item.start_ms) };
-            let duration = (duration_ms.max(1) as f64) / 1000.0;
-            let writing_duration = (if item.typewriter_duration_ms > 0 { item.typewriter_duration_ms.min(duration_ms) } else { 1500.min(duration_ms.max(100)) }.max(100) as f64) / 1000.0;
+            let entrance_duration_ms = item.entrance_duration_ms.clamp(100, 10000);
+            let duration = entrance_duration_ms as f64 / 1000.0;
+            let writing_duration = item.typewriter_duration_ms.clamp(100, 10000) as f64 / 1000.0;
             if item.preset == "typewriter" {
                 // Render successive text prefixes in non-overlapping time slices. This
                 // produces a true character-by-character reveal in the exported frames.
@@ -421,8 +423,7 @@ pub async fn export_timeline(
             let anchor_x = (item.x.clamp(0.0, 100.0) / 100.0) * 1080.0;
             let anchor_y = (item.y.clamp(0.0, 100.0) / 100.0) * 1920.0;
             let icon_size = item.lucide_icon_size.clamp(24, 512).max(24) as f64;
-            let duration_ms = item.end_ms.saturating_sub(item.start_ms).max(1);
-            let duration = duration_ms as f64 / 1000.0;
+            let duration = item.entrance_duration_ms.clamp(100, 10000) as f64 / 1000.0;
             let progress = format!("clip(t/{duration:.6},0,1)");
             let eased = format!("(1-pow(1-{progress},3))");
             let (scale, fade_alpha) = match item.preset.as_str() {
