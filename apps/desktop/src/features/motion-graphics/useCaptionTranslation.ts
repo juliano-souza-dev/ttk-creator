@@ -59,7 +59,8 @@ export function useCaptionTranslation({ captions, setCaptions, selectedCaption, 
       for (const item of pending) {
         const cueIndex = captionSequence.findIndex(caption => caption.id === item.id);
         const cueText = (item.captionEnglish || item.text).trim();
-        const cueBytes = new TextEncoder().encode(cueText).length;
+        const sourceWords = item.captionWords?.map(word => word.text) || [];
+        const cueBytes = new TextEncoder().encode(cueText + " " + sourceWords.join(" ")).length;
         if (cueBytes > settings.maxChunkChars || cueBytes > 18000) {
           throw new Error("A legenda " + item.id + " excede o limite configurado para um lote. Reduza o texto antes de traduzir.");
         }
@@ -68,7 +69,7 @@ export function useCaptionTranslation({ captions, setCaptions, selectedCaption, 
           text: cueText,
           contextBefore: cueIndex > 0 ? (captionSequence[cueIndex - 1].captionEnglish || captionSequence[cueIndex - 1].text).slice(-240) : undefined,
           contextAfter: cueIndex >= 0 && cueIndex < captionSequence.length - 1 ? (captionSequence[cueIndex + 1].captionEnglish || captionSequence[cueIndex + 1].text).slice(0, 240) : undefined,
-          words: item.captionWords?.map(word => word.text),
+          words: sourceWords.length ? sourceWords : undefined,
         };
         if (chunk.length && (chunk.length >= settings.maxCuesPerChunk || chars + cueBytes > settings.maxChunkChars)) {
           chunks.push(chunk);
